@@ -10,6 +10,26 @@ export function createOperationsExecutorDomain(dependencies) {
     spawn,
   } = dependencies;
 
+  function resolveNodePayload(node, payload) {
+    const nodePayloads =
+      payload?.node_payloads && typeof payload.node_payloads === "object"
+        ? payload.node_payloads
+        : {};
+    const nodePayload =
+      node?.id && nodePayloads[node.id] && typeof nodePayloads[node.id] === "object"
+        ? nodePayloads[node.id]
+        : null;
+
+    if (!nodePayload) {
+      return payload;
+    }
+
+    return {
+      ...payload,
+      ...nodePayload,
+    };
+  }
+
   function inferOperationSummary(node, payload) {
     if (payload.mode === "script") {
       return payload.script_name || "自定义脚本";
@@ -148,12 +168,13 @@ export function createOperationsExecutorDomain(dependencies) {
 
   async function executeOperationTarget(node, payload, timeoutMs) {
     const startedAt = nowIso();
+    const effectivePayload = resolveNodePayload(node, payload);
     const transport = await resolveExecutionTransport(node);
     if (!transport) {
       throw new Error("当前节点缺少可用执行通道，暂时无法下发命令。");
     }
     const spawnSpec = buildOperationSpawnSpec(transport);
-    const scriptBody = buildOperationScript(payload);
+    const scriptBody = buildOperationScript(effectivePayload);
     const banner = [];
 
     banner.push(
@@ -170,18 +191,16 @@ export function createOperationsExecutorDomain(dependencies) {
     );
     banner.push(operationLogLine(startedAt, `传输说明 ${transport.note}`));
     banner.push(
-      payload.mode === "script"
-        ? operationLogLine(startedAt, `下发脚本 ${payload.script_name || "自定义脚本"}`)
-        : operationLogLine(startedAt, `执行命令 ${String(payload.command || "").trim()}`),
+      effectivePayload.mode === "script"
+        ? operationLogLine(startedAt, `下发脚本 ${effectivePayload.script_name || "自定义脚本"}`)
+        : operationLogLine(startedAt, `执行命令 ${String(effectivePayload.command || "").trim()}`),
     );
 
-    if (node.networking?.access_mode === "relay") {
+    if (transport.kind === "ssh-relay") {
       banner.push(
         operationLogLine(
           startedAt,
-          `入口 ${node.networking?.entry_region || "中国大陆"} -> ${
-            node.networking?.relay_label || node.networking?.relay_node_id || "未指定中转"
-          } -> ${node.facts?.hostname || node.id}`,
+          `管理链路 ${transport.note || `${node.facts?.hostname || node.id} 通过 SSH 跳板接入`}`,
         ),
       );
     }
@@ -208,14 +227,19 @@ export function createOperationsExecutorDomain(dependencies) {
       hostname: node.facts?.hostname || node.id,
       provider: node.labels?.provider || null,
       region: node.labels?.region || null,
-      access_mode: node.networking?.access_mode || "direct",
-      summary: inferOperationSummary(node, payload),
+      access_mode: transport.kind === "ssh-relay" ? "relay" : "direct",
+      management_access_mode: transport.kind === "ssh-relay" ? "relay" : "direct",
+      summary: inferOperationSummary(node, effectivePayload),
       status,
       output,
       output_text: output.join("\n"),
       exit_code: execution.exit_code,
       signal: execution.signal,
       timed_out: execution.timed_out,
+      mode: effectivePayload.mode ?? payload.mode ?? "command",
+      command: effectivePayload.command ?? null,
+      script_name: effectivePayload.script_name ?? null,
+      script_body: effectivePayload.script_body ?? null,
       transport_kind: transport.kind,
       transport_label: transport.label,
       transport_note: transport.note,
@@ -265,6 +289,10 @@ export function createOperationsExecutorDomain(dependencies) {
       command: payload.command ?? null,
       script_name: payload.script_name ?? null,
       script_body: payload.script_body ?? null,
+      node_payloads:
+        payload.node_payloads && typeof payload.node_payloads === "object"
+          ? payload.node_payloads
+          : null,
       status,
       node_ids: payload.node_ids,
       summary: {

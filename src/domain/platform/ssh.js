@@ -6,14 +6,13 @@ export function createPlatformSshDomain(dependencies) {
     envPlatformPublicKey,
     envPlatformSshPrivateKeyPath,
     baseEnv = process.env,
-    getRelayNodeById,
     managedPlatformSshDir,
     managedPlatformSshPrivateKeyPath,
     managedPlatformSshPublicKeyPath,
     mkdir,
     normalizeNullableString,
     readFile,
-    resolveProbeTarget,
+    resolveManagementRoute,
     shellSessionLabel,
     spawn,
     sshConnectTimeoutSeconds,
@@ -190,31 +189,31 @@ export function createPlatformSshDomain(dependencies) {
         AIRPORT_NODE_NAME: shellSessionLabel(node),
         AIRPORT_NODE_PROVIDER: node.labels?.provider ?? "",
         AIRPORT_NODE_REGION: node.labels?.region ?? "",
-        AIRPORT_NODE_ACCESS_MODE: node.networking?.access_mode ?? "direct",
+        AIRPORT_NODE_ACCESS_MODE: node.management?.access_mode ?? node.networking?.access_mode ?? "direct",
       },
     };
   }
 
-  function formatSshJumpTarget(host, port) {
+  function formatSshJumpTarget(host, port, sshUser = defaultNodeSshUser) {
     if (!host) {
       return null;
     }
 
     if (host.includes(":")) {
-      return `${defaultNodeSshUser}@[${host}]${port === 19822 ? "" : `:${port}`}`;
+      return `${sshUser}@[${host}]${port === 19822 ? "" : `:${port}`}`;
     }
 
-    return `${defaultNodeSshUser}@${host}${port === 19822 ? "" : `:${port}`}`;
+    return `${sshUser}@${host}${port === 19822 ? "" : `:${port}`}`;
   }
 
-  function formatSshLoginTarget(host) {
+  function formatSshLoginTarget(host, sshUser = defaultNodeSshUser) {
     if (!host) {
       return null;
     }
 
     return host.includes(":")
-      ? `${defaultNodeSshUser}@[${host}]`
-      : `${defaultNodeSshUser}@${host}`;
+      ? `${sshUser}@[${host}]`
+      : `${sshUser}@${host}`;
   }
 
   function shellQuote(value) {
@@ -223,12 +222,10 @@ export function createPlatformSshDomain(dependencies) {
 
   async function resolveNodeSshTransport(node, options = {}) {
     const allowDemoFallback = options.allowDemoFallback !== false;
-    const target = resolveProbeTarget(node);
-    const accessMode = node.networking?.access_mode ?? "direct";
-    const relayNode =
-      accessMode === "relay" && node.networking?.relay_node_id
-        ? getRelayNodeById(node.networking.relay_node_id)
-        : null;
+    const route = resolveManagementRoute(node, options);
+    const target = route?.target ?? null;
+    const accessMode = route?.access_mode ?? "direct";
+    const relayNode = route?.relay_node ?? null;
     const keyState = await platformSshKeyState();
 
     if (!keyState.ok) {
@@ -239,7 +236,7 @@ export function createPlatformSshDomain(dependencies) {
           note: keyState.note,
           target,
           relay_node: relayNode,
-          relay_target: null,
+          relay_target: route?.relay_target ?? null,
           transport: buildLocalDemoTransport(
             node,
             keyState.reason_code === "platform_ssh_key_missing"
@@ -255,13 +252,15 @@ export function createPlatformSshDomain(dependencies) {
         note: keyState.note,
         target,
         relay_node: relayNode,
-        relay_target: null,
+        relay_target: route?.relay_target ?? null,
         transport: null,
       };
     }
 
     if (!target) {
-      const note = "当前节点缺少可用地址，暂时无法发起 SSH 连接。";
+      const note = route?.problems?.length
+        ? `当前节点缺少可用管理地址，暂时无法发起 SSH 连接（${route.problems.join(", ")}）。`
+        : "当前节点缺少可用管理地址，暂时无法发起 SSH 连接。";
       if (allowDemoFallback) {
         return {
           status: "demo",
@@ -269,7 +268,7 @@ export function createPlatformSshDomain(dependencies) {
           note,
           target: null,
           relay_node: relayNode,
-          relay_target: null,
+          relay_target: route?.relay_target ?? null,
           transport: buildLocalDemoTransport(
             node,
             "当前节点缺少可用地址，暂时无法发起 SSH，会话已退回控制面本机兜底模式。",
@@ -283,7 +282,7 @@ export function createPlatformSshDomain(dependencies) {
         note,
         target: null,
         relay_node: relayNode,
-        relay_target: null,
+        relay_target: route?.relay_target ?? null,
         transport: null,
       };
     }
@@ -313,9 +312,11 @@ export function createPlatformSshDomain(dependencies) {
     ];
 
     let label = "SSH 直连";
-    let note = `已尝试使用平台 SSH 密钥连接 ${shellSessionLabel(node)}。`;
+    let note = route?.route_label
+      ? `已尝试使用平台 SSH 密钥按“${route.route_label}”连接 ${shellSessionLabel(node)}。`
+      : `已尝试使用平台 SSH 密钥连接 ${shellSessionLabel(node)}。`;
     let kind = "ssh-direct";
-    let relayTarget = null;
+    let relayTarget = route?.relay_target ?? null;
 
     if (target?.host && target.host === node.facts?.private_ipv4) {
       label = "SSH 局域网";
@@ -324,13 +325,26 @@ export function createPlatformSshDomain(dependencies) {
     }
 
     if (accessMode === "relay") {
-      const relayHost =
-        relayNode?.facts?.public_ipv4 || relayNode?.facts?.public_ipv6 || relayNode?.facts?.private_ipv4 || null;
-      const relayPort = relayNode?.facts?.ssh_port ?? 19822;
-      const relayLoginTarget = formatSshLoginTarget(relayHost);
+      const relayHost = route?.relay_target?.host ?? null;
+      const relayPort =
+        route?.relay_target?.port ??
+        relayNode?.management?.ssh_port ??
+        relayNode?.facts?.ssh_port ??
+        19822;
+      const relayLoginTarget = formatSshLoginTarget(
+        relayHost,
+        route?.relay_node?.management?.ssh_user ?? defaultNodeSshUser,
+      );
 
       if (relayHost && relayLoginTarget) {
-        relayTarget = formatSshJumpTarget(relayHost, relayPort);
+        relayTarget = {
+          ...route?.relay_target,
+          login_target: formatSshJumpTarget(
+            relayHost,
+            relayPort,
+            route?.relay_node?.management?.ssh_user ?? defaultNodeSshUser,
+          ),
+        };
         const proxyCommand = [
           "ssh",
           "-F",
@@ -362,16 +376,15 @@ export function createPlatformSshDomain(dependencies) {
           .map((part) => shellQuote(part))
           .join(" ");
         sshArgs.push("-o", `ProxyCommand=${proxyCommand}`);
-        label = "SSH 经中转";
-        note = `已尝试通过中转机 ${shellSessionLabel(relayNode)} 建立 SSH 会话。`;
+        label = "SSH 经跳板";
+        note = `已尝试通过管理跳板 ${shellSessionLabel(relayNode)} 建立 SSH 会话。`;
         kind = "ssh-relay";
       } else {
-        note =
-          "节点标记为经中转，但中转机缺少可用地址，当前只能直接尝试目标 SSH 连接。";
+        note = "节点标记为经管理跳板，但跳板缺少可用地址，当前已退回直接尝试目标 SSH 连接。";
       }
     }
 
-    const loginTarget = formatSshLoginTarget(target.host);
+    const loginTarget = formatSshLoginTarget(target.host, route?.ssh_user ?? defaultNodeSshUser);
     sshArgs.push("-p", String(target.port), loginTarget);
 
     return {

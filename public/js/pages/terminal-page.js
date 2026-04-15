@@ -161,7 +161,9 @@ export function createTerminalPageModule(dependencies) {
                   <div>
                     <h3>${escapeHtml(target.hostname)}</h3>
                     <p>${escapeHtml(target.provider || "未标记")} / ${escapeHtml(target.region || "-")} / ${
-                      target.access_mode === "relay" ? "经中转" : "直连"
+                      (target.management_access_mode || target.access_mode) === "relay"
+                        ? "经 SSH 跳板"
+                        : "SSH 直连"
                     }</p>
                   </div>
                   <span class="${statusClassName(target.status)}">${statusText(target.status)}</span>

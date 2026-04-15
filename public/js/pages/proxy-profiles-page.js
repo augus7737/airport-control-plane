@@ -17,6 +17,8 @@ function createEmptyProfileDraft() {
     tls_min_version: "",
     tls_max_version: "",
     reality_private_key_path: "",
+    reality_public_key: "",
+    reality_client_fingerprint: "",
     reality_short_ids: "",
     reality_handshake_server: "",
     reality_handshake_server_port: "443",
@@ -233,6 +235,8 @@ export function createProxyProfilesPageModule(dependencies) {
       tls_min_version: String(tlsTemplate.min_version || ""),
       tls_max_version: String(tlsTemplate.max_version || ""),
       reality_private_key_path: String(realityTemplate.private_key_path || ""),
+      reality_public_key: String(realityTemplate.public_key || ""),
+      reality_client_fingerprint: String(realityTemplate.client_fingerprint || ""),
       reality_short_ids: joinListValue(realityTemplate.short_ids ?? realityTemplate.short_id),
       reality_handshake_server: String(handshake.server || ""),
       reality_handshake_server_port: String(handshake.server_port || "443"),
@@ -322,6 +326,8 @@ export function createProxyProfilesPageModule(dependencies) {
       const realityTemplate = cleanConfigValue({
         ...pickRealityTemplate(parsedTemplate),
         private_key_path: normalizeOptionalString(fields.reality_private_key_path),
+        public_key: normalizeOptionalString(fields.reality_public_key),
+        client_fingerprint: normalizeOptionalString(fields.reality_client_fingerprint),
         short_ids: splitListValue(fields.reality_short_ids),
         handshake: {
           ...(isPlainObject(pickRealityTemplate(parsedTemplate).handshake)
@@ -633,8 +639,19 @@ export function createProxyProfilesPageModule(dependencies) {
                   <input id="proxy-profile-reality-key-path" name="reality_private_key_path" value="${escapeHtml(draft.reality_private_key_path)}" placeholder="/etc/airport/reality/private.key" />
                 </div>
                 <div class="field">
+                  <label for="proxy-profile-reality-public-key">Reality 公钥</label>
+                  <input id="proxy-profile-reality-public-key" name="reality_public_key" value="${escapeHtml(draft.reality_public_key)}" placeholder="分享链接需要的 public key，可后补" />
+                </div>
+                <div class="field">
+                  <label for="proxy-profile-reality-client-fingerprint">Reality 客户端指纹</label>
+                  <input id="proxy-profile-reality-client-fingerprint" name="reality_client_fingerprint" value="${escapeHtml(draft.reality_client_fingerprint)}" placeholder="例如 chrome / safari / edge" />
+                </div>
+                <div class="field">
                   <label for="proxy-profile-reality-short-ids">Reality Short IDs</label>
                   <input id="proxy-profile-reality-short-ids" name="reality_short_ids" value="${escapeHtml(draft.reality_short_ids)}" placeholder="0123abcd, 89ef4567" />
+                </div>
+                <div class="field-note full">
+                  Reality 私钥仍然只建议存节点本地路径；这里新增的 public key / 客户端指纹主要用于后端生成订阅与直连分享链接。
                 </div>
                 <div class="field">
                   <label for="proxy-profile-reality-server">Reality 握手域名</label>
@@ -844,6 +861,8 @@ export function createProxyProfilesPageModule(dependencies) {
           tls_min_version: formData.get("tls_min_version"),
           tls_max_version: formData.get("tls_max_version"),
           reality_private_key_path: formData.get("reality_private_key_path"),
+          reality_public_key: formData.get("reality_public_key"),
+          reality_client_fingerprint: formData.get("reality_client_fingerprint"),
           reality_short_ids: formData.get("reality_short_ids"),
           reality_handshake_server: formData.get("reality_handshake_server"),
           reality_handshake_server_port: formData.get("reality_handshake_server_port"),

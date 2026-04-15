@@ -65,7 +65,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
               <strong>${escapeHtml(latestProbe ? formatProbeType(latestProbe) : "暂无记录")}</strong>
             </div>
             <div class="cell-hover-row">
-              <span>接管状态</span>
+              <span>巡检状态</span>
               <strong>${escapeHtml(formatProbeCapability(latestProbe))}</strong>
             </div>
             <div class="cell-hover-row">

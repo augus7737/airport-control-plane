@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
@@ -67,11 +67,18 @@ import {
   describeSingBoxTargetOutcome,
   summarizeSingBoxTargets,
 } from "./domain/releases/sing-box.js";
+import {
+  buildTrafficForwarderConfig,
+  buildTrafficForwarderPublishScript,
+} from "./domain/releases/haproxy.js";
 import { buildSystemTemplateApplyScript } from "./domain/system/templates.js";
 import { buildSystemUserApplyScript } from "./domain/system/users.js";
 import { createShellSessionsDomain } from "./domain/shell/sessions.js";
+import { createSharesDomain } from "./domain/shares/links.js";
 import { createTaskLifecycleDomain } from "./domain/tasks/lifecycle.js";
 import { createTaskStoreDomain } from "./domain/tasks/store.js";
+import { createTrafficRouteDomain } from "./domain/routes/traffic.js";
+import { createManagementRouteDomain } from "./domain/routes/management.js";
 import { createStorePersistenceInfrastructure } from "./infrastructure/store-persistence.js";
 import { createProbeSchedulerRuntime } from "./runtime/probe-scheduler.js";
 import { createServerStartupRuntime } from "./runtime/startup.js";
@@ -103,9 +110,14 @@ const managedPlatformSshDir = path.join(dataDir, "platform-ssh");
 const managedPlatformSshPrivateKeyPath = path.join(managedPlatformSshDir, "id_ed25519");
 const managedPlatformSshPublicKeyPath = path.join(managedPlatformSshDir, "id_ed25519.pub");
 const platformPublicBaseUrl = normalizeBaseUrl(process.env.PLATFORM_PUBLIC_BASE_URL ?? "");
+const clientPublicBaseUrl = normalizeBaseUrl(process.env.CLIENT_PUBLIC_BASE_URL ?? "");
 const defaultNodeSshUser = process.env.NODE_SSH_USER ?? "root";
 const demoShellBinary = process.env.DEMO_SHELL_BINARY ?? "/bin/sh";
 const shellSessionIdleMs = 15 * 60 * 1000;
+const operationHistoryLimit = Math.max(
+  Number.parseInt(process.env.OPERATION_HISTORY_LIMIT ?? "1000", 10) || 1000,
+  30,
+);
 const shellSessionClosedRetentionMs = 5 * 60 * 1000;
 const shellSessionOutputLimit = 120000;
 const operationExecutionTimeoutMs = Number.parseInt(
@@ -139,7 +151,6 @@ const operatorAuth = createOperatorSessionAuth({
   env: process.env,
   logger: console,
 });
-
 const nodeStore = new Map();
 const fingerprintIndex = new Map();
 const operationStore = [];
@@ -646,6 +657,21 @@ const {
 });
 
 const {
+  buildTrafficConflictMessage,
+  findTrafficRouteConflicts,
+  resolveTrafficRoute,
+} = createTrafficRouteDomain({
+  samePrivateIpv4Subnet,
+});
+
+const { resolveManagementRoute } = createManagementRouteDomain({
+  defaultNodeSshUser,
+  getNodeById: (nodeId) => nodeStore.get(nodeId),
+  getPreferredLanIpv4,
+  samePrivateIpv4Subnet,
+});
+
+const {
   detachRelayNodeReferences,
   pruneOperationsForNode,
   pruneProbesForNode,
@@ -707,14 +733,13 @@ const {
   envPlatformPublicKey,
   envPlatformSshPrivateKeyPath,
   baseEnv: process.env,
-  getRelayNodeById: (nodeId) => nodeStore.get(nodeId),
   managedPlatformSshDir,
   managedPlatformSshPrivateKeyPath,
   managedPlatformSshPublicKeyPath,
   mkdir,
   normalizeNullableString,
   readFile,
-  resolveProbeTarget: (node) => resolveProbeTarget(node),
+  resolveManagementRoute: (node, options) => resolveManagementRoute(node, options),
   shellSessionLabel,
   spawn,
   sshConnectTimeoutSeconds,
@@ -771,6 +796,8 @@ const {
   probeStore,
   probeTcpTimeoutMsValue: probeTcpTimeoutMs,
   randomUUID,
+  resolveBusinessProbeContext: (node, options) => resolveBusinessProbeContext(node, options),
+  resolveManagementRoute: (node, options) => resolveManagementRoute(node, options),
   resolveNodeSshTransport: async (node, options) => resolveNodeSshTransport(node, options),
   samePrivateIpv4Subnet,
   setNodeRecord: (node) => nodeStore.set(node.id, node),
@@ -808,11 +835,24 @@ const {
   probeStore,
   pushOperationRecord,
   resolveInitTemplate,
+  resolveBusinessProbeContext: (node, options) => resolveBusinessProbeContext(node, options),
+  resolveManagementRoute: (node, options) => resolveManagementRoute(node, options),
   resolveProbeTarget,
   setNodeRecord: (node) => nodeStore.set(node.id, node),
   shellSessionLabel,
   taskStore,
   upsertTaskRecord,
+});
+
+const {
+  buildAccessUserShareResponse,
+  buildSubscriptionContent,
+  resolveRequestOrigin,
+} = createSharesDomain({
+  clientPublicBaseUrl,
+  normalizeBaseUrl,
+  platformPublicBaseUrl,
+  resolveTrafficRoute: (node, nodes, profile) => resolveTrafficRoute(node, nodes, profile),
 });
 
 const {
@@ -931,8 +971,8 @@ function formatTimeLabel(value) {
 
 function pushOperationRecord(operation) {
   operationStore.unshift(operation);
-  if (operationStore.length > 30) {
-    operationStore.length = 30;
+  if (operationStore.length > operationHistoryLimit) {
+    operationStore.length = operationHistoryLimit;
   }
   return operation;
 }
@@ -987,6 +1027,67 @@ function operationTargetForNode(operation, nodeId) {
 
 function findAccessUserById(accessUserId) {
   return accessUserStore.find((item) => item.id === accessUserId) || null;
+}
+
+function safeDecodePathSegment(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+function findAccessUserByShareToken(shareToken) {
+  return accessUserStore.find((item) => item.share_token === shareToken) || null;
+}
+
+function generateAccessUserShareToken() {
+  return randomUUID().replace(/-/g, "");
+}
+
+function serializeAccessUser(accessUser) {
+  if (!accessUser || typeof accessUser !== "object") {
+    return null;
+  }
+
+  const { share_token: _shareToken, ...rest } = accessUser;
+  return rest;
+}
+
+function rotateAccessUserShareToken(accessUser) {
+  const timestamp = nowIso();
+  return {
+    ...accessUser,
+    share_token: generateAccessUserShareToken(),
+    share_token_created_at: accessUser?.share_token_created_at ?? timestamp,
+    share_token_updated_at: timestamp,
+    updated_at: timestamp,
+  };
+}
+
+async function ensureAccessUserShareTokens() {
+  let changed = false;
+
+  for (let index = 0; index < accessUserStore.length; index += 1) {
+    const accessUser = accessUserStore[index];
+    if (normalizeNullableString(accessUser?.share_token)) {
+      continue;
+    }
+
+    const timestamp = nowIso();
+    accessUserStore[index] = {
+      ...accessUser,
+      share_token: generateAccessUserShareToken(),
+      share_token_created_at: accessUser?.share_token_created_at ?? timestamp,
+      share_token_updated_at: accessUser?.share_token_updated_at ?? timestamp,
+      updated_at: accessUser?.updated_at ?? timestamp,
+    };
+    changed = true;
+  }
+
+  if (changed) {
+    await persistAccessUserStore();
+  }
 }
 
 function findSystemUserById(systemUserId) {
@@ -1064,6 +1165,153 @@ function findNodeGroupById(groupId) {
   return nodeGroupStore.find((item) => item.id === groupId) || null;
 }
 
+function findReleaseRouteForNode(release, nodeId) {
+  const routes = Array.isArray(release?.routes) ? release.routes : [];
+  return routes.find((route) => route?.node_id === nodeId) || null;
+}
+
+function findReleaseDeploymentForNode(release, nodeId) {
+  const deployments = Array.isArray(release?.deployments) ? release.deployments : [];
+  return deployments.find((deployment) => deployment?.node_id === nodeId) || null;
+}
+
+function inferReleaseListenPort(release, nodeId) {
+  const deployment = findReleaseDeploymentForNode(release, nodeId);
+  const singBoxArtifact = deployment?.artifacts?.sing_box ?? null;
+  const manifestListenPort = Number(singBoxArtifact?.manifest?.profile?.listen_port);
+  if (Number.isInteger(manifestListenPort) && manifestListenPort > 0) {
+    return manifestListenPort;
+  }
+
+  const inboundListenPort = Number(
+    singBoxArtifact?.rendered_config?.inbounds?.[0]?.listen_port ?? 0,
+  );
+  if (Number.isInteger(inboundListenPort) && inboundListenPort > 0) {
+    return inboundListenPort;
+  }
+
+  const profileListenPort = Number(findProxyProfileById(release?.profile_id)?.listen_port ?? 0);
+  return Number.isInteger(profileListenPort) && profileListenPort > 0 ? profileListenPort : null;
+}
+
+function resolveBusinessProbeContext(node) {
+  if (!node?.id) {
+    return {
+      published: false,
+      route: null,
+      profile: null,
+      release_id: null,
+      access_mode: "direct",
+      route_label: null,
+      entry_node_id: null,
+      entry_node: null,
+      entry_target: null,
+      relay_upstream_target: null,
+      problems: ["node_missing"],
+    };
+  }
+
+  for (const release of configReleaseStore) {
+    if (!release?.id || !Array.isArray(release?.node_ids) || !release.node_ids.includes(node.id)) {
+      continue;
+    }
+
+    const route = findReleaseRouteForNode(release, node.id);
+    if (!route) {
+      continue;
+    }
+
+    const deployment = findReleaseDeploymentForNode(release, node.id);
+    const deploymentStatus = String(deployment?.status || release?.status || "").toLowerCase();
+    if (deployment && deploymentStatus !== "success") {
+      continue;
+    }
+
+    const accessMode =
+      normalizeNullableString(route.access_mode)?.toLowerCase() === "relay" ? "relay" : "direct";
+    const entryHost = normalizeNullableString(route.entry_endpoint);
+    const entryPort = Number(route.entry_port);
+    const validEntryPort = Number.isInteger(entryPort) && entryPort > 0 ? entryPort : null;
+    const entryNodeId =
+      normalizeNullableString(route.entry_node_id) ?? (accessMode === "direct" ? node.id : null);
+    const entryNode = entryNodeId ? nodeStore.get(entryNodeId) || (entryNodeId === node.id ? node : null) : null;
+    const relayUpstreamHost = accessMode === "relay" ? normalizeNullableString(route.relay_upstream_endpoint) : null;
+    const upstreamFamily =
+      normalizeNullableString(route.upstream_family)?.toLowerCase() === "ipv6"
+        ? "ipv6"
+        : normalizeNullableString(route.upstream_family)?.toLowerCase() === "ipv4"
+          ? "ipv4"
+          : relayUpstreamHost?.includes(":")
+            ? "ipv6"
+            : relayUpstreamHost
+              ? "ipv4"
+              : null;
+    const listenPort = inferReleaseListenPort(release, node.id);
+    const profile = findProxyProfileById(release.profile_id) ?? deployment?.artifacts?.sing_box?.manifest?.profile ?? null;
+    const problems = [];
+
+    if (!entryHost) {
+      problems.push("entry_endpoint_missing");
+    }
+    if (!validEntryPort) {
+      problems.push("entry_port_missing");
+    }
+    if (accessMode === "relay" && !entryNodeId) {
+      problems.push("entry_node_missing");
+    }
+    if (accessMode === "relay" && !relayUpstreamHost) {
+      problems.push("relay_upstream_missing");
+    }
+    if (accessMode === "relay" && !listenPort) {
+      problems.push("listen_port_missing");
+    }
+
+    return {
+      published: problems.length === 0,
+      route,
+      profile,
+      release_id: release.id,
+      access_mode: accessMode,
+      route_label: normalizeNullableString(route.route_label) ?? null,
+      entry_node_id: entryNodeId,
+      entry_node: entryNode,
+      entry_target:
+        entryHost && validEntryPort
+          ? {
+              host: entryHost,
+              port: validEntryPort,
+              family: "ipv4",
+              source: "release_route",
+            }
+          : null,
+      relay_upstream_target:
+        accessMode === "relay" && relayUpstreamHost && listenPort
+          ? {
+              host: relayUpstreamHost,
+              port: listenPort,
+              family: upstreamFamily ?? "ipv4",
+              source: "release_route",
+            }
+          : null,
+      problems,
+    };
+  }
+
+  return {
+    published: false,
+    route: null,
+    profile: null,
+    release_id: null,
+    access_mode: normalizeNullableString(node?.networking?.access_mode)?.toLowerCase() === "relay" ? "relay" : "direct",
+    route_label: null,
+    entry_node_id: null,
+    entry_node: null,
+    entry_target: null,
+    relay_upstream_target: null,
+    problems: ["business_route_unpublished"],
+  };
+}
+
 function missingIds(ids, resolver) {
   return ids.filter((id) => !resolver(id));
 }
@@ -1081,6 +1329,9 @@ function buildAccessUserRecord(payload, existing = null) {
     Number(credentialSource.alter_id) >= 0
       ? Number(credentialSource.alter_id)
       : existing?.credential?.alter_id ?? 0;
+  const shareToken = normalizeNullableString(existing?.share_token) ?? generateAccessUserShareToken();
+  const shareTokenCreatedAt = existing?.share_token_created_at ?? timestamp;
+  const shareTokenUpdatedAt = existing?.share_token_updated_at ?? shareTokenCreatedAt;
 
   return {
     id: existing?.id ?? `access_user_${randomUUID()}`,
@@ -1109,6 +1360,9 @@ function buildAccessUserRecord(payload, existing = null) {
     note: hasOwn(payload, "note")
       ? normalizeNullableString(payload.note)
       : existing?.note ?? null,
+    share_token: shareToken,
+    share_token_created_at: shareTokenCreatedAt,
+    share_token_updated_at: shareTokenUpdatedAt,
     created_at: existing?.created_at ?? timestamp,
     updated_at: timestamp,
   };
@@ -1356,10 +1610,16 @@ function buildSystemUserReleaseRecord(payload, resolved, options = {}) {
 
 function buildConfigReleaseRecord(payload, resolved, options = {}) {
   const timestamp = nowIso();
-  const renderPlan = options.renderPlan ?? null;
+  const deploymentPlan = options.deploymentPlan ?? null;
+  const renderPlan = deploymentPlan?.landingRenderPlan ?? options.renderPlan ?? null;
   const previousRelease = options.previousRelease ?? null;
   const releaseId = options.releaseId ?? `release_${randomUUID()}`;
   const binaryDistribution = options.binaryDistribution ?? null;
+  const deploymentNodeIds = deploymentPlan?.deploymentNodeIds ?? resolved.nodeIds;
+  const entryNodeIds = deploymentPlan?.entryNodeIds ?? [];
+  const routeRecords = Array.isArray(resolved.trafficRoutes)
+    ? resolved.trafficRoutes.map((route) => serializeTrafficRoute(route))
+    : [];
 
   return {
     id: releaseId,
@@ -1371,43 +1631,55 @@ function buildConfigReleaseRecord(payload, resolved, options = {}) {
     profile_id: resolved.profile.id,
     node_group_ids: resolved.groupIds,
     node_ids: resolved.nodeIds,
+    deployment_node_ids: deploymentNodeIds,
+    entry_node_ids: entryNodeIds,
     operation_id: null,
     task_ids: [],
     version: `rel-${compactTimestamp(timestamp)}`,
+    routes: routeRecords,
+    deployments: [],
     summary: {
-      total_nodes: resolved.nodeIds.length,
+      total_nodes: deploymentNodeIds.length,
       success_nodes: 0,
       failed_nodes: 0,
+      landing_node_count: resolved.nodeIds.length,
+      entry_node_count: entryNodeIds.length,
       access_user_count: resolved.accessUsers.length,
       active_user_count: renderPlan?.eligibleUsers?.length ?? 0,
       skipped_user_count: renderPlan?.skippedUsers?.length ?? 0,
       profile_name: resolved.profile.name,
-      engine: renderPlan?.metadata?.engine ?? "managed-snapshot",
+      engine:
+        Array.isArray(deploymentPlan?.engines) && deploymentPlan.engines.length > 0
+          ? deploymentPlan.engines.join("+")
+          : renderPlan?.metadata?.engine ?? "managed-snapshot",
       action_type: "publish",
-      delivery_mode: renderPlan?.metadata?.delivery_mode ?? "snapshot_only",
+      delivery_mode:
+        deploymentPlan?.delivery_mode ?? renderPlan?.metadata?.delivery_mode ?? "snapshot_only",
       binary_version: binaryDistribution?.enabled ? binaryDistribution.version : null,
       binary_install_path: binaryDistribution?.enabled ? binaryDistribution.install_path : null,
       binary_variant_count: Array.isArray(binaryDistribution?.variants)
         ? binaryDistribution.variants.length
         : 0,
-      rollbackable: Boolean(renderPlan?.metadata?.rollbackable),
+      rollbackable: Boolean(
+        deploymentPlan?.rollbackable ?? renderPlan?.metadata?.rollbackable,
+      ),
       based_on_release_id: previousRelease?.id ?? null,
       rollback_target_release_id: previousRelease?.id ?? null,
       config_digest_before:
         previousRelease?.summary?.config_digest_after ??
         previousRelease?.summary?.config_digest ??
         null,
-      config_digest_after: renderPlan?.digest ?? null,
+      config_digest_after: deploymentPlan?.digest ?? renderPlan?.digest ?? null,
       change_summary:
-        renderPlan?.digest &&
-        renderPlan.digest ===
+        (deploymentPlan?.digest ?? renderPlan?.digest) &&
+        (deploymentPlan?.digest ?? renderPlan?.digest) ===
           (previousRelease?.summary?.config_digest_after ??
             previousRelease?.summary?.config_digest ??
             null)
           ? "本次渲染结果与上一版 digest 相同。"
-          : renderPlan?.metadata?.change_summary ?? null,
+          : deploymentPlan?.change_summary ?? renderPlan?.metadata?.change_summary ?? null,
       apply_summary: {
-        total: resolved.nodeIds.length,
+        total: deploymentNodeIds.length,
         success: 0,
         failed: 0,
         applied: 0,
@@ -1458,7 +1730,180 @@ function resolveReleaseNodes(payload) {
   return uniqueStringList([...directNodeIds, ...groupNodes]).filter((nodeId) => nodeStore.has(nodeId));
 }
 
-function buildReleaseManifest(release, resolved) {
+function serializeTrafficRoute(route) {
+  return {
+    node_id: route?.landing_node?.id ?? null,
+    node_name: route?.landing_node?.facts?.hostname ?? route?.landing_node?.id ?? null,
+    access_mode: route?.access_mode ?? "direct",
+    route_role: route?.route_role ?? "landing",
+    entry_node_id: route?.entry_node?.id ?? null,
+    entry_node_name: route?.entry_node?.facts?.hostname ?? route?.entry_node?.id ?? null,
+    entry_endpoint: route?.entry_endpoint?.host ?? null,
+    entry_port: route?.entry_port ?? null,
+    relay_upstream_endpoint: route?.relay_upstream_endpoint?.host ?? null,
+    upstream_family: route?.upstream_family ?? null,
+    route_label: route?.route_label ?? null,
+    route_note: route?.route_note ?? null,
+    publishable: Boolean(route?.publishable),
+    problems: Array.isArray(route?.problems) ? route.problems : [],
+  };
+}
+
+function buildCompositePublishScript(components = []) {
+  const scripts = (Array.isArray(components) ? components : [])
+    .map((component) => ({
+      component: normalizeNullableString(component?.component) ?? "component",
+      script_body: String(component?.script_body || "").trim(),
+    }))
+    .filter((component) => component.script_body);
+
+  if (scripts.length === 0) {
+    return "#!/bin/sh\nset -eu\nexit 0\n";
+  }
+
+  if (scripts.length === 1) {
+    return `${scripts[0].script_body.replace(/\r\n/g, "\n")}\n`;
+  }
+
+  const parts = ["#!/bin/sh", "set -eu", ""];
+  scripts.forEach((component, index) => {
+    parts.push(`echo "[publish] composite_component=${component.component}"`);
+    parts.push(`/bin/sh <<'EOF_COMPONENT_${index}'`);
+    parts.push(component.script_body.replace(/\r\n/g, "\n"));
+    parts.push(`EOF_COMPONENT_${index}`);
+    parts.push("");
+  });
+  return `${parts.join("\n").trimEnd()}\n`;
+}
+
+function buildConfigReleaseDeploymentPlan({ releaseId, resolved, binaryDistribution }) {
+  const landingRenderPlan = buildSingBoxConfig(
+    {
+      id: releaseId,
+    },
+    resolved,
+  );
+  const deploymentMap = new Map();
+  const relayBuckets = new Map();
+
+  for (const route of resolved.trafficRoutes) {
+    const landingNode = route?.landing_node;
+    if (!landingNode?.id) {
+      continue;
+    }
+
+    const landingPlan = deploymentMap.get(landingNode.id) ?? {
+      node_id: landingNode.id,
+      node: landingNode,
+      node_name: landingNode.name ?? landingNode.facts?.hostname ?? landingNode.id,
+      route_roles: new Set(),
+      landing_routes: [],
+      entry_routes: [],
+      components: {},
+    };
+    landingPlan.route_roles.add("landing");
+    landingPlan.landing_routes.push(route);
+    landingPlan.components.sing_box = {
+      engine: "sing-box",
+      renderPlan: landingRenderPlan,
+      binaryDistribution,
+    };
+    deploymentMap.set(landingNode.id, landingPlan);
+
+    if (route?.access_mode === "relay" && route?.entry_node?.id) {
+      const bucket = relayBuckets.get(route.entry_node.id) ?? {
+        entryNode: route.entry_node,
+        routes: [],
+      };
+      bucket.routes.push(route);
+      relayBuckets.set(route.entry_node.id, bucket);
+    }
+  }
+
+  for (const bucket of relayBuckets.values()) {
+    const entryNode = bucket.entryNode;
+    const forwarderPlan = buildTrafficForwarderConfig(
+      {
+        id: releaseId,
+      },
+      {
+        entryNode,
+        profile: resolved.profile,
+        routes: bucket.routes,
+      },
+    );
+    const entryPlan = deploymentMap.get(entryNode.id) ?? {
+      node_id: entryNode.id,
+      node: entryNode,
+      node_name: entryNode.name ?? entryNode.facts?.hostname ?? entryNode.id,
+      route_roles: new Set(),
+      landing_routes: [],
+      entry_routes: [],
+      components: {},
+    };
+    entryPlan.route_roles.add("entry");
+    entryPlan.entry_routes.push(...bucket.routes);
+    entryPlan.components.traffic_forwarder = {
+      engine: "haproxy",
+      renderPlan: forwarderPlan,
+    };
+    deploymentMap.set(entryNode.id, entryPlan);
+  }
+
+  const deploymentPlans = [...deploymentMap.values()].sort((left, right) =>
+    String(left.node_name || left.node_id).localeCompare(String(right.node_name || right.node_id), "zh-CN")
+  );
+  const landingNodeIds = uniqueStringList(resolved.nodeIds);
+  const entryNodeIds = uniqueStringList(
+    deploymentPlans
+      .filter((plan) => plan.route_roles.has("entry"))
+      .map((plan) => plan.node_id),
+  );
+  const deploymentNodeIds = deploymentPlans.map((plan) => plan.node_id);
+  const digestPayload = deploymentPlans.map((plan) => ({
+    node_id: plan.node_id,
+    route_roles: [...plan.route_roles].sort(),
+    sing_box_digest: plan.components.sing_box?.renderPlan?.digest ?? null,
+    traffic_forwarder_digest: plan.components.traffic_forwarder?.renderPlan?.digest ?? null,
+    entry_ports:
+      plan.components.traffic_forwarder?.renderPlan?.bindings?.map((binding) => binding.entry_port) ?? [],
+  }));
+  const digest = createHash("sha256")
+    .update(JSON.stringify(digestPayload))
+    .digest("hex")
+    .slice(0, 12);
+  const landingCount = landingNodeIds.length;
+  const entryCount = entryNodeIds.length;
+  const engines = uniqueStringList(
+    deploymentPlans.flatMap((plan) =>
+      Object.values(plan.components)
+        .map((component) => component?.engine)
+        .filter(Boolean),
+    ),
+  );
+  const protocolLabel = String(resolved.profile.protocol || "vless").toUpperCase();
+  const securityLabel = String(resolved.profile.security || "none").toUpperCase();
+  const changeSummary =
+    entryCount > 0
+      ? `${protocolLabel} ${securityLabel} 落地配置 ${landingCount} 台，入口 TCP 转发 ${entryCount} 台`
+      : `${protocolLabel} ${securityLabel} 落地配置 ${landingCount} 台`;
+
+  return {
+    digest,
+    change_summary: changeSummary,
+    delivery_mode: "node_targeted_publish",
+    rollbackable: true,
+    engines,
+    entryNodeIds,
+    landingNodeIds,
+    deploymentNodeIds,
+    landingRenderPlan,
+    deploymentPlans,
+  };
+}
+
+function buildReleaseManifest(release, resolved, options = {}) {
+  const deploymentPlan = options.deploymentPlan ?? null;
   return {
     release: {
       id: release.id,
@@ -1497,7 +1942,22 @@ function buildReleaseManifest(release, resolved) {
     scope: {
       node_group_ids: release.node_group_ids,
       node_ids: release.node_ids,
+      landing_node_ids: deploymentPlan?.landingNodeIds ?? release.node_ids,
+      entry_node_ids: deploymentPlan?.entryNodeIds ?? release.entry_node_ids ?? [],
+      deployment_node_ids: deploymentPlan?.deploymentNodeIds ?? release.deployment_node_ids ?? release.node_ids,
     },
+    routes: Array.isArray(resolved.trafficRoutes)
+      ? resolved.trafficRoutes.map((route) => serializeTrafficRoute(route))
+      : [],
+    deployments: Array.isArray(deploymentPlan?.deploymentPlans)
+      ? deploymentPlan.deploymentPlans.map((plan) => ({
+          node_id: plan.node_id,
+          node_name: plan.node_name,
+          route_roles: [...plan.route_roles].sort(),
+          landing_route_count: plan.landing_routes.length,
+          entry_route_count: plan.entry_routes.length,
+        }))
+      : [],
     render: {
       engine: release.summary?.engine ?? "managed-snapshot",
       delivery_mode: release.summary?.delivery_mode ?? "snapshot_only",
@@ -1572,47 +2032,155 @@ async function executeConfigRelease(payload, options = {}) {
   }
 
   const nodes = nodeIds.map((nodeId) => nodeStore.get(nodeId)).filter(Boolean);
+  const allNodes = [...nodeStore.values()];
+  const trafficRoutes = nodes.map((node) => resolveTrafficRoute(node, allNodes, profile));
+  const routeConflicts = findTrafficRouteConflicts(trafficRoutes);
+  const unpublishedRoutes = trafficRoutes.filter((route) => !route.publishable);
+  if (unpublishedRoutes.length > 0) {
+    throw new Error(
+      `存在不可发布线路：${unpublishedRoutes
+        .map((route) => `${route.route_label} (${route.problems.join(", ")})`)
+        .join("；")}`,
+    );
+  }
+  if (routeConflicts.length > 0) {
+    throw new Error(routeConflicts.map((conflict) => buildTrafficConflictMessage(conflict)).join("；"));
+  }
   const resolved = {
     accessUsers,
     groupIds,
     profile,
     nodeIds,
     nodes,
+    trafficRoutes,
   };
 
   const releaseId = `release_${randomUUID()}`;
   const binaryDistribution = buildPublishDistribution(options.platformBaseUrl ?? null);
-  const renderPlan = buildSingBoxConfig(
-    {
-      id: releaseId,
-    },
+  const deploymentPlan = buildConfigReleaseDeploymentPlan({
+    releaseId,
     resolved,
-  );
+    binaryDistribution,
+  });
   const previousRelease =
     configReleaseStore.find(
       (item) => item.profile_id === profile.id && item.status === "success",
     ) || null;
   const release = buildConfigReleaseRecord(payload, resolved, {
     binaryDistribution,
-    renderPlan,
+    deploymentPlan,
     previousRelease,
     releaseId,
   });
-  const manifest = buildReleaseManifest(release, resolved);
-  const scriptBody = buildSingBoxPublishScript({
-    binaryDistribution,
-    release,
-    manifest,
-    renderedConfig: renderPlan.config,
-    renderPlan,
+  const manifest = buildReleaseManifest(release, resolved, {
+    deploymentPlan,
   });
-  const tasks = nodes.map((node) =>
+  const nodePayloads = {};
+  release.deployments = deploymentPlan.deploymentPlans.map((plan) => {
+    const routeRoles = [...plan.route_roles].sort();
+    const deploymentManifestBase = {
+      ...manifest,
+      deployment: {
+        node_id: plan.node_id,
+        node_name: plan.node_name,
+        route_roles: routeRoles,
+        landing_routes: plan.landing_routes.map((route) => serializeTrafficRoute(route)),
+        entry_routes: plan.entry_routes.map((route) => serializeTrafficRoute(route)),
+      },
+    };
+    const componentScripts = [];
+    const artifacts = {};
+
+    if (plan.components.sing_box?.renderPlan) {
+      const singBoxManifest = {
+        ...deploymentManifestBase,
+        deployment: {
+          ...deploymentManifestBase.deployment,
+          artifact_engine: "sing-box",
+        },
+      };
+      const singBoxScript = buildSingBoxPublishScript({
+        binaryDistribution,
+        release,
+        manifest: singBoxManifest,
+        renderedConfig: plan.components.sing_box.renderPlan.config,
+        renderPlan: plan.components.sing_box.renderPlan,
+      });
+      componentScripts.push({
+        component: "sing-box",
+        script_body: singBoxScript,
+      });
+      artifacts.sing_box = {
+        engine: "sing-box",
+        config_digest: plan.components.sing_box.renderPlan.digest,
+        config_path: plan.components.sing_box.renderPlan.metadata?.config_path ?? null,
+        rendered_config: plan.components.sing_box.renderPlan.config,
+        manifest: singBoxManifest,
+      };
+    }
+
+    if (plan.components.traffic_forwarder?.renderPlan) {
+      const forwarderManifest = {
+        ...deploymentManifestBase,
+        deployment: {
+          ...deploymentManifestBase.deployment,
+          artifact_engine: "haproxy",
+        },
+      };
+      const forwarderScript = buildTrafficForwarderPublishScript({
+        release,
+        manifest: forwarderManifest,
+        renderedConfig: plan.components.traffic_forwarder.renderPlan.config,
+        renderPlan: plan.components.traffic_forwarder.renderPlan,
+      });
+      componentScripts.push({
+        component: "traffic_forwarder",
+        script_body: forwarderScript,
+      });
+      artifacts.traffic_forwarder = {
+        engine: "haproxy",
+        config_digest: plan.components.traffic_forwarder.renderPlan.digest,
+        config_path: plan.components.traffic_forwarder.renderPlan.metadata?.config_path ?? null,
+        rendered_config: plan.components.traffic_forwarder.renderPlan.config,
+        manifest: forwarderManifest,
+        bindings: plan.components.traffic_forwarder.renderPlan.bindings ?? [],
+      };
+    }
+
+    const scriptNameParts = [];
+    if (artifacts.sing_box) {
+      scriptNameParts.push(`落地 ${String(profile.protocol || "vless").toUpperCase()} 配置`);
+    }
+    if (artifacts.traffic_forwarder) {
+      scriptNameParts.push("入口 TCP 转发");
+    }
+    nodePayloads[plan.node_id] = {
+      script_name: scriptNameParts.join(" + ") || `发布 ${String(profile.protocol || "vless").toUpperCase()} 配置`,
+      script_body: buildCompositePublishScript(componentScripts),
+    };
+
+    return {
+      node_id: plan.node_id,
+      node_name: plan.node_name,
+      route_roles: routeRoles,
+      landing_route_labels: plan.landing_routes.map((route) => route.route_label).filter(Boolean),
+      entry_route_labels: plan.entry_routes.map((route) => route.route_label).filter(Boolean),
+      artifacts,
+      status: "running",
+      started_at: null,
+      finished_at: null,
+      note: null,
+    };
+  });
+
+  const deploymentNodes = deploymentPlan.deploymentPlans.map((plan) => plan.node).filter(Boolean);
+  const tasks = deploymentNodes.map((node) =>
     buildTaskRecord(node, {
       type: "publish_proxy_config",
       title: payload.title,
       status: "running",
       trigger: "manual_release",
-      note: "等待控制面对节点执行统一配置下发。",
+      note: "等待控制面对节点执行按业务角色生成的配置下发。",
       started_at: nowIso(),
       payload: {
         release_id: release.id,
@@ -1620,7 +2188,11 @@ async function executeConfigRelease(payload, options = {}) {
         profile_id: profile.id,
         node_group_ids: groupIds,
         node_ids: nodeIds,
+        deployment_node_ids: deploymentPlan.deploymentNodeIds,
+        entry_node_ids: deploymentPlan.entryNodeIds,
         protocol: profile.protocol,
+        route_roles:
+          release.deployments.find((deployment) => deployment.node_id === node.id)?.route_roles ?? [],
         reason: "manual_release",
       },
     }),
@@ -1638,9 +2210,10 @@ async function executeConfigRelease(payload, options = {}) {
     const operation = await buildOperationRecord({
       mode: "script",
       title: `${release.title} · ${profile.protocol.toUpperCase()}`,
-      script_name: `发布 ${profile.protocol.toUpperCase()} sing-box 配置`,
-      script_body: scriptBody,
-      node_ids: nodeIds,
+      script_name: `发布 ${profile.protocol.toUpperCase()} 线路配置`,
+      script_body: "",
+      node_payloads: nodePayloads,
+      node_ids: deploymentPlan.deploymentNodeIds,
     });
     pushOperationRecord(operation);
     const publishSummary = summarizeSingBoxTargets(operation.targets);
@@ -1648,15 +2221,26 @@ async function executeConfigRelease(payload, options = {}) {
     release.started_at = operation.started_at ?? release.created_at;
     release.finished_at = operation.finished_at ?? nowIso();
     release.status = operation.status;
+    release.deployments = release.deployments.map((deployment) => {
+      const target = operationTargetForNode(operation, deployment.node_id);
+      const targetStatus = String(target?.status || operation.status || "failed").toLowerCase();
+      return {
+        ...deployment,
+        status: targetStatus,
+        started_at: target?.started_at ?? operation.started_at ?? nowIso(),
+        finished_at: target?.finished_at ?? operation.finished_at ?? nowIso(),
+        note: describeSingBoxTargetOutcome(target),
+      };
+    });
     release.summary = {
       ...release.summary,
-      total_nodes: operation.summary?.total ?? nodeIds.length,
+      total_nodes: operation.summary?.total ?? deploymentPlan.deploymentNodeIds.length,
       success_nodes: operation.summary?.success ?? 0,
-      failed_nodes: operation.summary?.failed ?? nodeIds.length,
+      failed_nodes: operation.summary?.failed ?? deploymentPlan.deploymentNodeIds.length,
       apply_summary: {
-        total: operation.summary?.total ?? nodeIds.length,
+        total: operation.summary?.total ?? deploymentPlan.deploymentNodeIds.length,
         success: operation.summary?.success ?? 0,
-        failed: operation.summary?.failed ?? nodeIds.length,
+        failed: operation.summary?.failed ?? deploymentPlan.deploymentNodeIds.length,
         applied: publishSummary.applied_nodes,
         rendered_only: publishSummary.rendered_only_nodes,
         rolled_back: publishSummary.rolled_back_nodes,
@@ -1693,6 +2277,12 @@ async function executeConfigRelease(payload, options = {}) {
     release.note =
       normalizeNullableString(release.note) ??
       `配置发布执行失败: ${error instanceof Error ? error.message : "unknown error"}`;
+    release.deployments = release.deployments.map((deployment) => ({
+      ...deployment,
+      status: "failed",
+      finished_at: nowIso(),
+      note: `配置发布执行失败: ${error instanceof Error ? error.message : "unknown error"}`,
+    }));
 
     for (const task of tasks) {
       task.status = "failed";
@@ -1974,6 +2564,13 @@ function requestRequiresOperatorAuth(request, url) {
     return false;
   }
 
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    /^\/sub\/[^/]+$/.test(url.pathname)
+  ) {
+    return false;
+  }
+
   if (isPublicApiRequest(request, url)) {
     return false;
   }
@@ -2099,6 +2696,62 @@ const server = createServer(async (request, reply) => {
         error: "bootstrap_script_missing",
       });
     }
+    return;
+  }
+
+  const publicSubscriptionMatch = url.pathname.match(/^\/sub\/([^/]+)$/);
+  if ((request.method === "GET" || request.method === "HEAD") && publicSubscriptionMatch) {
+    const shareToken = safeDecodePathSegment(publicSubscriptionMatch[1]);
+    if (!shareToken) {
+      jsonResponse(reply, 400, {
+        error: "invalid_request",
+        message: "invalid subscription token",
+      });
+      return;
+    }
+    const accessUser = findAccessUserByShareToken(shareToken);
+
+    if (!accessUser) {
+      jsonResponse(reply, 404, {
+        error: "not_found",
+        message: "subscription token not found",
+      });
+      return;
+    }
+
+    const shareResponse = await buildAccessUserShareResponse({
+      accessUser,
+      nodes: [...nodeStore.values()],
+      operations: operationStore,
+      releases: configReleaseStore,
+      requestOrigin: resolveRequestOrigin(url),
+      options: {
+        includeQr: false,
+      },
+    });
+    const requestedNodeId = normalizeNullableString(url.searchParams.get("node_id"));
+
+    if (
+      requestedNodeId &&
+      !shareResponse.targets.some((target) => target.node_id === requestedNodeId)
+    ) {
+      jsonResponse(reply, 404, {
+        error: "not_found",
+        message: "subscription target not found",
+      });
+      return;
+    }
+
+    const body = buildSubscriptionContent(shareResponse.targets, requestedNodeId);
+    if (request.method === "HEAD") {
+      reply.writeHead(200, {
+        "content-type": "text/plain; charset=utf-8",
+      });
+      reply.end();
+      return;
+    }
+
+    textResponse(reply, 200, "text/plain", body);
     return;
   }
 
@@ -2437,7 +3090,7 @@ const server = createServer(async (request, reply) => {
 
   if (request.method === "GET" && url.pathname === "/api/v1/access-users") {
     jsonResponse(reply, 200, {
-      items: sortByUpdatedAt(accessUserStore),
+      items: sortByUpdatedAt(accessUserStore).map(serializeAccessUser),
     });
     return;
   }
@@ -2480,7 +3133,7 @@ const server = createServer(async (request, reply) => {
       await persistAccessUserStore();
 
       jsonResponse(reply, 201, {
-        access_user: accessUser,
+        access_user: serializeAccessUser(accessUser),
       });
     } catch (error) {
       jsonResponse(reply, 400, {
@@ -2488,6 +3141,75 @@ const server = createServer(async (request, reply) => {
         message: error instanceof Error ? error.message : "unknown error",
       });
     }
+    return;
+  }
+
+  const accessUserShareMatch = url.pathname.match(/^\/api\/v1\/access-users\/([^/]+)\/share$/);
+  if (accessUserShareMatch && request.method === "GET") {
+    const accessUserId = safeDecodePathSegment(accessUserShareMatch[1]);
+    if (!accessUserId) {
+      jsonResponse(reply, 400, {
+        error: "invalid_request",
+        message: "invalid access user id",
+      });
+      return;
+    }
+    const existingAccessUser = findAccessUserById(accessUserId);
+
+    if (!existingAccessUser) {
+      jsonResponse(reply, 404, {
+        error: "not_found",
+        message: "access user not found",
+      });
+      return;
+    }
+
+    const response = await buildAccessUserShareResponse({
+      accessUser: existingAccessUser,
+      nodes: [...nodeStore.values()],
+      operations: operationStore,
+      releases: configReleaseStore,
+      requestOrigin: resolveRequestOrigin(url),
+    });
+
+    jsonResponse(reply, 200, {
+      ...response,
+      access_user: serializeAccessUser(response.access_user),
+    });
+    return;
+  }
+
+  const accessUserShareTokenMatch = url.pathname.match(
+    /^\/api\/v1\/access-users\/([^/]+)\/share-token\/regenerate$/,
+  );
+  if (accessUserShareTokenMatch && request.method === "POST") {
+    const accessUserId = safeDecodePathSegment(accessUserShareTokenMatch[1]);
+    if (!accessUserId) {
+      jsonResponse(reply, 400, {
+        error: "invalid_request",
+        message: "invalid access user id",
+      });
+      return;
+    }
+    const existingAccessUser = findAccessUserById(accessUserId);
+
+    if (!existingAccessUser) {
+      jsonResponse(reply, 404, {
+        error: "not_found",
+        message: "access user not found",
+      });
+      return;
+    }
+
+    const rotatedAccessUser = rotateAccessUserShareToken(existingAccessUser);
+    const index = accessUserStore.findIndex((item) => item.id === accessUserId);
+    accessUserStore[index] = rotatedAccessUser;
+    await persistAccessUserStore();
+
+    jsonResponse(reply, 200, {
+      ok: true,
+      access_user: serializeAccessUser(rotatedAccessUser),
+    });
     return;
   }
 
@@ -2552,7 +3274,7 @@ const server = createServer(async (request, reply) => {
       await persistAccessUserStore();
 
       jsonResponse(reply, 200, {
-        access_user: updatedAccessUser,
+        access_user: serializeAccessUser(updatedAccessUser),
       });
     } catch (error) {
       jsonResponse(reply, 400, {
@@ -3723,10 +4445,16 @@ const server = createServer(async (request, reply) => {
       const requestedProbeType =
         typeof payload.probe_type === "string" && payload.probe_type.trim()
           ? payload.probe_type.trim().toLowerCase()
-          : "ssh_auth";
-      const probeType = ["ssh_auth", "tcp_ssh"].includes(requestedProbeType)
+          : "full_stack";
+      const allowedProbeTypes = new Set([
+        "ssh_auth",
+        "business_entry_tcp",
+        "relay_upstream_tcp",
+        "full_stack",
+      ]);
+      const probeType = allowedProbeTypes.has(requestedProbeType)
         ? requestedProbeType
-        : "ssh_auth";
+        : "full_stack";
       const task = buildProbeTask(node, {
         trigger: "manual_probe",
         reason: "manual_probe",
@@ -3736,7 +4464,14 @@ const server = createServer(async (request, reply) => {
       await persistTaskStore();
 
       const result = await executeProbeTask(task, {
-        note: "已由控制台手动触发，控制面开始执行连通性与 SSH 接管探测。",
+        note:
+          probeType === "business_entry_tcp"
+            ? "已由控制台手动触发，控制面开始验证业务入口 TCP 可达性。"
+            : probeType === "relay_upstream_tcp"
+              ? "已由控制台手动触发，控制面开始验证入口到落地上游链路。"
+              : probeType === "ssh_auth"
+                ? "已由控制台手动触发，控制面开始验证 SSH 接管链路。"
+                : "已由控制台手动触发，控制面开始执行综合巡检，校验管理链路、业务入口与 relay 上游状态。",
       });
 
       jsonResponse(reply, 201, {
@@ -3901,7 +4636,10 @@ const { start } = createServerStartupRuntime({
     });
   },
   startProbeScheduler,
-  loadAccessUserStore,
+  loadAccessUserStore: async () => {
+    await loadAccessUserStore();
+    await ensureAccessUserShareTokens();
+  },
   loadBootstrapTokens,
   loadConfigReleaseStore,
   loadNodeStore,

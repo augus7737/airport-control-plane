@@ -772,6 +772,24 @@ function extractPublishMarker(outputLines, prefix) {
   return null;
 }
 
+function collectPublishEngines(outputLines) {
+  const values = new Set();
+  for (const line of outputLines) {
+    const text = String(line || "");
+    const marker = "[publish] engine=";
+    if (!text.includes(marker)) {
+      continue;
+    }
+
+    const value = text.slice(text.indexOf(marker) + marker.length).trim();
+    if (value) {
+      values.add(value);
+    }
+  }
+
+  return [...values];
+}
+
 export function summarizeSingBoxTargets(targets = []) {
   const summary = {
     applied_nodes: 0,
@@ -811,18 +829,42 @@ export function summarizeSingBoxTargets(targets = []) {
 export function describeSingBoxTargetOutcome(target) {
   const outputLines = Array.isArray(target?.output) ? target.output : [];
   const result = extractPublishMarker(outputLines, "result");
+  const engines = collectPublishEngines(outputLines);
+  const onlyHaproxy = engines.length === 1 && engines[0] === "haproxy";
+  const hasHaproxy = engines.includes("haproxy");
+  const hasSingBox = engines.includes("sing-box");
+  const successLabel = onlyHaproxy
+    ? "TCP 转发配置"
+    : hasHaproxy && hasSingBox
+      ? "落地配置与入口转发"
+      : "sing-box 配置";
+  const pendingLabel = onlyHaproxy
+    ? "TCP 转发配置已渲染到节点，等待服务接管或人工启用。"
+    : hasHaproxy && hasSingBox
+      ? "节点配置已渲染完成，等待服务接管或人工启用。"
+      : "sing-box 配置已渲染到节点，等待服务接管或人工启用。";
+  const rollbackLabel = onlyHaproxy
+    ? "TCP 转发配置发布失败，已自动回滚到上一版。"
+    : hasHaproxy && hasSingBox
+      ? "节点配置发布失败，已自动回滚到上一版。"
+      : "sing-box 配置发布失败，已自动回滚到上一版。";
+  const failedLabel = onlyHaproxy
+    ? "TCP 转发配置发布失败，请查看终端输出。"
+    : hasHaproxy && hasSingBox
+      ? "节点配置发布失败，请查看终端输出。"
+      : "sing-box 配置发布失败，请查看终端输出。";
 
   if (String(target?.status || "").toLowerCase() === "success") {
     if (result === "applied") {
-      return "sing-box 配置已校验并重载。";
+      return `${successLabel}已校验并重载。`;
     }
 
-    return "sing-box 配置已渲染到节点，等待服务接管或人工启用。";
+    return pendingLabel;
   }
 
   if (result === "rolled_back") {
-    return "sing-box 配置发布失败，已自动回滚到上一版。";
+    return rollbackLabel;
   }
 
-  return "sing-box 配置发布失败，请查看终端输出。";
+  return failedLabel;
 }

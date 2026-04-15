@@ -40,6 +40,14 @@ function resolveUserAlterId(user) {
   return String(user.credential.alter_id);
 }
 
+function toSafeFileName(value) {
+  return String(value || "share")
+    .trim()
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "share";
+}
+
 export function createAccessUsersPageModule(dependencies) {
   const {
     appState,
@@ -49,8 +57,10 @@ export function createAccessUsersPageModule(dependencies) {
     escapeHtml,
     formatDate,
     formatRelativeTime,
+    getAccessUserShare,
     page,
     refreshRuntimeData,
+    regenerateAccessUserShareToken,
     renderCurrentContent,
     statusClassName,
     statusText,
@@ -62,10 +72,39 @@ export function createAccessUsersPageModule(dependencies) {
     filter: "",
     selectedId: null,
     message: null,
+    shareData: null,
+    shareUserId: null,
+    shareLoading: false,
+    shareError: null,
+    shareFeedback: null,
+    shareRequestKey: null,
+    queryHydrated: false,
+    pendingQueryShareUserId: null,
   };
 
   function getSelectedUser() {
     return appState.accessUsers.find((item) => item.id === state.selectedId) || null;
+  }
+
+  function clearShareState(options = {}) {
+    const { preserveData = false, preserveUserId = false } = options;
+    state.shareLoading = false;
+    state.shareError = null;
+    state.shareFeedback = null;
+    state.shareRequestKey = null;
+    if (!preserveData) {
+      state.shareData = null;
+    }
+    if (!preserveUserId) {
+      state.shareUserId = null;
+    }
+  }
+
+  function getVisibleShareData(selectedUser) {
+    if (!selectedUser || state.shareUserId !== selectedUser.id) {
+      return null;
+    }
+    return state.shareData;
   }
 
   function getDraft(user) {
@@ -120,6 +159,117 @@ export function createAccessUsersPageModule(dependencies) {
     });
   }
 
+  function scrollToSharePanel() {
+    documentRef.getElementById("access-user-share-panel")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function setShareFeedback(type, text) {
+    state.shareFeedback = {
+      type,
+      text,
+    };
+    renderCurrentContent();
+  }
+
+  function hydrateFromQuery() {
+    if (state.queryHydrated) {
+      return;
+    }
+
+    state.queryHydrated = true;
+    const params = new windowRef.URLSearchParams(windowRef.location.search || "");
+    const userId = String(params.get("user_id") || "").trim();
+    const shouldOpenShare = String(params.get("share") || "").trim() === "1";
+
+    if (userId && appState.accessUsers.some((item) => item.id === userId)) {
+      state.selectedId = userId;
+      if (shouldOpenShare) {
+        state.pendingQueryShareUserId = userId;
+      }
+    }
+  }
+
+  async function loadShareData(userId, options = {}) {
+    const selectedUser =
+      appState.accessUsers.find((item) => item.id === userId) ||
+      appState.accessUsers.find((item) => item.id === state.selectedId);
+    if (!selectedUser || !getAccessUserShare) {
+      return;
+    }
+
+    const requestKey = `${selectedUser.id}:${Date.now()}`;
+    state.selectedId = selectedUser.id;
+    state.shareUserId = selectedUser.id;
+    state.shareRequestKey = requestKey;
+    state.shareLoading = true;
+    state.shareError = null;
+    state.shareFeedback = null;
+    if (!options.keepCurrentData) {
+      state.shareData = null;
+    }
+    renderCurrentContent();
+    if (options.scroll !== false) {
+      scrollToSharePanel();
+    }
+
+    try {
+      const result = await getAccessUserShare(selectedUser.id);
+      if (state.shareRequestKey !== requestKey) {
+        return;
+      }
+
+      state.shareData = result;
+      state.shareLoading = false;
+      state.shareError = null;
+      renderCurrentContent();
+      if (options.scroll !== false) {
+        scrollToSharePanel();
+      }
+    } catch (error) {
+      if (state.shareRequestKey !== requestKey) {
+        return;
+      }
+
+      state.shareLoading = false;
+      state.shareError = error instanceof Error ? error.message : "加载分享信息失败";
+      renderCurrentContent();
+      if (options.scroll !== false) {
+        scrollToSharePanel();
+      }
+    }
+  }
+
+  async function handleRegenerateShareToken() {
+    const selectedUser = getSelectedUser();
+    if (!selectedUser || !regenerateAccessUserShareToken) {
+      return;
+    }
+
+    const confirmed = windowRef.confirm(
+      `确认重置“${selectedUser.name || selectedUser.id}”的订阅令牌吗？旧订阅链接会立即失效。`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await regenerateAccessUserShareToken(selectedUser.id);
+      await refreshRuntimeData();
+      await loadShareData(selectedUser.id, { keepCurrentData: false, scroll: true });
+      state.message = {
+        type: "success",
+        text: "订阅令牌已重置，新的聚合订阅与节点订阅已刷新。",
+      };
+      renderCurrentContent();
+      scrollToSharePanel();
+    } catch (error) {
+      setShareFeedback("error", error instanceof Error ? error.message : "重置订阅令牌失败");
+    }
+  }
+
   async function handleDelete(id) {
     const user = appState.accessUsers.find((item) => item.id === id);
     if (!user) {
@@ -134,6 +284,9 @@ export function createAccessUsersPageModule(dependencies) {
       await deleteAccessUser(user.id);
       if (state.selectedId === user.id) {
         state.selectedId = null;
+      }
+      if (state.shareUserId === user.id) {
+        clearShareState();
       }
       state.message = {
         type: "success",
@@ -165,7 +318,341 @@ export function createAccessUsersPageModule(dependencies) {
     `;
   }
 
+  function renderShareLinkBlock(options) {
+    const {
+      title,
+      description,
+      value,
+      qrSvg,
+      copyKind,
+      targetIndex = "",
+      emptyText = "当前暂无可用链接。",
+    } = options;
+    const safeValue = value || "";
+    const hasValue = Boolean(safeValue);
+    const hasQr = Boolean(qrSvg);
+    const dataTargetIndex = targetIndex === "" ? "" : ` data-target-index="${targetIndex}"`;
+
+    return `
+      <section class="share-link-block">
+        <div class="share-link-head">
+          <strong>${escapeHtml(title)}</strong>
+          ${description ? `<span class="tiny">${escapeHtml(description)}</span>` : ""}
+        </div>
+        <textarea class="share-readonly mono" readonly rows="${copyKind === "aggregate_subscription" ? 3 : 2}">${escapeHtml(
+          hasValue ? safeValue : emptyText,
+        )}</textarea>
+        <div class="ops-table-actions share-action-row">
+          <button class="button ghost" type="button" data-share-copy="${escapeHtml(copyKind)}"${dataTargetIndex}${
+            hasValue ? "" : " disabled"
+          }>复制链接</button>
+          <button class="button ghost" type="button" data-share-download-qr="${escapeHtml(copyKind)}"${dataTargetIndex}${
+            hasQr ? "" : " disabled"
+          }>下载二维码</button>
+          ${
+            hasValue
+              ? `<a class="button ghost" href="${escapeHtml(safeValue)}" target="_blank" rel="noreferrer">打开</a>`
+              : '<button class="button ghost" type="button" disabled>打开</button>'
+          }
+        </div>
+        <div class="share-qr-shell">
+          ${
+            hasQr
+              ? `<div class="share-qr-svg">${qrSvg}</div>`
+              : `<div class="share-qr-empty">${escapeHtml(emptyText)}</div>`
+          }
+        </div>
+      </section>
+    `;
+  }
+
+  function renderTargetShareCard(target, index) {
+    return `
+      <article class="share-target-card">
+        <div class="share-target-head">
+          <div class="share-target-title">
+            <strong>${escapeHtml(target.node_name || target.node_id || "未命名节点")}</strong>
+            <span class="tiny mono">${escapeHtml(target.node_id || "-")}</span>
+          </div>
+          <div class="ops-chip-list">
+            <span class="pill">${escapeHtml(String(target.protocol || "vless").toUpperCase())}</span>
+            <span class="pill">${escapeHtml(String(target.security || "none").toUpperCase())}</span>
+            <span class="pill">${escapeHtml(String(target.transport || "tcp").toUpperCase())}</span>
+          </div>
+        </div>
+
+        <div class="share-target-meta">
+          <div><span>线路</span><strong>${escapeHtml(target.route_label || target.node_name || "-")}</strong></div>
+          <div><span>区域</span><strong>${escapeHtml(target.region || "未标记")}</strong></div>
+          <div><span>厂商</span><strong>${escapeHtml(target.provider || "未标记")}</strong></div>
+          <div><span>业务入口</span><strong class="mono">${escapeHtml(
+            target.endpoint_host ? `${target.endpoint_host}:${target.endpoint_port || "-"}` : "未识别",
+          )}</strong></div>
+          <div><span>生效发布</span><strong>${escapeHtml(target.latest_release_id || "-")}</strong></div>
+        </div>
+
+        <div class="share-link-grid">
+          ${renderShareLinkBlock({
+            title: "节点订阅链接",
+            description: "这个节点当前生效配置的单节点订阅入口。",
+            value: target.subscription_url,
+            qrSvg: target.subscription_qr_svg,
+            copyKind: "target_subscription",
+            targetIndex: index,
+            emptyText: "当前暂无单节点订阅链接。",
+          })}
+          ${renderShareLinkBlock({
+            title: "直连分享链接",
+            description: "直接投给客户端的单条 vless:// / vmess://。",
+            value: target.share_url,
+            qrSvg: target.share_qr_svg,
+            copyKind: "target_share",
+            targetIndex: index,
+            emptyText: "当前模板参数不足，暂无法生成直连分享链接。",
+          })}
+        </div>
+      </article>
+    `;
+  }
+
+  function renderSharePanel(selectedUser) {
+    const shareData = getVisibleShareData(selectedUser);
+    const warnings = Array.isArray(shareData?.warnings) ? shareData.warnings : [];
+    const targets = Array.isArray(shareData?.targets) ? shareData.targets : [];
+
+    if (!selectedUser) {
+      return `
+        <article class="panel" id="access-user-share-panel">
+          <div class="panel-body">
+            <div class="panel-title">
+              <div>
+                <h3>分享与订阅</h3>
+                <p>选中一个接入用户后，这里会展示聚合订阅和节点级分享结果。</p>
+              </div>
+            </div>
+            <div class="ops-empty-block">先从左侧选择一个接入用户，或者点击列表里的“订阅”按钮。</div>
+          </div>
+        </article>
+      `;
+    }
+
+    return `
+      <article class="panel" id="access-user-share-panel">
+        <div class="panel-body">
+          <div class="panel-title">
+            <div>
+              <h3>分享与订阅</h3>
+              <p>按“当前各节点最近一次成功发布”回溯这个用户的真实生效结果，不按理论节点组猜测。</p>
+            </div>
+            <div class="ops-table-actions">
+              <button class="button ghost" type="button" id="access-user-share-refresh">刷新结果</button>
+              <button class="button ghost" type="button" id="access-user-share-regenerate">重置令牌</button>
+            </div>
+          </div>
+
+          <div class="share-summary-strip">
+            <div>
+              <span>当前用户</span>
+              <strong>${escapeHtml(selectedUser.name || selectedUser.id)}</strong>
+            </div>
+            <div>
+              <span>当前模板</span>
+              <strong>${escapeHtml(getProfileName(selectedUser.profile_id))}</strong>
+            </div>
+            <div>
+              <span>当前生效节点</span>
+              <strong>${shareData ? String(shareData.aggregate?.target_count ?? 0) : "-"}</strong>
+            </div>
+          </div>
+
+          ${
+            state.shareFeedback
+              ? `<div class="message ${escapeHtml(state.shareFeedback.type)}">${escapeHtml(
+                  state.shareFeedback.text,
+                )}</div>`
+              : ""
+          }
+          ${
+            state.shareError
+              ? `<div class="message error">${escapeHtml(state.shareError)}</div>`
+              : ""
+          }
+
+          ${
+            state.shareLoading
+              ? '<div class="ops-empty-block">正在从后端加载聚合订阅、节点订阅和直连分享结果…</div>'
+              : shareData
+                ? `
+                  ${renderShareLinkBlock({
+                    title: "聚合订阅链接",
+                    description: `当前共 ${shareData.aggregate?.target_count ?? 0} 个生效节点，聚合订阅会一次返回所有可生成的直连链接。`,
+                    value: shareData.aggregate?.subscription_url,
+                    qrSvg: shareData.aggregate?.subscription_qr_svg,
+                    copyKind: "aggregate_subscription",
+                    emptyText: "当前暂无聚合订阅链接。",
+                  })}
+
+                  ${
+                    warnings.length
+                      ? `
+                        <div class="share-warning-list">
+                          ${warnings
+                            .map(
+                              (warning) =>
+                                `<div class="share-warning-item">${escapeHtml(String(warning))}</div>`,
+                            )
+                            .join("")}
+                        </div>
+                      `
+                      : ""
+                  }
+
+                  ${
+                    targets.length
+                      ? `<div class="share-target-list">${targets
+                          .map((target, index) => renderTargetShareCard(target, index))
+                          .join("")}</div>`
+                      : '<div class="ops-empty-block">这个接入用户当前没有任何生效节点，所以暂时不会生成节点级订阅结果。</div>'
+                  }
+                `
+                : `
+                  <div class="ops-empty-block">
+                    还没加载当前用户的订阅结果。点击下面按钮后，后端会统一生成聚合订阅、节点订阅、直连分享链接和二维码。
+                  </div>
+                  <div class="ops-action-row">
+                    <button class="button primary" type="button" id="access-user-share-load">加载分享结果</button>
+                  </div>
+                `
+          }
+        </div>
+      </article>
+    `;
+  }
+
+  function resolveCopyValue(kind, targetIndex) {
+    const shareData = getVisibleShareData(getSelectedUser());
+    if (!shareData) {
+      return "";
+    }
+
+    if (kind === "aggregate_subscription") {
+      return String(shareData.aggregate?.subscription_url || "");
+    }
+
+    const target = Array.isArray(shareData.targets) ? shareData.targets[targetIndex] : null;
+    if (!target) {
+      return "";
+    }
+
+    if (kind === "target_subscription") {
+      return String(target.subscription_url || "");
+    }
+
+    if (kind === "target_share") {
+      return String(target.share_url || "");
+    }
+
+    return "";
+  }
+
+  function resolveQrSvg(kind, targetIndex) {
+    const shareData = getVisibleShareData(getSelectedUser());
+    if (!shareData) {
+      return "";
+    }
+
+    if (kind === "aggregate_subscription") {
+      return String(shareData.aggregate?.subscription_qr_svg || "");
+    }
+
+    const target = Array.isArray(shareData.targets) ? shareData.targets[targetIndex] : null;
+    if (!target) {
+      return "";
+    }
+
+    if (kind === "target_subscription") {
+      return String(target.subscription_qr_svg || "");
+    }
+
+    if (kind === "target_share") {
+      return String(target.share_qr_svg || "");
+    }
+
+    return "";
+  }
+
+  function buildQrFileName(kind, targetIndex) {
+    const selectedUser = getSelectedUser();
+    const shareData = getVisibleShareData(selectedUser);
+    const userName = toSafeFileName(selectedUser?.name || selectedUser?.id || "access-user");
+
+    if (kind === "aggregate_subscription") {
+      return `${userName}-aggregate-subscription.svg`;
+    }
+
+    const target = Array.isArray(shareData?.targets) ? shareData.targets[targetIndex] : null;
+    const nodeName = toSafeFileName(target?.node_name || target?.node_id || `target-${targetIndex + 1}`);
+
+    if (kind === "target_subscription") {
+      return `${userName}-${nodeName}-subscription.svg`;
+    }
+
+    return `${userName}-${nodeName}-share.svg`;
+  }
+
+  async function copyShareValue(kind, targetIndex) {
+    const value = resolveCopyValue(kind, targetIndex);
+    if (!value) {
+      setShareFeedback("error", "当前没有可复制的链接。");
+      return;
+    }
+
+    if (!windowRef.navigator?.clipboard?.writeText) {
+      setShareFeedback("error", "当前浏览器环境不支持剪贴板复制。");
+      return;
+    }
+
+    try {
+      await windowRef.navigator.clipboard.writeText(value);
+      setShareFeedback("success", "链接已复制到剪贴板。");
+      scrollToSharePanel();
+    } catch (error) {
+      setShareFeedback("error", error instanceof Error ? error.message : "复制链接失败");
+    }
+  }
+
+  function downloadQrSvg(kind, targetIndex) {
+    const svgText = resolveQrSvg(kind, targetIndex);
+    if (!svgText) {
+      setShareFeedback("error", "当前没有可下载的二维码。");
+      return;
+    }
+
+    if (!windowRef.URL?.createObjectURL) {
+      setShareFeedback("error", "当前浏览器环境不支持下载二维码。");
+      return;
+    }
+
+    const blob = new windowRef.Blob([svgText], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    const objectUrl = windowRef.URL.createObjectURL(blob);
+    const anchor = documentRef.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = buildQrFileName(kind, targetIndex);
+    documentRef.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    windowRef.setTimeout(() => {
+      windowRef.URL.revokeObjectURL(objectUrl);
+    }, 0);
+    setShareFeedback("success", "二维码 SVG 已开始下载。");
+    scrollToSharePanel();
+  }
+
   function renderAccessUsersPage() {
+    hydrateFromQuery();
+
     const selectedUser = getSelectedUser();
     const draft = getDraft(selectedUser);
     const filteredUsers = getFilteredUsers();
@@ -187,7 +674,7 @@ export function createAccessUsersPageModule(dependencies) {
             const alterId = resolveUserAlterId(user);
             const displayName = user.name || user.id;
             return `
-              <tr>
+              <tr class="${state.selectedId === user.id ? "is-selected" : ""}">
                 <td>
                   <div class="node-meta">
                     <span class="node-name">${escapeHtml(displayName)}</span>
@@ -221,6 +708,7 @@ export function createAccessUsersPageModule(dependencies) {
                 <td>
                   <div class="ops-table-actions">
                     <button class="button ghost" type="button" data-access-user-edit="${escapeHtml(user.id)}">编辑</button>
+                    <button class="button ghost" type="button" data-access-user-share="${escapeHtml(user.id)}">订阅</button>
                     <button class="button ghost" type="button" data-access-user-delete="${escapeHtml(user.id)}">删除</button>
                   </div>
                 </td>
@@ -379,6 +867,8 @@ export function createAccessUsersPageModule(dependencies) {
             </div>
           </article>
 
+          ${renderSharePanel(selectedUser)}
+
           <article class="panel">
             <div class="panel-body">
               <div class="panel-title">
@@ -407,6 +897,7 @@ export function createAccessUsersPageModule(dependencies) {
     documentRef.getElementById("focus-access-user-form")?.addEventListener("click", () => {
       state.selectedId = null;
       state.message = null;
+      clearShareState();
       renderCurrentContent();
       scrollToForm();
     });
@@ -419,6 +910,7 @@ export function createAccessUsersPageModule(dependencies) {
     documentRef.getElementById("access-user-create-empty")?.addEventListener("click", () => {
       state.selectedId = null;
       state.message = null;
+      clearShareState();
       renderCurrentContent();
       scrollToForm();
     });
@@ -426,15 +918,27 @@ export function createAccessUsersPageModule(dependencies) {
     documentRef.getElementById("access-user-form-reset")?.addEventListener("click", () => {
       state.selectedId = null;
       state.message = null;
+      clearShareState();
       renderCurrentContent();
     });
 
     documentRef.querySelectorAll("[data-access-user-edit]").forEach((button) => {
       button.addEventListener("click", (event) => {
-        state.selectedId = event.currentTarget.dataset.accessUserEdit || null;
+        const nextSelectedId = event.currentTarget.dataset.accessUserEdit || null;
+        if (state.selectedId !== nextSelectedId) {
+          clearShareState();
+        }
+        state.selectedId = nextSelectedId;
         state.message = null;
         renderCurrentContent();
         scrollToForm();
+      });
+    });
+
+    documentRef.querySelectorAll("[data-access-user-share]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        const userId = event.currentTarget.dataset.accessUserShare || "";
+        void loadShareData(userId, { scroll: true });
       });
     });
 
@@ -448,6 +952,38 @@ export function createAccessUsersPageModule(dependencies) {
       if (state.selectedId) {
         handleDelete(state.selectedId);
       }
+    });
+
+    documentRef.getElementById("access-user-share-load")?.addEventListener("click", () => {
+      if (state.selectedId) {
+        void loadShareData(state.selectedId, { scroll: true });
+      }
+    });
+
+    documentRef.getElementById("access-user-share-refresh")?.addEventListener("click", () => {
+      if (state.selectedId) {
+        void loadShareData(state.selectedId, { scroll: true, keepCurrentData: true });
+      }
+    });
+
+    documentRef.getElementById("access-user-share-regenerate")?.addEventListener("click", () => {
+      void handleRegenerateShareToken();
+    });
+
+    documentRef.querySelectorAll("[data-share-copy]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const kind = button.dataset.shareCopy || "";
+        const targetIndex = Number.parseInt(button.dataset.targetIndex || "-1", 10);
+        void copyShareValue(kind, Number.isInteger(targetIndex) && targetIndex >= 0 ? targetIndex : null);
+      });
+    });
+
+    documentRef.querySelectorAll("[data-share-download-qr]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const kind = button.dataset.shareDownloadQr || "";
+        const targetIndex = Number.parseInt(button.dataset.targetIndex || "-1", 10);
+        downloadQrSvg(kind, Number.isInteger(targetIndex) && targetIndex >= 0 ? targetIndex : null);
+      });
     });
 
     documentRef.getElementById("access-user-form")?.addEventListener("submit", async (event) => {
@@ -489,6 +1025,7 @@ export function createAccessUsersPageModule(dependencies) {
       }
 
       const isEditing = Boolean(state.selectedId);
+      const previousShareUserId = state.shareUserId;
 
       try {
         const result = isEditing
@@ -502,6 +1039,12 @@ export function createAccessUsersPageModule(dependencies) {
         if (result?.id) {
           state.selectedId = result.id;
         }
+        const savedUserId = result?.id || state.selectedId;
+        if (savedUserId && previousShareUserId === savedUserId) {
+          await loadShareData(savedUserId, { keepCurrentData: false, scroll: false });
+        } else {
+          clearShareState();
+        }
         renderCurrentContent();
         scrollToForm();
       } catch (error) {
@@ -513,6 +1056,12 @@ export function createAccessUsersPageModule(dependencies) {
         scrollToForm();
       }
     });
+
+    if (state.pendingQueryShareUserId) {
+      const userId = state.pendingQueryShareUserId;
+      state.pendingQueryShareUserId = null;
+      void loadShareData(userId, { scroll: false });
+    }
   }
 
   return {

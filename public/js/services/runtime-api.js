@@ -298,6 +298,16 @@ export async function deleteAccessUser(id) {
   return requestJson(`/api/v1/access-users/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export async function getAccessUserShare(id) {
+  return requestJson(`/api/v1/access-users/${encodeURIComponent(id)}/share`);
+}
+
+export async function regenerateAccessUserShareToken(id) {
+  return requestJson(`/api/v1/access-users/${encodeURIComponent(id)}/share-token/regenerate`, {
+    method: "POST",
+  });
+}
+
 export async function createProxyProfile(payload) {
   const result = await requestJson("/api/v1/proxy-profiles", jsonRequest(payload));
   return pickEntity(result, ["proxy_profile", "profile", "item"]) || result;

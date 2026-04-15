@@ -11,9 +11,15 @@ export function getLastSeenMinutes(node) {
 }
 
 export function buildCapabilityGauge(probeCapabilityText) {
-  if (probeCapabilityText === "已验证") return { value: "SSH", percent: 100, tone: "green", foot: "已验证接管" };
-  if (probeCapabilityText === "仅 TCP") return { value: "TCP", percent: 68, tone: "blue", foot: "仅端口已通" };
+  if (probeCapabilityText === "全链路就绪") return { value: "全通", percent: 100, tone: "green", foot: "管理与业务均正常" };
+  if (probeCapabilityText === "已验证接管") return { value: "SSH", percent: 88, tone: "green", foot: "管理链路已验证" };
+  if (probeCapabilityText === "入口可达") return { value: "入口", percent: 82, tone: "green", foot: "业务入口当前可达" };
+  if (probeCapabilityText === "上游可达") return { value: "上游", percent: 78, tone: "blue", foot: "入口到落地已通" };
+  if (probeCapabilityText === "仅管理 TCP") return { value: "TCP", percent: 68, tone: "blue", foot: "仅管理端口已通" };
   if (probeCapabilityText === "待配私钥") return { value: "待配", percent: 54, tone: "yellow", foot: "补平台私钥" };
+  if (probeCapabilityText === "私钥异常") return { value: "私钥", percent: 38, tone: "red", foot: "平台私钥不可用" };
+  if (probeCapabilityText === "业务入口异常") return { value: "入口", percent: 30, tone: "red", foot: "业务入口不可达" };
+  if (probeCapabilityText === "入口上游异常") return { value: "上游", percent: 24, tone: "red", foot: "入口到落地异常" };
   if (probeCapabilityText === "接管失败") return { value: "失败", percent: 28, tone: "red", foot: "认证或链路异常" };
   if (probeCapabilityText === "未通过") return { value: "异常", percent: 16, tone: "red", foot: "当前不可接管" };
   return { value: "待判", percent: 40, tone: "blue", foot: "等待更多探测" };
@@ -223,6 +229,17 @@ export function buildNodeDetailViewModel({
 }) {
   const relayNode = resolveRelayNode(node, nodes);
   const relayLabel = relayNode ? getNodeDisplayName(relayNode) : getRelayDisplayName(node, nodes);
+  const managementAccessMode = node.management?.access_mode || "direct";
+  const managementRelayNode =
+    node.management?.relay_node_id
+      ? nodes.find((item) => item.id === node.management.relay_node_id) || null
+      : null;
+  const managementRelayLabel =
+    managementAccessMode === "relay"
+      ? managementRelayNode
+        ? getNodeDisplayName(managementRelayNode)
+        : node.management?.relay_label || node.management?.relay_node_id || "未指定跳板"
+      : "无需跳板";
   const nodeTasks = getTasksForNode(node, getTasks(), sortTasks);
   const recentNodeTasks = nodeTasks.slice(0, 4);
   const nodeProbes = getProbesForNode(node, getProbes(), sortProbes).slice(0, 4);
@@ -360,7 +377,7 @@ export function buildNodeDetailViewModel({
   ];
   const heroHighlights = [
     { label: "健康分", value: healthScoreText },
-    { label: "接管能力", value: probeCapabilityText },
+    { label: "巡检状态", value: probeCapabilityText },
     { label: "最近探测", value: lastProbeText },
   ];
   const activeSystemTemplates = Array.isArray(systemTemplates)
@@ -419,12 +436,16 @@ export function buildNodeDetailViewModel({
     ["备注", node.commercial?.note || "-"],
   ];
   const routeOverview = [
-    ["接入方式", accessModeText],
-    ["入口区域", node.networking?.entry_region || "中国大陆"],
-    ["中转节点", accessMode === "relay" ? relayLabel : "无需中转"],
-    ["中转区域", accessMode === "relay" ? node.networking?.relay_region || relayNode?.labels?.region || "-" : "-"],
-    ["链路摘要", routeSummaryText],
-    ["链路说明", node.networking?.route_note || "-"],
+    ["业务链路", accessModeText],
+    ["业务入口区域", node.networking?.entry_region || "中国大陆"],
+    ["业务入口端口", node.networking?.entry_port ? String(node.networking.entry_port) : "跟随代理配置"],
+    ["业务中转节点", accessMode === "relay" ? relayLabel : "无需中转"],
+    ["业务中转区域", accessMode === "relay" ? node.networking?.relay_region || relayNode?.labels?.region || "-" : "-"],
+    ["业务链路摘要", routeSummaryText],
+    ["业务备注", node.networking?.route_note || "-"],
+    ["管理链路", managementAccessMode === "relay" ? "SSH 经跳板" : "SSH 直连"],
+    ["管理跳板", managementRelayLabel],
+    ["管理备注", node.management?.route_note || "-"],
   ];
   const healthOverviewRows = [
     ["探测阶段", probeStageText],

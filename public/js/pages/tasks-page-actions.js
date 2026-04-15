@@ -138,7 +138,7 @@ export function createTasksPageActions(dependencies) {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            probe_type: task.payload?.probe_type || "ssh_auth",
+            probe_type: task.payload?.probe_type || "full_stack",
           }),
         },
       };

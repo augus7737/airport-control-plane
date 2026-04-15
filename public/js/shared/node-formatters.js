@@ -2,8 +2,16 @@ export function getAccessMode(node) {
   return node?.networking?.access_mode || "direct";
 }
 
+export function getManagementAccessMode(node) {
+  return node?.management?.access_mode || node?.networking?.access_mode || "direct";
+}
+
 export function formatAccessMode(value) {
   return value === "relay" ? "经中转" : "直连";
+}
+
+export function formatManagementAccessMode(value) {
+  return value === "relay" ? "SSH 经跳板" : "SSH 直连";
 }
 
 export function getNodeDisplayName(node) {
@@ -78,7 +86,7 @@ export function formatNodeConfigMeta(node) {
 }
 
 export function formatNodeSshPort(node) {
-  const port = Number(node?.facts?.ssh_port ?? 19822);
+  const port = Number(node?.management?.ssh_port ?? node?.facts?.ssh_port ?? 19822);
   return Number.isInteger(port) && port > 0 ? String(port) : "19822";
 }
 

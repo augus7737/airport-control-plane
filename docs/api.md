@@ -337,9 +337,10 @@ Example response:
     {
       "id": "access_user_xxx",
       "name": "香港入口用户",
-      "protocol": "vless",
+      "protocol": "vmess",
       "credential": {
-        "uuid": "11111111-2222-3333-4444-555555555555"
+        "uuid": "11111111-2222-3333-4444-555555555555",
+        "alter_id": 0
       },
       "status": "active",
       "expires_at": "2026-06-01T00:00:00.000Z",
@@ -360,12 +361,16 @@ Request body:
 ```json
 {
   "name": "日本落地用户",
-  "protocol": "vless",
+  "protocol": "vmess",
   "profile_id": "profile_xxx",
   "node_group_ids": ["group_jp"],
   "status": "active",
   "expires_at": "2026-07-01",
-  "note": "内部统一发布使用"
+  "note": "内部统一发布使用",
+  "credential": {
+    "uuid": "11111111-2222-3333-4444-555555555555",
+    "alter_id": 0
+  }
 }
 ```
 
@@ -377,6 +382,7 @@ Supported fields:
 
 - `name`
 - `credential.uuid`
+- `credential.alter_id`
 - `status`
 - `expires_at`
 - `profile_id`
@@ -399,17 +405,26 @@ Request body:
 
 ```json
 {
-  "name": "HKG VLESS Reality",
-  "protocol": "vless",
+  "name": "JP VMess TLS",
+  "protocol": "vmess",
   "listen_port": 443,
-  "transport": "tcp",
-  "security": "reality",
-  "tls_enabled": false,
-  "reality_enabled": true,
+  "transport": "ws",
+  "security": "tls",
+  "tls_enabled": true,
+  "reality_enabled": false,
   "server_name": "edge.example.com",
-  "flow": "xtls-rprx-vision",
   "mux_enabled": false,
-  "status": "active"
+  "status": "active",
+  "template": {
+    "transport": {
+      "type": "ws",
+      "path": "/ws"
+    },
+    "tls": {
+      "certificate_path": "/etc/ssl/airport/jp-vmess/fullchain.pem",
+      "key_path": "/etc/ssl/airport/jp-vmess/privkey.pem"
+    }
+  }
 }
 ```
 
@@ -496,10 +511,12 @@ Success response:
 Notes:
 
 - when no target nodes can be resolved from `node_group_ids` or `node_ids`, the endpoint rejects the request
-- current first version renders a real `sing-box` config for `VLESS` profiles and reuses the existing task / operation pipeline
+- current version renders a real `sing-box` config for `VLESS` / `VMess` profiles and reuses the existing task / operation pipeline
 - inactive or expired access users are skipped before rendering; if no publishable users remain, the request is rejected
 - when `security` is `tls`, the template JSON should provide `template.tls.certificate_path` and `template.tls.key_path`
 - when `security` is `reality`, the template JSON should provide `template.reality.private_key_path` and `template.reality.short_id`; private key content should stay on the node and is not accepted inline
+- `vmess` currently supports `tls` or `none`, not `reality`
+- built-in system template `Alpine ACME 证书申请` can generate files under `/etc/ssl/airport/<cert_name>/fullchain.pem` and `/etc/ssl/airport/<cert_name>/privkey.pem`
 - node-side publish now attempts: write manifest -> render sing-box config -> `sing-box check` -> replace config -> restart service -> rollback on failure
 
 ## `GET /api/v1/tasks`

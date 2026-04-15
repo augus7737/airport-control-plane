@@ -51,7 +51,7 @@ export function createNodeShellPageModule(dependencies = {}) {
       return '<div class="empty">当前还没有可打开终端的节点。先完成节点纳管，再进入独立终端页。</div>';
     }
     const sessionLabel = appState.nodeTerminal.sessionTransportLabel;
-    const relayMode = formatAccessMode(getAccessMode(node));
+    const relayMode = (node.management?.access_mode || "direct") === "relay" ? "SSH 经跳板" : "SSH 直连";
     const sshPort = formatNodeSshPort(node);
 
     return `
@@ -75,7 +75,7 @@ export function createNodeShellPageModule(dependencies = {}) {
             </div>
           </div>
           <div class="chips shell-page-chips">
-            <div class="pill"><span>接入方式</span><strong>${escapeHtml(relayMode)}</strong></div>
+            <div class="pill"><span>管理链路</span><strong>${escapeHtml(relayMode)}</strong></div>
             <div class="pill"><span>SSH 端口</span><strong>${escapeHtml(sshPort)}</strong></div>
             <div class="pill"><span>当前传输</span><strong>${escapeHtml(sessionLabel)}</strong></div>
             <div class="pill"><span>公网 IPv4</span><strong>${escapeHtml(node.facts?.public_ipv4 || "-")}</strong></div>

@@ -101,7 +101,7 @@ export function createOverviewPageRenderer({
       resultNote = "恢复启用后会重新安排下一轮";
     } else if (running) {
       headline = "本轮自动巡检执行中";
-      headlineNote = "控制面正在批量校验节点连通性与 SSH 接管能力";
+      headlineNote = "控制面正在批量校验管理链路、业务入口与 relay 上游状态";
       cardTone = "blue";
     }
 

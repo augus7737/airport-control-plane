@@ -137,19 +137,34 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-provider").value = node.labels?.provider || "";
       documentRef.getElementById("asset-region").value = node.labels?.region || "";
       documentRef.getElementById("asset-role").value = node.labels?.role || "";
+      documentRef.getElementById("asset-public-ip").value = node.facts?.public_ipv4 || "";
+      documentRef.getElementById("asset-public-ipv6").value = node.facts?.public_ipv6 || "";
+      documentRef.getElementById("asset-private-ip").value = node.facts?.private_ipv4 || "";
       documentRef.getElementById("asset-billing").value = node.commercial?.billing_cycle || "";
       documentRef.getElementById("asset-expire").value = formatDateInput(node.commercial?.expires_at);
       documentRef.getElementById("asset-access-mode").value = node.networking?.access_mode || "direct";
       documentRef.getElementById("asset-entry-region").value = node.networking?.entry_region || "";
+      documentRef.getElementById("asset-entry-port").value = node.networking?.entry_port ?? "";
       documentRef.getElementById("asset-ssh-port").value = node.facts?.ssh_port ?? "";
       documentRef.getElementById("asset-relay-node-id").value = node.networking?.relay_node_id || "";
       documentRef.getElementById("asset-relay-label").value = node.networking?.relay_label || "";
       documentRef.getElementById("asset-relay-region").value = node.networking?.relay_region || "";
+      documentRef.getElementById("asset-management-access-mode").value =
+        node.management?.access_mode || node.networking?.access_mode || "direct";
+      documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";
+      documentRef.getElementById("asset-management-relay-node-id").value =
+        node.management?.relay_node_id || "";
+      documentRef.getElementById("asset-management-relay-label").value =
+        node.management?.relay_label || node.networking?.relay_label || "";
+      documentRef.getElementById("asset-management-relay-region").value =
+        node.management?.relay_region || node.networking?.relay_region || "";
       documentRef.getElementById("asset-auto-renew").checked = Boolean(node.commercial?.auto_renew);
       documentRef.getElementById("asset-bandwidth").value = node.commercial?.bandwidth_mbps ?? "";
       documentRef.getElementById("asset-traffic-quota").value = node.commercial?.traffic_quota_gb ?? "";
       documentRef.getElementById("asset-traffic-used").value = node.commercial?.traffic_used_gb ?? "";
       documentRef.getElementById("asset-route-note").value = node.networking?.route_note || "";
+      documentRef.getElementById("asset-management-route-note").value =
+        node.management?.route_note || "";
       documentRef.getElementById("asset-note").value = node.commercial?.note || "";
     };
 

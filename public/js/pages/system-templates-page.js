@@ -505,7 +505,7 @@ export function createSystemTemplatesPageModule(dependencies) {
                                   <input type="checkbox" data-system-template-apply-node="true" value="${escapeHtml(node.id)}" ${state.applyDraft.node_ids.includes(node.id) ? "checked" : ""} />
                                   <span>
                                     <strong>${escapeHtml(getNodeName(node.id))}</strong>
-                                    <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml(node.networking?.access_mode || "direct")}</span>
+                                    <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml((node.management?.access_mode || "direct") === "relay" ? "SSH 经跳板" : "SSH 直连")}</span>
                                   </span>
                                 </label>
                               `,

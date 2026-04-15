@@ -2,6 +2,14 @@ function sourceValue(source, key, fallback = null) {
   return Object.prototype.hasOwnProperty.call(source, key) ? source[key] : fallback;
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readRecordSource(source, key) {
+  return isPlainObject(source?.[key]) ? source[key] : source;
+}
+
 function buildCommercialRecord(source = {}, existingCommercial = {}) {
   return {
     expires_at: sourceValue(source, "expires_at", existingCommercial.expires_at ?? null),
@@ -31,24 +39,77 @@ function buildCommercialRecord(source = {}, existingCommercial = {}) {
 }
 
 function buildNetworkingRecord(source = {}, existingNetworking = {}) {
-  const accessMode = sourceValue(source, "access_mode", existingNetworking.access_mode ?? "direct");
+  const input = readRecordSource(source, "networking");
+  const accessMode = sourceValue(input, "access_mode", existingNetworking.access_mode ?? "direct");
 
   return {
     access_mode: accessMode,
     relay_node_id:
       accessMode === "relay"
-        ? sourceValue(source, "relay_node_id", existingNetworking.relay_node_id ?? null)
+        ? sourceValue(input, "relay_node_id", existingNetworking.relay_node_id ?? null)
         : null,
     relay_label:
       accessMode === "relay"
-        ? sourceValue(source, "relay_label", existingNetworking.relay_label ?? null)
+        ? sourceValue(input, "relay_label", existingNetworking.relay_label ?? null)
         : null,
     relay_region:
       accessMode === "relay"
-        ? sourceValue(source, "relay_region", existingNetworking.relay_region ?? null)
+        ? sourceValue(input, "relay_region", existingNetworking.relay_region ?? null)
         : null,
-    entry_region: sourceValue(source, "entry_region", existingNetworking.entry_region ?? null),
-    route_note: sourceValue(source, "route_note", existingNetworking.route_note ?? null),
+    entry_region: sourceValue(input, "entry_region", existingNetworking.entry_region ?? null),
+    entry_port: sourceValue(input, "entry_port", existingNetworking.entry_port ?? null),
+    route_note: sourceValue(input, "route_note", existingNetworking.route_note ?? null),
+  };
+}
+
+function buildManagementRecord(
+  source = {},
+  existingManagement = {},
+  options = {},
+) {
+  const currentManagement = isPlainObject(existingManagement) ? existingManagement : {};
+  const input = readRecordSource(source, "management");
+  const legacyNetworking = isPlainObject(options.legacyNetworking) ? options.legacyNetworking : {};
+  const accessMode = sourceValue(
+    input,
+    "access_mode",
+    currentManagement.access_mode ?? legacyNetworking.access_mode ?? "direct",
+  );
+
+  return {
+    access_mode: accessMode,
+    relay_node_id:
+      accessMode === "relay"
+        ? sourceValue(
+            input,
+            "relay_node_id",
+            currentManagement.relay_node_id ?? legacyNetworking.relay_node_id ?? null,
+          )
+        : null,
+    relay_label:
+      accessMode === "relay"
+        ? sourceValue(
+            input,
+            "relay_label",
+            currentManagement.relay_label ?? legacyNetworking.relay_label ?? null,
+          )
+        : null,
+    relay_region:
+      accessMode === "relay"
+        ? sourceValue(
+            input,
+            "relay_region",
+            currentManagement.relay_region ?? legacyNetworking.relay_region ?? null,
+          )
+        : null,
+    ssh_host: sourceValue(input, "ssh_host", currentManagement.ssh_host ?? null),
+    ssh_port: sourceValue(input, "ssh_port", currentManagement.ssh_port ?? null),
+    ssh_user: sourceValue(input, "ssh_user", currentManagement.ssh_user ?? null),
+    route_note: sourceValue(
+      input,
+      "route_note",
+      currentManagement.route_note ?? legacyNetworking.route_note ?? null,
+    ),
   };
 }
 
@@ -74,6 +135,10 @@ export function createNodeRecordBuilders({
     const facts = normalizeNodeFacts(payload.facts, {
       existingFacts: existingNode?.facts,
     });
+    const networking = buildNetworkingRecord(payload.networking ?? payload, existingNode?.networking);
+    const management = buildManagementRecord(payload.management ?? payload, existingNode?.management, {
+      legacyNetworking: existingNode?.networking ?? networking,
+    });
 
     return {
       id: existingNode?.id ?? createNodeId(),
@@ -88,13 +153,22 @@ export function createNodeRecordBuilders({
       bootstrap_token_id: existingNode?.bootstrap_token_id ?? null,
       facts,
       commercial: buildCommercialRecord(payload.commercial, existingNode?.commercial),
-      networking: buildNetworkingRecord(payload.networking, existingNode?.networking),
+      networking,
+      management: {
+        ...management,
+        ssh_port: management.ssh_port ?? facts.ssh_port ?? existingNode?.facts?.ssh_port ?? 19822,
+      },
     };
   }
 
   function updateNodeAssetRecord(existingNode, payload) {
     const currentFacts =
       existingNode.facts && typeof existingNode.facts === "object" ? existingNode.facts : {};
+
+    const nextNetworking = buildNetworkingRecord(payload.networking ?? payload, existingNode.networking);
+    const nextManagement = buildManagementRecord(payload.management ?? payload, existingNode.management, {
+      legacyNetworking: existingNode.networking ?? nextNetworking,
+    });
 
     return {
       ...existingNode,
@@ -125,7 +199,14 @@ export function createNodeRecordBuilders({
         { existingFacts: currentFacts },
       ),
       commercial: buildCommercialRecord(payload, existingNode.commercial),
-      networking: buildNetworkingRecord(payload, existingNode.networking),
+      networking: nextNetworking,
+      management: {
+        ...nextManagement,
+        ssh_port:
+          nextManagement.ssh_port ??
+          sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? 19822) ??
+          19822,
+      },
     };
   }
 
@@ -155,6 +236,11 @@ export function createNodeRecordBuilders({
       { existingFacts: null },
     );
 
+    const networking = buildNetworkingRecord(payload.networking ?? payload);
+    const management = buildManagementRecord(payload.management ?? payload, null, {
+      legacyNetworking: networking,
+    });
+
     return {
       id: createNodeId(),
       fingerprint: payload.fingerprint ?? null,
@@ -171,13 +257,18 @@ export function createNodeRecordBuilders({
       source: "manual",
       facts,
       commercial: buildCommercialRecord(payload),
-      networking: buildNetworkingRecord(payload),
+      networking,
+      management: {
+        ...management,
+        ssh_port: management.ssh_port ?? facts.ssh_port ?? 19822,
+      },
     };
   }
 
   return {
     sourceValue,
     buildCommercialRecord,
+    buildManagementRecord,
     buildNetworkingRecord,
     buildNodeRecord,
     updateNodeAssetRecord,

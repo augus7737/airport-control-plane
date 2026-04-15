@@ -20,6 +20,7 @@ export function createTaskLifecycleDomain(dependencies) {
     probeStore,
     pushOperationRecord,
     resolveInitTemplate,
+    resolveBusinessProbeContext = () => null,
     resolveProbeTarget,
     setNodeRecord,
     shellSessionLabel,
@@ -31,6 +32,18 @@ export function createTaskLifecycleDomain(dependencies) {
     return new Promise((resolve) => {
       setTimeout(resolve, ms);
     });
+  }
+
+  function toCapabilityFlag(value) {
+    if (value === true) {
+      return true;
+    }
+
+    if (value === false) {
+      return false;
+    }
+
+    return null;
   }
 
   function taskLogExcerpt(lines) {
@@ -234,20 +247,69 @@ export function createTaskLifecycleDomain(dependencies) {
   }
 
   function buildProbeTask(node, options = {}) {
-    const target = resolveProbeTarget(node);
+    const requestedProbeType = String(options.probe_type || "full_stack").trim().toLowerCase();
+    const probeType = ["ssh_auth", "business_entry_tcp", "relay_upstream_tcp", "full_stack"].includes(
+      requestedProbeType,
+    )
+      ? requestedProbeType
+      : "full_stack";
+    const managementTarget = resolveProbeTarget(node);
+    const businessContext = resolveBusinessProbeContext(node, options);
+    const businessEntryTarget = businessContext?.entry_target
+      ? {
+          host: businessContext.entry_target.host ?? null,
+          port: businessContext.entry_target.port ?? null,
+          family: businessContext.entry_target.family ?? null,
+        }
+      : null;
+    const relayTarget = businessContext?.relay_upstream_target
+      ? {
+          host: businessContext.relay_upstream_target.host ?? null,
+          port: businessContext.relay_upstream_target.port ?? null,
+          family: businessContext.relay_upstream_target.family ?? null,
+        }
+      : null;
+    const target =
+      probeType === "business_entry_tcp"
+        ? businessEntryTarget
+        : probeType === "relay_upstream_tcp"
+          ? relayTarget
+          : probeType === "full_stack"
+            ? businessEntryTarget ?? managementTarget
+            : managementTarget;
     const trigger = options.trigger ?? "manual_probe";
     const title =
       options.title ??
       (trigger === "bootstrap_complete"
         ? "自动首探"
         : trigger === "manual_probe"
-          ? "手动复探"
-          : "节点健康探测");
+          ? probeType === "business_entry_tcp"
+            ? "业务入口复探"
+            : probeType === "relay_upstream_tcp"
+              ? "入口上游复探"
+              : probeType === "ssh_auth"
+                ? "SSH 接管复探"
+                : "手动复探"
+          : trigger === "scheduled_probe"
+            ? "周期巡检"
+            : probeType === "business_entry_tcp"
+              ? "业务入口探测"
+              : probeType === "relay_upstream_tcp"
+                ? "入口上游探测"
+                : probeType === "ssh_auth"
+                  ? "SSH 接管探测"
+                  : "节点健康探测");
     const note =
       options.note ??
       (trigger === "bootstrap_complete"
-        ? "节点已完成 bootstrap 回报，等待控制面执行首轮自动探测。"
-        : "等待控制面对节点执行连通性与 SSH 接管探测。");
+        ? "节点已完成 bootstrap 回报，等待控制面执行首轮综合巡检。"
+        : probeType === "business_entry_tcp"
+          ? "等待控制面对节点执行业务入口 TCP 探测。"
+          : probeType === "relay_upstream_tcp"
+            ? "等待控制面通过入口节点校验到落地节点的上游链路。"
+            : probeType === "ssh_auth"
+              ? "等待控制面对节点执行管理链路与 SSH 接管探测。"
+              : "等待控制面对节点执行综合巡检，校验管理链路、业务入口与 relay 上游状态。");
 
     return buildTaskRecord(node, {
       type: "probe_node",
@@ -255,14 +317,29 @@ export function createTaskLifecycleDomain(dependencies) {
       trigger,
       note,
       payload: {
-        probe_type: options.probe_type ?? "ssh_auth",
+        probe_type: probeType,
         target_host: target?.host ?? null,
-        target_port: target?.port ?? (Number(node?.facts?.ssh_port ?? 19822) || 19822),
+        target_port:
+          target?.port ??
+          (probeType === "ssh_auth" ? Number(node?.facts?.ssh_port ?? 19822) || 19822 : null),
         target_family: target?.family ?? null,
-        access_mode: node?.networking?.access_mode ?? "direct",
-        relay_node_id: node?.networking?.relay_node_id ?? null,
-        relay_label: node?.networking?.relay_label ?? null,
-        ssh_user: defaultNodeSshUser,
+        access_mode:
+          probeType === "ssh_auth"
+            ? managementTarget?.mode ?? "direct"
+            : businessContext?.access_mode ?? "direct",
+        business_access_mode: probeType === "ssh_auth" ? null : businessContext?.access_mode ?? "direct",
+        management_access_mode: managementTarget?.mode ?? "direct",
+        requested_management_access_mode:
+          managementTarget?.requested_mode ?? managementTarget?.mode ?? "direct",
+        relay_node_id: managementTarget?.relay_node_id ?? null,
+        relay_label: node?.management?.relay_label ?? node?.networking?.relay_label ?? null,
+        route_label: businessContext?.route_label ?? null,
+        entry_node_id: businessContext?.entry_node_id ?? null,
+        release_id: businessContext?.release_id ?? null,
+        upstream_host: relayTarget?.host ?? null,
+        upstream_port: relayTarget?.port ?? null,
+        upstream_family: relayTarget?.family ?? null,
+        ssh_user: managementTarget?.ssh_user ?? defaultNodeSshUser,
         timeout_ms: getSshProbeTimeoutMs(),
         init_task_id: options.init_task_id ?? null,
         reason: options.reason ?? "manual_probe",
@@ -280,9 +357,11 @@ export function createTaskLifecycleDomain(dependencies) {
     }
 
     return {
-      tcp_reachable: Boolean(probe?.stages?.tcp?.success),
+      tcp_reachable: Boolean(probe?.stages?.management_tcp?.success || probe?.stages?.business_entry_tcp?.success),
       ssh_reachable: Boolean(probe.control_ready),
-      relay_used: probe.transport_kind === "ssh-relay" || probe.access_mode === "relay",
+      business_entry_reachable: toCapabilityFlag(probe.business_ready),
+      relay_upstream_reachable: toCapabilityFlag(probe.relay_upstream_ready),
+      relay_used: probe.transport_kind === "ssh-relay",
     };
   }
 
@@ -355,10 +434,10 @@ export function createTaskLifecycleDomain(dependencies) {
     const probeTask = buildProbeTask(node, {
       trigger: "bootstrap_auto_probe",
       reason: "bootstrap_auto_probe",
-      probe_type: "ssh_auth",
+      probe_type: "full_stack",
       init_task_id: initTask.id,
       title: "自动首探",
-      note: "节点已完成 bootstrap 回报，等待控制面执行首轮自动探测。",
+      note: "节点已完成 bootstrap 回报，等待控制面执行首轮综合巡检。",
     });
     upsertTaskRecord(probeTask);
     await persistTaskStore();
@@ -366,7 +445,7 @@ export function createTaskLifecycleDomain(dependencies) {
     const result = await executeProbeTask(probeTask, {
       note:
         options.note ??
-        "节点已完成 bootstrap 回报，控制面开始执行首轮自动探测。",
+        "节点已完成 bootstrap 回报，控制面开始执行首轮综合巡检。",
     });
     return {
       task: result.task,

@@ -21,7 +21,7 @@ export function createNodeRecommendationsModule(dependencies = {}) {
         latestProbe?.reason_code ||
         latestProbe?.error_message,
     );
-    const accessMode = getAccessMode(node);
+    const accessMode = node?.management?.access_mode || getAccessMode(node);
     const missingCommercialInfo =
       !node.commercial?.expires_at ||
       node.commercial?.bandwidth_mbps == null ||
@@ -33,7 +33,23 @@ export function createNodeRecommendationsModule(dependencies = {}) {
         node.source === "bootstrap" ? "等待自动首探" : "执行首次探测",
         node.source === "bootstrap"
           ? "节点完成 bootstrap 后，平台会自动补一轮首探；如果迟迟没有结果，再手动补跑。"
-          : "先跑一轮真实探测，把 TCP 连通性和 SSH 接管能力确认下来。",
+          : "先跑一轮真实探测，把管理链路、业务入口和上游状态确认下来。",
+      );
+    }
+
+    if (latestProbe?.business_ready === false) {
+      pushRecommendation(
+        items,
+        "检查业务入口",
+        "管理链路可能已经恢复，但当前业务入口仍不可达，建议优先排查入口地址、入口端口与发布状态。",
+      );
+    }
+
+    if (latestProbe?.relay_upstream_ready === false) {
+      pushRecommendation(
+        items,
+        "检查入口到落地链路",
+        "当前 relay 入口到落地上游链路异常，建议核对入口机出口、IPv6 可达性与落地端监听状态。",
       );
     }
 
@@ -64,8 +80,8 @@ export function createNodeRecommendationsModule(dependencies = {}) {
     if (["ssh_timeout", "ssh_no_route", "ssh_connection_closed"].includes(reasonCode) && accessMode === "relay") {
       pushRecommendation(
         items,
-        "检查中转链路",
-        "当前节点经中转接入，建议先检查香港入口与中转机的 SSH 路径是否稳定。",
+        "检查管理跳板",
+        "当前节点需要经 SSH 跳板接入，建议先检查入口机与目标节点之间的管理链路是否稳定。",
       );
     }
 
@@ -80,11 +96,11 @@ export function createNodeRecommendationsModule(dependencies = {}) {
       );
     }
 
-    if (accessMode === "relay" && !node.networking?.relay_node_id && !node.networking?.relay_label) {
+    if (accessMode === "relay" && !node.management?.relay_node_id && !node.management?.relay_label) {
       pushRecommendation(
         items,
-        "补全中转节点",
-        "当前节点已标记为经中转，但还没有绑定实际的中转机标识，后续排障会很费劲。",
+        "补全管理跳板",
+        "当前节点已标记为 SSH 经跳板，但还没有绑定实际跳板机标识，后续排障会很费劲。",
       );
     }
 

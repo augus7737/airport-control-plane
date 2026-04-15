@@ -30,6 +30,65 @@ function validateNullableIpField(errors, value, fieldName, options = {}) {
   }
 }
 
+function validateNullablePortField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    errors.push(`${fieldName} must be an integer between 1 and 65535`);
+  }
+}
+
+function validateAccessModeField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (!["direct", "relay"].includes(String(value).trim().toLowerCase())) {
+    errors.push(`${fieldName} must be direct or relay`);
+  }
+}
+
+function validateRouteSection(errors, payload, fieldName, options = {}) {
+  if (payload === undefined || payload === null) {
+    return;
+  }
+
+  if (!isPlainObject(payload)) {
+    errors.push(`${fieldName} must be an object`);
+    return;
+  }
+
+  validateAccessModeField(errors, payload.access_mode, `${fieldName}.access_mode`);
+
+  if (options.allowEntryPort) {
+    validateNullablePortField(errors, payload.entry_port, `${fieldName}.entry_port`);
+  }
+
+  if (options.allowSshPort) {
+    validateNullablePortField(errors, payload.ssh_port, `${fieldName}.ssh_port`);
+  }
+
+  if (
+    options.allowSshUser &&
+    payload.ssh_user !== undefined &&
+    payload.ssh_user !== null &&
+    typeof payload.ssh_user !== "string"
+  ) {
+    errors.push(`${fieldName}.ssh_user must be a string`);
+  }
+
+  if (
+    options.allowSshHost &&
+    payload.ssh_host !== undefined &&
+    payload.ssh_host !== null &&
+    typeof payload.ssh_host !== "string"
+  ) {
+    errors.push(`${fieldName}.ssh_host must be a string`);
+  }
+}
+
 export function validateRegistration(payload) {
   const errors = [];
 
@@ -96,21 +155,17 @@ export function validateManualNode(payload) {
     }
   }
 
-  if (
-    payload.ssh_port !== undefined &&
-    payload.ssh_port !== null &&
-    (!Number.isInteger(payload.ssh_port) || payload.ssh_port < 1 || payload.ssh_port > 65535)
-  ) {
-    errors.push("ssh_port must be an integer between 1 and 65535");
-  }
-
-  if (
-    payload.access_mode !== undefined &&
-    payload.access_mode !== null &&
-    !["direct", "relay"].includes(payload.access_mode)
-  ) {
-    errors.push("access_mode must be direct or relay");
-  }
+  validateNullablePortField(errors, payload.ssh_port, "ssh_port");
+  validateNullablePortField(errors, payload.entry_port, "entry_port");
+  validateAccessModeField(errors, payload.access_mode, "access_mode");
+  validateRouteSection(errors, payload.networking, "networking", {
+    allowEntryPort: true,
+  });
+  validateRouteSection(errors, payload.management, "management", {
+    allowSshPort: true,
+    allowSshUser: true,
+    allowSshHost: true,
+  });
 
   return errors;
 }
@@ -122,33 +177,24 @@ export function validateAssetUpdate(payload) {
   validateNullableIpField(errors, payload.public_ipv6, "public_ipv6", { version: 6 });
   validateNullableIpField(errors, payload.private_ipv4, "private_ipv4", { version: 4 });
 
-  for (const field of [
-    "ssh_port",
-    "bandwidth_mbps",
-    "traffic_quota_gb",
-    "traffic_used_gb",
-  ]) {
+  for (const field of ["ssh_port", "entry_port", "bandwidth_mbps", "traffic_quota_gb", "traffic_used_gb"]) {
     const value = payload[field];
     if (value !== undefined && value !== null && (!Number.isFinite(value) || value < 0)) {
       errors.push(`${field} must be a non-negative number`);
     }
   }
 
-  if (
-    payload.ssh_port !== undefined &&
-    payload.ssh_port !== null &&
-    (!Number.isInteger(payload.ssh_port) || payload.ssh_port < 1 || payload.ssh_port > 65535)
-  ) {
-    errors.push("ssh_port must be an integer between 1 and 65535");
-  }
-
-  if (
-    payload.access_mode !== undefined &&
-    payload.access_mode !== null &&
-    !["direct", "relay"].includes(payload.access_mode)
-  ) {
-    errors.push("access_mode must be direct or relay");
-  }
+  validateNullablePortField(errors, payload.ssh_port, "ssh_port");
+  validateNullablePortField(errors, payload.entry_port, "entry_port");
+  validateAccessModeField(errors, payload.access_mode, "access_mode");
+  validateRouteSection(errors, payload.networking, "networking", {
+    allowEntryPort: true,
+  });
+  validateRouteSection(errors, payload.management, "management", {
+    allowSshPort: true,
+    allowSshUser: true,
+    allowSshHost: true,
+  });
 
   return errors;
 }

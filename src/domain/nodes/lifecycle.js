@@ -108,7 +108,10 @@ export function createNodeLifecycleDomain(dependencies) {
     const fallbackRelayRegion = deletedNode?.labels?.region || null;
 
     for (const node of nodeStore.values()) {
-      if (node?.id === nodeId || node?.networking?.relay_node_id !== nodeId) {
+      const networkingReferencesDeleted = node?.networking?.relay_node_id === nodeId;
+      const managementReferencesDeleted = node?.management?.relay_node_id === nodeId;
+
+      if (node?.id === nodeId || (!networkingReferencesDeleted && !managementReferencesDeleted)) {
         continue;
       }
 
@@ -116,9 +119,23 @@ export function createNodeLifecycleDomain(dependencies) {
         ...node,
         networking: {
           ...(node.networking || {}),
-          relay_node_id: null,
-          relay_label: node.networking?.relay_label || fallbackRelayLabel || null,
-          relay_region: node.networking?.relay_region || fallbackRelayRegion,
+          relay_node_id: networkingReferencesDeleted ? null : node.networking?.relay_node_id ?? null,
+          relay_label: networkingReferencesDeleted
+            ? node.networking?.relay_label || fallbackRelayLabel || null
+            : node.networking?.relay_label ?? null,
+          relay_region: networkingReferencesDeleted
+            ? node.networking?.relay_region || fallbackRelayRegion
+            : node.networking?.relay_region ?? null,
+        },
+        management: {
+          ...(node.management || {}),
+          relay_node_id: managementReferencesDeleted ? null : node.management?.relay_node_id ?? null,
+          relay_label: managementReferencesDeleted
+            ? node.management?.relay_label || fallbackRelayLabel || null
+            : node.management?.relay_label ?? null,
+          relay_region: managementReferencesDeleted
+            ? node.management?.relay_region || fallbackRelayRegion
+            : node.management?.relay_region ?? null,
         },
       });
       changed = true;

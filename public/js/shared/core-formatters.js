@@ -337,8 +337,13 @@ export function resolveTransportLabel(target, operation = null) {
     return operationLabel;
   }
 
-  if (target?.access_mode === "relay") return "SSH 经中转";
-  if (target?.access_mode === "direct") return "SSH 直连";
+  const managementAccessMode =
+    target?.management_access_mode ||
+    target?.requested_management_access_mode ||
+    target?.access_mode;
+
+  if (managementAccessMode === "relay") return "SSH 经跳板";
+  if (managementAccessMode === "direct") return "SSH 直连";
   return "未回传";
 }
 

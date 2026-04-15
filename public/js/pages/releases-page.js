@@ -68,7 +68,11 @@ export function createReleasesPageModule(dependencies) {
 
   function formatApplySummary(summary) {
     const apply = summary.apply_summary || {};
-    return `成功 ${Number(apply.success || 0)} / 失败 ${Number(apply.failed || 0)} / 已应用 ${Number(apply.applied || 0)} / 仅渲染 ${Number(apply.rendered_only || 0)}`;
+    const landingCount = Number(summary.landing_node_count || summary.total_nodes || 0);
+    const entryCount = Number(summary.entry_node_count || 0);
+    const scopeSummary =
+      entryCount > 0 ? `落地 ${landingCount} / 入口 ${entryCount}` : `节点 ${landingCount}`;
+    return `${scopeSummary} · 成功 ${Number(apply.success || 0)} / 失败 ${Number(apply.failed || 0)} / 已应用 ${Number(apply.applied || 0)} / 仅渲染 ${Number(apply.rendered_only || 0)}`;
   }
 
   function renderReleaseMetaBadges(summary) {
@@ -355,7 +359,20 @@ export function createReleasesPageModule(dependencies) {
 
               ${
                 state.releaseMessage
-                  ? `<div class="message ${state.releaseMessage.type}">${escapeHtml(state.releaseMessage.text)}</div>`
+                  ? `
+                    <div class="message ${state.releaseMessage.type}">
+                      <div class="release-message-row">
+                        <span>${escapeHtml(state.releaseMessage.text)}</span>
+                        ${
+                          state.releaseMessage.href
+                            ? `<a class="button ghost" href="${escapeHtml(state.releaseMessage.href)}">${escapeHtml(
+                                state.releaseMessage.actionLabel || "查看",
+                              )}</a>`
+                            : ""
+                        }
+                      </div>
+                    </div>
+                  `
                   : ""
               }
             </div>
@@ -630,11 +647,17 @@ export function createReleasesPageModule(dependencies) {
       try {
         const result = await createConfigRelease(payload);
         await refreshRuntimeData();
+        const onlyAccessUserId =
+          payload.access_user_ids.length === 1 ? payload.access_user_ids[0] : null;
         state.releaseMessage = {
           type: "success",
           text: result?.operation?.id
             ? `发布已创建，执行回显 ID：${result.operation.id}`
             : "发布已创建，等待执行链路返回。",
+          actionLabel: onlyAccessUserId ? "查看订阅" : null,
+          href: onlyAccessUserId
+            ? `/access-users.html?user_id=${encodeURIComponent(onlyAccessUserId)}&share=1`
+            : null,
         };
         form.reset();
         renderCurrentContent();

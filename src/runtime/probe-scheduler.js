@@ -144,15 +144,15 @@ export function createProbeSchedulerRuntime(dependencies) {
         const task = buildProbeTask(node, {
           trigger: "scheduled_probe",
           reason: "scheduled_probe",
-          probe_type: "ssh_auth",
+          probe_type: "full_stack",
           title: "周期巡检",
-          note: "控制面按计划执行周期巡检，持续刷新节点健康分与接管状态。",
+          note: "控制面按计划执行周期巡检，持续刷新管理链路、业务入口与 relay 上游状态。",
         });
         upsertTaskRecord(task);
         await persistTaskStore();
 
         const result = await executeProbeTask(task, {
-          note: "控制面按计划执行周期巡检，正在校验 TCP 连通性与 SSH 接管能力。",
+          note: "控制面按计划执行周期巡检，正在执行综合探测并刷新链路健康状态。",
         });
         const status = String(result?.task?.status || "failed").toLowerCase();
         if (status === "success") {
