@@ -361,6 +361,57 @@ echo "[init] 初始化完成"
   },
 };
 
+const alpineBbrTuningScript = `#!/bin/sh
+set -eu
+
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin:\${PATH}"
+
+SYSCTL_FILE=/etc/sysctl.d/99-airport-bbr.conf
+
+log() {
+  printf '%s\\n' "$1"
+}
+
+available_cc() {
+  sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null || true
+}
+
+current_cc() {
+  sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true
+}
+
+ensure_sysctl_file() {
+  mkdir -p /etc/sysctl.d
+  cat >"$SYSCTL_FILE" <<'EOF_SYSCTL'
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+EOF_SYSCTL
+}
+
+if command -v modprobe >/dev/null 2>&1; then
+  modprobe tcp_bbr >/dev/null 2>&1 || true
+fi
+
+ensure_sysctl_file
+
+AVAILABLE="$(available_cc)"
+if [ -n "$AVAILABLE" ] && printf '%s' "$AVAILABLE" | grep -qw bbr; then
+  sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+  sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1 || true
+else
+  log "[bbr] 当前环境未暴露 bbr，已写入持久化配置并跳过即时切换"
+fi
+
+CURRENT="$(current_cc)"
+if [ "$CURRENT" = "bbr" ]; then
+  log "[bbr] BBR 已启用"
+else
+  log "[bbr] BBR 未生效，常见于 LXC 或宿主机内核未开启"
+fi
+
+log "[bbr] 完成"
+`;
+
 function defaultSystemTemplateRecords() {
   const alpineBase = initTemplates["alpine-base"];
   const timestamp = nowIso();
@@ -376,6 +427,19 @@ function defaultSystemTemplateRecords() {
       node_group_ids: [],
       tags: ["alpine", "baseline", "bootstrap"],
       note: "内置基线模板，可直接批量应用到低内存 Alpine 节点。",
+      created_at: timestamp,
+      updated_at: timestamp,
+    },
+    {
+      id: "system_template_alpine_bbr",
+      name: "Alpine BBR 网络优化",
+      category: "hardening",
+      script_name: "启用 BBR / FQ（best effort）",
+      script_body: alpineBbrTuningScript,
+      status: "active",
+      node_group_ids: [],
+      tags: ["alpine", "network", "bbr", "sysctl"],
+      note: "内置网络优化模板，会尽力启用 fq + bbr；在 LXC 场景下若宿主未开放内核能力，脚本会保留提示而不强制失败。",
       created_at: timestamp,
       updated_at: timestamp,
     },
@@ -1255,11 +1319,14 @@ function pruneNodeFromGroups(nodeId) {
 }
 
 async function ensureDefaultSystemTemplates() {
-  if (systemTemplateStore.length > 0) {
+  const existingIds = new Set(systemTemplateStore.map((item) => item.id));
+  const missingTemplates = defaultSystemTemplateRecords().filter((record) => !existingIds.has(record.id));
+
+  if (missingTemplates.length === 0) {
     return false;
   }
 
-  systemTemplateStore.push(...defaultSystemTemplateRecords());
+  systemTemplateStore.push(...missingTemplates);
   await persistSystemTemplateStore();
   return true;
 }

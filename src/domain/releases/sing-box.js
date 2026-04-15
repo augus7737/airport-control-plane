@@ -151,8 +151,12 @@ export function validateSingBoxProfileTemplate(profile) {
     errors.push("listen_port 必须是有效端口");
   }
 
-  if (!["tcp", "ws", "grpc", "httpupgrade"].includes(transport)) {
+  if (!["tcp", "ws", "grpc", "http", "httpupgrade"].includes(transport)) {
     errors.push(`暂不支持的 transport: ${transport}`);
+  }
+
+  if (!["reality", "tls", "none"].includes(security)) {
+    errors.push(`暂不支持的 security: ${security}`);
   }
 
   if (transport !== "tcp" && !isPlainObject(transportTemplate)) {
@@ -206,8 +210,8 @@ function buildTransportConfig(profile) {
 
   const template = pickTransportTemplate(profile) || {};
   return {
-    type: normalizeString(template.type) ?? transport,
     ...template,
+    type: transport,
   };
 }
 
@@ -225,14 +229,20 @@ function buildMultiplexConfig(profile) {
 
 function buildTlsConfig(profile) {
   const security = String(profile?.security || "reality").toLowerCase();
-  const template = pickTlsTemplate(profile);
-  const block = {
-    enabled: security !== "none",
-  };
-
-  if (!block.enabled) {
+  if (security === "none") {
     return null;
   }
+
+  const template = isPlainObject(pickTlsTemplate(profile)) ? { ...pickTlsTemplate(profile) } : {};
+  delete template.enabled;
+  delete template.reality;
+  delete template.certificate;
+  delete template.key;
+
+  const block = {
+    ...template,
+    enabled: true,
+  };
 
   if (normalizeString(profile?.server_name)) {
     block.server_name = normalizeString(profile.server_name);
@@ -251,33 +261,52 @@ function buildTlsConfig(profile) {
   }
 
   if (security === "tls") {
-    block.certificate_path = normalizeString(template.certificate_path);
-    block.key_path = normalizeString(template.key_path);
+    delete block.reality;
+
+    if (normalizeString(template.certificate_path)) {
+      block.certificate_path = normalizeString(template.certificate_path);
+    }
+    if (normalizeString(template.key_path)) {
+      block.key_path = normalizeString(template.key_path);
+    }
   }
 
   if (security === "reality") {
-    const realityTemplate = pickRealityTemplate(profile);
-    const handshake = isPlainObject(realityTemplate.handshake) ? realityTemplate.handshake : {};
+    delete block.certificate_path;
+    delete block.key_path;
+
+    const sourceRealityTemplate = pickRealityTemplate(profile);
+    const realityTemplate = isPlainObject(sourceRealityTemplate) ? { ...sourceRealityTemplate } : {};
+    const handshake = isPlainObject(realityTemplate.handshake) ? { ...realityTemplate.handshake } : {};
     const handshakeServer =
       normalizeString(handshake.server) ?? normalizeString(profile?.server_name) ?? "www.cloudflare.com";
     const handshakePort =
       Number.isInteger(Number(handshake.server_port)) && Number(handshake.server_port) > 0
         ? Number(handshake.server_port)
         : 443;
-    const shortIds = normalizeStringArray(realityTemplate.short_ids ?? realityTemplate.short_id);
+    const shortIds = normalizeStringArray(sourceRealityTemplate.short_ids ?? sourceRealityTemplate.short_id);
+
+    delete realityTemplate.enabled;
+    delete realityTemplate.private_key;
+    delete realityTemplate.private_key_path;
+    delete realityTemplate.short_id;
+    delete realityTemplate.short_ids;
+    delete realityTemplate.handshake;
 
     block.reality = {
+      ...realityTemplate,
       enabled: true,
       handshake: {
+        ...handshake,
         server: handshakeServer,
         server_port: handshakePort,
       },
       private_key: "__AIRPORT_REALITY_PRIVATE_KEY__",
-      short_id: shortIds[0],
+      short_id: shortIds,
     };
 
-    if (normalizeString(realityTemplate.max_time_difference)) {
-      block.reality.max_time_difference = normalizeString(realityTemplate.max_time_difference);
+    if (normalizeString(sourceRealityTemplate.max_time_difference)) {
+      block.reality.max_time_difference = normalizeString(sourceRealityTemplate.max_time_difference);
     }
   }
 

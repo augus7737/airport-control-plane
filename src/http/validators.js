@@ -262,6 +262,24 @@ export function validateProxyProfileCreate(payload) {
   }
 
   if (
+    payload.transport !== undefined &&
+    payload.transport !== null &&
+    !["tcp", "ws", "grpc", "http", "httpupgrade"].includes(
+      String(payload.transport).trim().toLowerCase(),
+    )
+  ) {
+    errors.push("transport must be tcp, ws, grpc, http or httpupgrade");
+  }
+
+  if (
+    payload.security !== undefined &&
+    payload.security !== null &&
+    !["reality", "tls", "none"].includes(String(payload.security).trim().toLowerCase())
+  ) {
+    errors.push("security must be reality, tls or none");
+  }
+
+  if (
     payload.status !== undefined &&
     payload.status !== null &&
     !["draft", "active", "disabled"].includes(String(payload.status).trim().toLowerCase())
