@@ -86,6 +86,10 @@ export function validateManualNode(payload) {
 export function validateAssetUpdate(payload) {
   const errors = [];
 
+  validateNullableIpField(errors, payload.public_ipv4, "public_ipv4", { version: 4 });
+  validateNullableIpField(errors, payload.public_ipv6, "public_ipv6", { version: 6 });
+  validateNullableIpField(errors, payload.private_ipv4, "private_ipv4", { version: 4 });
+
   for (const field of [
     "ssh_port",
     "bandwidth_mbps",
@@ -177,9 +181,9 @@ export function validateAccessUserCreate(payload) {
   if (
     payload.protocol !== undefined &&
     payload.protocol !== null &&
-    !["vless"].includes(String(payload.protocol).trim().toLowerCase())
+    !["vless", "vmess"].includes(String(payload.protocol).trim().toLowerCase())
   ) {
-    errors.push("protocol must be vless");
+    errors.push("protocol must be vless or vmess");
   }
 
   if (
@@ -226,6 +230,15 @@ export function validateAccessUserCreate(payload) {
     errors.push("credential.uuid must be a non-empty string");
   }
 
+  if (
+    isPlainObject(payload.credential) &&
+    payload.credential.alter_id !== undefined &&
+    payload.credential.alter_id !== null &&
+    (!Number.isInteger(payload.credential.alter_id) || payload.credential.alter_id < 0)
+  ) {
+    errors.push("credential.alter_id must be a non-negative integer");
+  }
+
   validateStringArray(errors, payload.node_group_ids, "node_group_ids");
 
   return errors;
@@ -256,9 +269,22 @@ export function validateProxyProfileCreate(payload) {
   if (
     payload.protocol !== undefined &&
     payload.protocol !== null &&
-    !["vless"].includes(String(payload.protocol).trim().toLowerCase())
+    !["vless", "vmess"].includes(String(payload.protocol).trim().toLowerCase())
   ) {
-    errors.push("protocol must be vless");
+    errors.push("protocol must be vless or vmess");
+  }
+
+  const protocol =
+    payload.protocol !== undefined && payload.protocol !== null
+      ? String(payload.protocol).trim().toLowerCase()
+      : null;
+  const security =
+    payload.security !== undefined && payload.security !== null
+      ? String(payload.security).trim().toLowerCase()
+      : null;
+
+  if (protocol === "vmess" && security === "reality") {
+    errors.push("vmess does not support reality");
   }
 
   if (

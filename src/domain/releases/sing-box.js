@@ -143,8 +143,8 @@ export function validateSingBoxProfileTemplate(profile) {
   const handshake = isPlainObject(realityTemplate.handshake) ? realityTemplate.handshake : {};
   const handshakeServer = normalizeString(handshake.server) ?? normalizeString(profile?.server_name);
 
-  if (protocol !== "vless") {
-    errors.push("当前真实发布仅支持 VLESS 模板");
+  if (!["vless", "vmess"].includes(protocol)) {
+    errors.push("当前真实发布仅支持 VLESS / VMess 模板");
   }
 
   if (!Number.isInteger(Number(profile?.listen_port)) || Number(profile?.listen_port) < 1) {
@@ -157,6 +157,10 @@ export function validateSingBoxProfileTemplate(profile) {
 
   if (!["reality", "tls", "none"].includes(security)) {
     errors.push(`暂不支持的 security: ${security}`);
+  }
+
+  if (protocol === "vmess" && security === "reality") {
+    errors.push("VMess 模板暂不支持 Reality，请改用 TLS 或无加密");
   }
 
   if (transport !== "tcp" && !isPlainObject(transportTemplate)) {
@@ -175,7 +179,7 @@ export function validateSingBoxProfileTemplate(profile) {
     }
   }
 
-  if (security === "reality") {
+  if (security === "reality" && protocol === "vless") {
     if (!handshakeServer) {
       errors.push("Reality 模板需要 server_name 或 template.reality.handshake.server");
     }
@@ -314,16 +318,28 @@ function buildTlsConfig(profile) {
 }
 
 function buildInboundConfig(release, profile, eligibleUsers) {
+  const protocol = String(profile?.protocol || "vless").toLowerCase();
   const inbound = {
-    type: "vless",
+    type: protocol,
     tag: normalizeString(profile?.tag) ?? `airport-${release.id}`,
     listen: pickListenAddress(profile),
     listen_port: Number(profile?.listen_port ?? 443),
-    users: eligibleUsers.map((user) => ({
-      name: normalizeString(user?.name) ?? user?.id ?? "unknown",
-      uuid: normalizeString(user?.credential?.uuid),
-      ...(normalizeString(profile?.flow) ? { flow: normalizeString(profile.flow) } : {}),
-    })),
+    users: eligibleUsers.map((user) =>
+      protocol === "vmess"
+        ? {
+            name: normalizeString(user?.name) ?? user?.id ?? "unknown",
+            uuid: normalizeString(user?.credential?.uuid),
+            alterId:
+              Number.isInteger(Number(user?.credential?.alter_id)) && Number(user?.credential?.alter_id) >= 0
+                ? Number(user.credential.alter_id)
+                : 0,
+          }
+        : {
+            name: normalizeString(user?.name) ?? user?.id ?? "unknown",
+            uuid: normalizeString(user?.credential?.uuid),
+            ...(normalizeString(profile?.flow) ? { flow: normalizeString(profile.flow) } : {}),
+          },
+    ),
   };
 
   const listenFields = pickListenFields(profile);
@@ -388,13 +404,14 @@ export function buildSingBoxConfig(release, resolved) {
   }
 
   const security = String(profile?.security || "reality").toLowerCase();
+  const protocol = String(profile?.protocol || "vless").toUpperCase();
   const digest = buildConfigDigest(config);
   const changeSummary =
     security === "reality"
-      ? `VLESS Reality / ${eligibleUsers.length} 个有效用户 / ${profile.listen_port} 端口`
+      ? `${protocol} Reality / ${eligibleUsers.length} 个有效用户 / ${profile.listen_port} 端口`
       : security === "tls"
-        ? `VLESS TLS / ${eligibleUsers.length} 个有效用户 / ${profile.listen_port} 端口`
-        : `VLESS 明文 / ${eligibleUsers.length} 个有效用户 / ${profile.listen_port} 端口`;
+        ? `${protocol} TLS / ${eligibleUsers.length} 个有效用户 / ${profile.listen_port} 端口`
+        : `${protocol} 明文 / ${eligibleUsers.length} 个有效用户 / ${profile.listen_port} 端口`;
 
   return {
     config,

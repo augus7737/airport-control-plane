@@ -93,6 +93,7 @@ Core fields:
 - `name`
 - `protocol`
 - `credential.uuid`
+- `credential.alter_id` (for `vmess`)
 - `status`
 - `expires_at`
 - `profile_id`
@@ -103,7 +104,7 @@ Core fields:
 
 Notes:
 
-- first version focuses on internal VLESS-style access identities
+- current version supports internal `vless` / `vmess` access identities
 - `profile_id` points to one `ProxyProfile`
 - `node_group_ids` describes the default release scope for this user
 
@@ -133,7 +134,7 @@ Core fields:
 
 Notes:
 
-- first version is optimized for `vless`
+- current version supports `vless` and `vmess`
 - `template` stores the managed profile payload that later renders into node-side config
 
 ## NodeGroup

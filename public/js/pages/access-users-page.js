@@ -3,6 +3,7 @@ function createEmptyDraft() {
     name: "",
     protocol: "vless",
     uuid: "",
+    alter_id: "0",
     status: "active",
     expires_at: "",
     profile_id: "",
@@ -30,6 +31,13 @@ function resolveUserUuid(user) {
     return user.credential;
   }
   return String(user?.credential?.uuid || user?.uuid || "");
+}
+
+function resolveUserAlterId(user) {
+  if (user?.credential?.alter_id === undefined || user?.credential?.alter_id === null) {
+    return "";
+  }
+  return String(user.credential.alter_id);
 }
 
 export function createAccessUsersPageModule(dependencies) {
@@ -68,6 +76,7 @@ export function createAccessUsersPageModule(dependencies) {
       name: String(user.name || ""),
       protocol: String(user.protocol || "vless"),
       uuid: resolveUserUuid(user),
+      alter_id: resolveUserAlterId(user) || "0",
       status: String(user.status || "active"),
       expires_at: toDateInputValue(user.expires_at),
       profile_id: String(user.profile_id || ""),
@@ -96,6 +105,7 @@ export function createAccessUsersPageModule(dependencies) {
         user.note,
         user.profile_id,
         resolveUserUuid(user),
+        resolveUserAlterId(user),
       ]
         .join(" ")
         .toLowerCase();
@@ -174,6 +184,7 @@ export function createAccessUsersPageModule(dependencies) {
       ? filteredUsers
           .map((user) => {
             const uuid = resolveUserUuid(user);
+            const alterId = resolveUserAlterId(user);
             const displayName = user.name || user.id;
             return `
               <tr>
@@ -198,7 +209,14 @@ export function createAccessUsersPageModule(dependencies) {
                   </div>
                 </td>
                 <td title="${escapeHtml(uuid || "未填写 UUID")}">
-                  <span class="mono">${escapeHtml(uuid ? `${uuid.slice(0, 8)}...${uuid.slice(-6)}` : "-")}</span>
+                  <div class="ops-inline-meta">
+                    <span class="mono">${escapeHtml(uuid ? `${uuid.slice(0, 8)}...${uuid.slice(-6)}` : "-")}</span>
+                    ${
+                      String(user.protocol || "vless").toLowerCase() === "vmess"
+                        ? `<span class="tiny">alterId ${escapeHtml(alterId || "0")}</span>`
+                        : `<span class="tiny">UUID</span>`
+                    }
+                  </div>
                 </td>
                 <td>
                   <div class="ops-table-actions">
@@ -281,6 +299,7 @@ export function createAccessUsersPageModule(dependencies) {
                   <label for="access-user-protocol">协议</label>
                   <select id="access-user-protocol" name="protocol">
                     <option value="vless"${draft.protocol === "vless" ? " selected" : ""}>VLESS</option>
+                    <option value="vmess"${draft.protocol === "vmess" ? " selected" : ""}>VMess</option>
                   </select>
                 </div>
                 <div class="field">
@@ -291,6 +310,10 @@ export function createAccessUsersPageModule(dependencies) {
                   <label for="access-user-uuid">UUID</label>
                   <input id="access-user-uuid" name="uuid" value="${escapeHtml(draft.uuid)}" placeholder="例如：c8c4516d-bf1b-4aa0-bfd9-..." />
                 </div>
+                <div class="field">
+                  <label for="access-user-alter-id">alterId</label>
+                  <input id="access-user-alter-id" name="alter_id" value="${escapeHtml(draft.alter_id)}" placeholder="VMess 常用 0" />
+                </div>
                 <div class="field full">
                   <label for="access-user-profile-id">协议模板</label>
                   <select id="access-user-profile-id" name="profile_id">
@@ -299,7 +322,7 @@ export function createAccessUsersPageModule(dependencies) {
                       .map(
                         (profile) => `
                           <option value="${escapeHtml(profile.id)}"${draft.profile_id === profile.id ? " selected" : ""}>
-                            ${escapeHtml(profile.name || profile.id)}
+                            [${escapeHtml(String(profile.protocol || "vless").toUpperCase())}] ${escapeHtml(profile.name || profile.id)}
                           </option>
                         `,
                       )
@@ -365,7 +388,7 @@ export function createAccessUsersPageModule(dependencies) {
                 </div>
               </div>
               <div class="event-list">
-                <div class="event"><strong>先建接入身份</strong><p>把 UUID、有效期、启停状态和备注统一记录。</p></div>
+                <div class="event"><strong>先建接入身份</strong><p>把 UUID、有效期、启停状态和备注统一记录；VMess 可额外维护 alterId。</p></div>
                 <div class="event"><strong>再挂协议模板</strong><p>把协议参数统一从模板继承，避免逐台节点手写。</p></div>
                 <div class="event"><strong>最后走发布</strong><p>用户、模板和节点组组合完成后，再去发布中心统一下发。</p></div>
               </div>
@@ -441,6 +464,7 @@ export function createAccessUsersPageModule(dependencies) {
         note: String(formData.get("note") || "").trim() || null,
         credential: {
           uuid: String(formData.get("uuid") || "").trim(),
+          alter_id: Number.parseInt(String(formData.get("alter_id") || "0").trim() || "0", 10),
         },
       };
 
@@ -451,6 +475,11 @@ export function createAccessUsersPageModule(dependencies) {
 
       if (!payload.credential.uuid) {
         windowRef.alert("请先填写 UUID。");
+        return;
+      }
+
+      if (!Number.isInteger(payload.credential.alter_id) || payload.credential.alter_id < 0) {
+        windowRef.alert("alterId 必须是大于等于 0 的整数。");
         return;
       }
 

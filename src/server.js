@@ -412,6 +412,81 @@ fi
 log "[bbr] 完成"
 `;
 
+const alpineAcmeLegoScript = `#!/bin/sh
+set -eu
+
+export PATH="/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\${PATH}"
+
+if [ -f /etc/airport/acme.env ]; then
+  # shellcheck disable=SC1091
+  . /etc/airport/acme.env
+fi
+
+ACME_EMAIL="\${ACME_EMAIL:-}"
+ACME_DOMAINS="\${ACME_DOMAINS:-}"
+ACME_CERT_NAME="\${ACME_CERT_NAME:-default}"
+ACME_CA_URL="\${ACME_CA_URL:-https://acme-v02.api.letsencrypt.org/directory}"
+ACME_WEBROOT="\${ACME_WEBROOT:-/var/www/acme}"
+ACME_STATE_DIR="\${ACME_STATE_DIR:-/etc/airport/lego}"
+ACME_CERT_ROOT="\${ACME_CERT_ROOT:-/etc/ssl/airport}"
+
+require_value() {
+  KEY="$1"
+  VALUE="$2"
+  if [ -z "$VALUE" ]; then
+    echo "[acme] 缺少 $KEY，请先在 /etc/airport/acme.env 或模板脚本里设置。" >&2
+    exit 1
+  fi
+}
+
+install_lego() {
+  if command -v lego >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v apk >/dev/null 2>&1; then
+    apk update >/dev/null 2>&1 || true
+    apk add --no-cache lego ca-certificates >/dev/null 2>&1 || true
+  fi
+
+  command -v lego >/dev/null 2>&1
+}
+
+require_value "ACME_EMAIL" "$ACME_EMAIL"
+require_value "ACME_DOMAINS" "$ACME_DOMAINS"
+
+if ! install_lego; then
+  echo "[acme] lego 未安装成功，请检查 Alpine 仓库或手动安装。" >&2
+  exit 1
+fi
+
+install -d -m 755 "$ACME_WEBROOT" "$ACME_STATE_DIR" "$ACME_CERT_ROOT/$ACME_CERT_NAME"
+
+set -- --accept-tos --email "$ACME_EMAIL" --server "$ACME_CA_URL" --path "$ACME_STATE_DIR" --http --http.webroot "$ACME_WEBROOT"
+for DOMAIN in $(printf '%s' "$ACME_DOMAINS" | tr ',' ' '); do
+  set -- "$@" --domains "$DOMAIN"
+done
+
+if ! lego "$@" run >/dev/null 2>&1; then
+  lego "$@" renew --days 30
+fi
+
+PRIMARY_DOMAIN=$(printf '%s' "$ACME_DOMAINS" | cut -d',' -f1 | awk '{print $1}')
+if [ -z "$PRIMARY_DOMAIN" ]; then
+  echo "[acme] 无法确定主域名" >&2
+  exit 1
+fi
+
+LEGO_CERT_DIR="$ACME_STATE_DIR/certificates"
+install -m 644 "$LEGO_CERT_DIR/$PRIMARY_DOMAIN.crt" "$ACME_CERT_ROOT/$ACME_CERT_NAME/fullchain.pem"
+install -m 600 "$LEGO_CERT_DIR/$PRIMARY_DOMAIN.key" "$ACME_CERT_ROOT/$ACME_CERT_NAME/privkey.pem"
+
+echo "[acme] cert_name=$ACME_CERT_NAME"
+echo "[acme] fullchain=$ACME_CERT_ROOT/$ACME_CERT_NAME/fullchain.pem"
+echo "[acme] privkey=$ACME_CERT_ROOT/$ACME_CERT_NAME/privkey.pem"
+echo "[acme] webroot=$ACME_WEBROOT"
+`;
+
 function defaultSystemTemplateRecords() {
   const alpineBase = initTemplates["alpine-base"];
   const timestamp = nowIso();
@@ -440,6 +515,19 @@ function defaultSystemTemplateRecords() {
       node_group_ids: [],
       tags: ["alpine", "network", "bbr", "sysctl"],
       note: "内置网络优化模板，会尽力启用 fq + bbr；在 LXC 场景下若宿主未开放内核能力，脚本会保留提示而不强制失败。",
+      created_at: timestamp,
+      updated_at: timestamp,
+    },
+    {
+      id: "system_template_alpine_acme_lego",
+      name: "Alpine ACME 证书申请",
+      category: "hardening",
+      script_name: "申请 / 续签 TLS 证书（lego / HTTP-01）",
+      script_body: alpineAcmeLegoScript,
+      status: "active",
+      node_group_ids: [],
+      tags: ["alpine", "acme", "lego", "tls", "certificate"],
+      note: "内置证书模板。执行前请在 /etc/airport/acme.env 中设置 ACME_EMAIL、ACME_DOMAINS、ACME_CERT_NAME，产物默认落在 /etc/ssl/airport/<cert_name>/。",
       created_at: timestamp,
       updated_at: timestamp,
     },
@@ -982,17 +1070,31 @@ function missingIds(ids, resolver) {
 
 function buildAccessUserRecord(payload, existing = null) {
   const timestamp = nowIso();
+  const protocol =
+    normalizeNullableString(payload.protocol ?? existing?.protocol)?.toLowerCase() ?? "vless";
   const credentialSource = hasOwn(payload, "credential") ? payload.credential : existing?.credential;
   const uuid = normalizeNullableString(credentialSource?.uuid) ?? existing?.credential?.uuid ?? randomUUID();
+  const alterId =
+    credentialSource?.alter_id !== undefined &&
+    credentialSource?.alter_id !== null &&
+    Number.isInteger(Number(credentialSource.alter_id)) &&
+    Number(credentialSource.alter_id) >= 0
+      ? Number(credentialSource.alter_id)
+      : existing?.credential?.alter_id ?? 0;
 
   return {
     id: existing?.id ?? `access_user_${randomUUID()}`,
     name: normalizeNullableString(payload.name) ?? existing?.name ?? "未命名接入用户",
-    protocol:
-      normalizeNullableString(payload.protocol ?? existing?.protocol)?.toLowerCase() ?? "vless",
-    credential: {
-      uuid,
-    },
+    protocol,
+    credential:
+      protocol === "vmess"
+        ? {
+            uuid,
+            alter_id: alterId,
+          }
+        : {
+            uuid,
+          },
     status:
       normalizeNullableString(payload.status ?? existing?.status)?.toLowerCase() ?? "active",
     expires_at: hasOwn(payload, "expires_at")
@@ -1010,6 +1112,22 @@ function buildAccessUserRecord(payload, existing = null) {
     created_at: existing?.created_at ?? timestamp,
     updated_at: timestamp,
   };
+}
+
+function validateAccessUserProfileLink({ protocol, profileId, details }) {
+  if (!profileId) {
+    return;
+  }
+
+  const profile = findProxyProfileById(profileId);
+  if (!profile) {
+    details.push(`unknown profile id: ${profileId}`);
+    return;
+  }
+
+  if (String(profile.protocol || "vless").toLowerCase() !== String(protocol || "vless").toLowerCase()) {
+    details.push(`access user protocol ${protocol} does not match profile protocol ${profile.protocol}`);
+  }
 }
 
 function buildSystemUserRecord(payload, existing = null) {
@@ -1087,8 +1205,11 @@ function buildSystemTemplateRecord(payload, existing = null) {
 
 function buildProxyProfileRecord(payload, existing = null) {
   const timestamp = nowIso();
+  const protocol =
+    normalizeNullableString(payload.protocol ?? existing?.protocol)?.toLowerCase() ?? "vless";
   const security =
-    normalizeNullableString(payload.security ?? existing?.security)?.toLowerCase() ?? "reality";
+    normalizeNullableString(payload.security ?? existing?.security)?.toLowerCase() ??
+    (protocol === "vmess" ? "tls" : "reality");
   const tlsEnabled = hasOwn(payload, "tls_enabled")
     ? Boolean(payload.tls_enabled)
     : existing?.tls_enabled ?? security === "tls";
@@ -1099,8 +1220,7 @@ function buildProxyProfileRecord(payload, existing = null) {
   return {
     id: existing?.id ?? `profile_${randomUUID()}`,
     name: normalizeNullableString(payload.name) ?? existing?.name ?? "未命名模板",
-    protocol:
-      normalizeNullableString(payload.protocol ?? existing?.protocol)?.toLowerCase() ?? "vless",
+    protocol,
     listen_port: hasOwn(payload, "listen_port")
       ? Number(payload.listen_port)
       : existing?.listen_port ?? 443,
@@ -1114,7 +1234,7 @@ function buildProxyProfileRecord(payload, existing = null) {
       : existing?.server_name ?? null,
     flow: hasOwn(payload, "flow")
       ? normalizeNullableString(payload.flow)
-      : existing?.flow ?? "xtls-rprx-vision",
+      : existing?.flow ?? (protocol === "vless" ? "xtls-rprx-vision" : null),
     mux_enabled: hasOwn(payload, "mux_enabled")
       ? Boolean(payload.mux_enabled)
       : existing?.mux_enabled ?? false,
@@ -1426,6 +1546,18 @@ async function executeConfigRelease(payload, options = {}) {
       `access users bound to another profile: ${conflictingUsers.map((item) => item.id).join(", ")}`,
     );
   }
+  const protocolMismatchUsers = accessUsers.filter(
+    (user) =>
+      String(user?.protocol || "vless").toLowerCase() !==
+      String(profile.protocol || "vless").toLowerCase(),
+  );
+  if (protocolMismatchUsers.length > 0) {
+    throw new Error(
+      `access user protocol does not match profile protocol: ${protocolMismatchUsers
+        .map((item) => item.id)
+        .join(", ")}`,
+    );
+  }
 
   const groupIds =
     requestedGroupIds.length > 0 || directNodeIds.length > 0
@@ -1506,7 +1638,7 @@ async function executeConfigRelease(payload, options = {}) {
     const operation = await buildOperationRecord({
       mode: "script",
       title: `${release.title} · ${profile.protocol.toUpperCase()}`,
-      script_name: "发布 VLESS sing-box 配置",
+      script_name: `发布 ${profile.protocol.toUpperCase()} sing-box 配置`,
       script_body: scriptBody,
       node_ids: nodeIds,
     });
@@ -2325,11 +2457,10 @@ const server = createServer(async (request, reply) => {
 
       const profileId = hasOwn(payload, "profile_id") ? normalizeNullableString(payload.profile_id) : null;
       const groupIds = hasOwn(payload, "node_group_ids") ? uniqueStringList(payload.node_group_ids) : [];
+      const protocol = normalizeNullableString(payload.protocol)?.toLowerCase() ?? "vless";
       const details = [];
 
-      if (profileId && !findProxyProfileById(profileId)) {
-        details.push(`unknown profile id: ${profileId}`);
-      }
+      validateAccessUserProfileLink({ protocol, profileId, details });
 
       const missingGroupIds = missingIds(groupIds, findNodeGroupById);
       if (missingGroupIds.length > 0) {
@@ -2388,9 +2519,16 @@ const server = createServer(async (request, reply) => {
       const details = [];
       if (hasOwn(payload, "profile_id")) {
         const profileId = normalizeNullableString(payload.profile_id);
-        if (profileId && !findProxyProfileById(profileId)) {
-          details.push(`unknown profile id: ${profileId}`);
-        }
+        const protocol =
+          normalizeNullableString(payload.protocol ?? existingAccessUser.protocol)?.toLowerCase() ??
+          "vless";
+        validateAccessUserProfileLink({ protocol, profileId, details });
+      } else if (hasOwn(payload, "protocol")) {
+        validateAccessUserProfileLink({
+          protocol: normalizeNullableString(payload.protocol)?.toLowerCase() ?? "vless",
+          profileId: existingAccessUser.profile_id,
+          details,
+        });
       }
 
       if (hasOwn(payload, "node_group_ids")) {

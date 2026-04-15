@@ -569,6 +569,7 @@ export function createProxyProfilesPageModule(dependencies) {
                   <label for="proxy-profile-protocol">协议</label>
                   <select id="proxy-profile-protocol" name="protocol">
                     <option value="vless"${draft.protocol === "vless" ? " selected" : ""}>VLESS</option>
+                    <option value="vmess"${draft.protocol === "vmess" ? " selected" : ""}>VMess</option>
                   </select>
                 </div>
                 <div class="field">
@@ -600,6 +601,7 @@ export function createProxyProfilesPageModule(dependencies) {
                 <div class="field">
                   <label for="proxy-profile-flow">Flow</label>
                   <input id="proxy-profile-flow" name="flow" value="${escapeHtml(draft.flow)}" placeholder="xtls-rprx-vision" />
+                  <div class="field-note">VLESS 常用该字段；如果选择 VMess，发布时会自动忽略。</div>
                 </div>
                 <div class="field">
                   <label for="proxy-profile-tag">模板标签</label>
@@ -608,6 +610,7 @@ export function createProxyProfilesPageModule(dependencies) {
                 <div class="field">
                   <label for="proxy-profile-tls-cert-path">证书路径</label>
                   <input id="proxy-profile-tls-cert-path" name="tls_certificate_path" value="${escapeHtml(draft.tls_certificate_path)}" placeholder="/etc/ssl/airport/fullchain.pem" />
+                  <div class="field-note">推荐配合系统模板里的 ACME 证书申请，把证书统一落到固定路径后再在这里引用。</div>
                 </div>
                 <div class="field">
                   <label for="proxy-profile-tls-key-path">证书私钥路径</label>
@@ -795,17 +798,21 @@ export function createProxyProfilesPageModule(dependencies) {
       const formData = new FormData(form);
       const security = String(formData.get("security") || "reality").trim() || "reality";
       const transport = String(formData.get("transport") || "tcp").trim() || "tcp";
+      const protocol = String(formData.get("protocol") || "vless").trim() || "vless";
       const payload = {
         name: String(formData.get("name") || "").trim(),
-        protocol: String(formData.get("protocol") || "vless").trim() || "vless",
+        protocol,
         listen_port: Number(formData.get("listen_port")) || Number(formData.get("listen_port") || 0) || null,
         transport,
         security,
         tls_enabled: security !== "none",
-        reality_enabled: security === "reality",
+        reality_enabled: protocol === "vless" && security === "reality",
         mux_enabled: formData.get("mux_enabled") === "on",
         server_name: String(formData.get("server_name") || "").trim() || null,
-        flow: String(formData.get("flow") || "").trim() || null,
+        flow:
+          protocol === "vless"
+            ? String(formData.get("flow") || "").trim() || null
+            : null,
         tag: String(formData.get("tag") || "").trim() || null,
         status: String(formData.get("status") || "active").trim() || "active",
         note: String(formData.get("note") || "").trim() || null,
@@ -819,6 +826,11 @@ export function createProxyProfilesPageModule(dependencies) {
 
       if (!payload.listen_port) {
         windowRef.alert("请先填写监听端口。");
+        return;
+      }
+
+      if (protocol === "vmess" && security === "reality") {
+        windowRef.alert("VMess 当前仅支持 TLS 或无加密，不支持 Reality。");
         return;
       }
 
