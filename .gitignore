@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.production
+.DS_Store
+.codex/
+npm-debug.log*
+dist/
+coverage/
+data-prod/
+.playwright-cli/
+.tmp/
+output/
+data/*
+!data/.gitkeep

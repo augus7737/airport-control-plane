@@ -1,0 +1,295 @@
+.route-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.route-orb-meta {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.route-visual {
+  display: grid;
+  gap: 16px;
+}
+
+.route-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 18px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.swatch.entry {
+  background: rgba(97, 168, 255, 0.8);
+}
+
+.swatch.relay {
+  background: rgba(255, 122, 69, 0.84);
+}
+
+.swatch.country {
+  background: rgba(66, 200, 138, 0.84);
+}
+
+.swatch.line-solid,
+.swatch.line-dashed {
+  height: 2px;
+  border-radius: 0;
+}
+
+.swatch.line-solid {
+  background: linear-gradient(90deg, rgba(255, 122, 69, 0.7), rgba(95, 213, 210, 0.7));
+}
+
+.swatch.line-dashed {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(97, 168, 255, 0.75) 0 7px,
+      transparent 7px 11px
+    );
+}
+
+.route-canvas {
+  position: relative;
+  isolation: isolate;
+  min-height: 520px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 20% 18%, rgba(97, 168, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 84% 30%, rgba(66, 200, 138, 0.12), transparent 26%),
+    radial-gradient(circle at 54% 52%, rgba(255, 122, 69, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(7, 14, 22, 0.9), rgba(11, 19, 29, 0.96));
+  overflow: hidden;
+}
+
+.route-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 100%);
+}
+
+.route-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.route-link {
+  fill: none;
+  stroke-linecap: round;
+  opacity: 0.72;
+}
+
+.route-link.relay {
+  stroke: rgba(255, 122, 69, 0.82);
+}
+
+.route-link.direct {
+  stroke: rgba(97, 168, 255, 0.72);
+  stroke-dasharray: 1.4 1.2;
+}
+
+.route-lane-label {
+  position: absolute;
+  top: 18px;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+.route-orb {
+  position: absolute;
+  width: min(220px, 22vw);
+  min-width: 156px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 16, 26, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 20px 48px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.route-orb strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 15px;
+}
+
+.route-orb-code {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.route-orb-entry {
+  border-color: rgba(97, 168, 255, 0.24);
+}
+
+.route-orb-entry .route-orb-code {
+  color: #d8f6ff;
+  background: rgba(97, 168, 255, 0.14);
+}
+
+.route-orb-relay {
+  border-color: rgba(255, 122, 69, 0.24);
+}
+
+.route-orb-relay .route-orb-code {
+  color: #fff1e9;
+  background: rgba(255, 122, 69, 0.16);
+}
+
+.route-orb-country {
+  border-color: rgba(66, 200, 138, 0.22);
+}
+
+.route-orb-country .route-orb-code {
+  color: #d9ffe6;
+  background: rgba(66, 200, 138, 0.16);
+}
+
+.route-topology,
+.route-members {
+  display: grid;
+  gap: 14px;
+}
+
+.route-card {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, rgba(255, 122, 69, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.02));
+}
+
+.route-caption {
+  color: #ffc1a9;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.route-flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+
+.route-node {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.route-entry {
+  color: #d8f6ff;
+  background: rgba(97, 168, 255, 0.12);
+}
+
+.route-relay {
+  color: #fff1e9;
+  background: rgba(255, 122, 69, 0.14);
+}
+
+.route-exit {
+  color: #d9ffe6;
+  background: rgba(66, 200, 138, 0.14);
+}
+
+.route-arrow {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.route-member {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.route-member:hover {
+  border-color: rgba(255, 122, 69, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.route-member-meta,
+.route-member-extra {
+  display: grid;
+  gap: 6px;
+}
+
+.route-member-meta span,
+.route-member-extra .tiny {
+  color: var(--muted);
+}
+
+.route-member-extra {
+  justify-items: end;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .route-canvas {
+    min-height: 760px;
+  }
+
+  .route-orb {
+    width: min(220px, 56vw);
+  }
+
+  .route-member {
+    flex-direction: column;
+  }
+
+  .route-member-extra {
+    justify-items: start;
+    text-align: left;
+  }
+}

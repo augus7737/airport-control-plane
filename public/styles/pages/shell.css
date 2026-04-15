@@ -1,0 +1,119 @@
+body[data-page="shell"] .page-hero {
+  display: none;
+}
+
+body[data-page="shell"] .content {
+  padding: 22px;
+}
+
+body[data-page="shell"] .topbar {
+  margin-bottom: 14px;
+}
+
+body[data-page="shell"] .shell-page-head .panel-body {
+  padding: 16px 18px;
+}
+
+body[data-page="shell"] .shell-page-head-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+body[data-page="shell"] .shell-page-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+body[data-page="shell"] .shell-page-breadcrumb strong,
+body[data-page="shell"] .shell-page-breadcrumb a:hover {
+  color: var(--text);
+}
+
+body[data-page="shell"] .shell-page-head h3 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+}
+
+body[data-page="shell"] .shell-page-head p {
+  margin: 8px 0 0;
+  max-width: 780px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+body[data-page="shell"] .shell-page-head-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+body[data-page="shell"] .shell-page-chips {
+  margin-top: 12px;
+  gap: 8px;
+}
+
+body[data-page="shell"] #node-terminal {
+  margin-top: 14px;
+}
+
+body[data-page="shell"] #node-terminal .workspace {
+  align-items: start;
+}
+
+body[data-page="shell"] .single-terminal-window {
+  margin-top: 14px;
+  height: clamp(360px, 62vh, 620px);
+}
+
+body[data-page="shell"] .single-terminal-window .terminal-screen {
+  min-height: 0;
+  height: auto;
+}
+
+body[data-page="shell"] .single-terminal-window.shell-interactive {
+  border-color: rgba(95, 213, 210, 0.28);
+  box-shadow: 0 0 0 1px rgba(95, 213, 210, 0.08);
+}
+
+body[data-page="shell"] .terminal-screen-xterm {
+  display: none;
+  padding: 12px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body[data-page="shell"] .single-terminal-window.shell-xterm-ready .terminal-screen-xterm {
+  display: block;
+}
+
+body[data-page="shell"] .single-terminal-window.shell-xterm-ready #node-shell-screen {
+  display: none;
+}
+
+body[data-page="shell"] .single-terminal-window.shell-xterm-ready .xterm-viewport {
+  border-radius: 0 0 18px 18px;
+}
+
+body[data-page="shell"] .single-terminal-window.shell-xterm-ready .xterm,
+body[data-page="shell"] .single-terminal-window.shell-xterm-ready .xterm-screen-rows {
+  height: 100%;
+}
+
+body[data-page="shell"] .single-terminal-window.shell-xterm-ready .xterm-screen,
+body[data-page="shell"] .single-terminal-window.shell-xterm-ready .xterm-helpers {
+  inset-inline: 12px !important;
+}
+
+@media (max-width: 980px) {
+  body[data-page="shell"] .shell-page-head-main {
+    flex-direction: column;
+  }
+}

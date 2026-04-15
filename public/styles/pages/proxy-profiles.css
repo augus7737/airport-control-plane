@@ -1,0 +1,14 @@
+body[data-page="proxy-profiles"] .ops-form-grid .check-row {
+  min-height: 42px;
+}
+
+body[data-page="proxy-profiles"] .ops-form-grid textarea.mono {
+  min-height: 160px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body[data-page="proxy-profiles"] .pill,
+body[data-page="proxy-profiles"] .badge {
+  white-space: nowrap;
+}

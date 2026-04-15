@@ -1,0 +1,25 @@
+body[data-page="releases"] .ops-release-layout {
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.92fr);
+}
+
+body[data-page="releases"] .ops-node-check-grid {
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+body[data-page="releases"] .ops-soft-item {
+  cursor: pointer;
+}
+
+body[data-page="releases"] .ops-soft-item:hover,
+body[data-page="releases"] .ops-soft-item:focus-visible {
+  border-color: rgba(31, 111, 127, 0.18);
+  background: rgba(31, 111, 127, 0.06);
+}
+
+@media (max-width: 1180px) {
+  body[data-page="releases"] .ops-release-layout {
+    grid-template-columns: 1fr;
+  }
+}

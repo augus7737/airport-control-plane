@@ -1,0 +1,52 @@
+name: airport-control-plane
+
+services:
+  airport:
+    container_name: ${AIRPORT_CONTAINER_NAME:-airport-control-plane}
+    image: ${AIRPORT_IMAGE_TAG:-airport-control-plane:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${AIRPORT_BIND_IP:-0.0.0.0}:${AIRPORT_HOST_PORT:-8080}:8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      TZ: ${TZ:-Asia/Shanghai}
+      CONTROL_PLANE_AUTH_USERNAME: ${CONTROL_PLANE_AUTH_USERNAME:-admin}
+      CONTROL_PLANE_AUTH_PASSWORD: ${CONTROL_PLANE_AUTH_PASSWORD}
+      CONTROL_PLANE_SESSION_TTL_MS: ${CONTROL_PLANE_SESSION_TTL_MS:-43200000}
+      CONTROL_PLANE_SESSION_SECURE: ${CONTROL_PLANE_SESSION_SECURE:-false}
+      PLATFORM_PUBLIC_BASE_URL: ${PLATFORM_PUBLIC_BASE_URL:-}
+      PLATFORM_SSH_PRIVATE_KEY_PATH: ${PLATFORM_SSH_PRIVATE_KEY_PATH:-}
+      PLATFORM_PUBLIC_KEY: ${PLATFORM_PUBLIC_KEY:-}
+      NODE_SSH_USER: ${NODE_SSH_USER:-root}
+      DEMO_SHELL_BINARY: ${DEMO_SHELL_BINARY:-/bin/sh}
+      OPERATION_EXECUTION_TIMEOUT_MS: ${OPERATION_EXECUTION_TIMEOUT_MS:-300000}
+      SSH_CONNECT_TIMEOUT_SECONDS: ${SSH_CONNECT_TIMEOUT_SECONDS:-15}
+      PROBE_TCP_TIMEOUT_MS: ${PROBE_TCP_TIMEOUT_MS:-4000}
+      PROBE_SSH_TIMEOUT_MS: ${PROBE_SSH_TIMEOUT_MS:-12000}
+      AUTO_PROBE_ENABLED: ${AUTO_PROBE_ENABLED:-true}
+      AUTO_PROBE_INTERVAL_MS: ${AUTO_PROBE_INTERVAL_MS:-900000}
+      AUTO_PROBE_BATCH_SIZE: ${AUTO_PROBE_BATCH_SIZE:-4}
+      AUTO_PROBE_MIN_GAP_MS: ${AUTO_PROBE_MIN_GAP_MS:-600000}
+      AUTO_PROBE_JITTER_MS: ${AUTO_PROBE_JITTER_MS:-10000}
+    volumes:
+      - ${AIRPORT_DATA_DIR:-./data-prod}:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

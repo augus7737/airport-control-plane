@@ -1,0 +1,14 @@
+.DS_Store
+.codex
+.git
+.playwright-cli
+.tmp
+.env
+.env.production
+data
+data-prod
+node_modules
+output
+npm-debug.log*
+coverage
+dist
