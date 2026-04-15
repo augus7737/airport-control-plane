@@ -221,10 +221,10 @@ Example response:
 
 ```json
 {
-  "request_origin": "http://127.0.0.1:8080",
-  "bootstrap_base_url": "http://192.168.125.73:8080",
-  "detected_lan_ipv4": "192.168.125.73",
-  "detected_lan_base_url": "http://192.168.125.73:8080",
+  "request_origin": "http://control-plane.example:8080",
+  "bootstrap_base_url": "http://192.0.2.10:8080",
+  "detected_lan_ipv4": "192.0.2.10",
+  "detected_lan_base_url": "http://192.0.2.10:8080",
   "source": "detected_lan",
   "ssh_key": {
     "status": "ready",
@@ -535,8 +535,8 @@ Example response:
       "node_id": "node_xxx",
       "task_id": "task_xxx",
       "probe_type": "ssh_auth",
-      "target": "192.168.1.8:22",
-      "target_host": "192.168.1.8",
+      "target": "203.0.113.8:22",
+      "target_host": "203.0.113.8",
       "target_port": 22,
       "access_mode": "direct",
       "transport_kind": "ssh-direct",

@@ -1,9 +1,17 @@
 node_modules/
 .env
+.env.local
+.env.*.local
 .env.production
 .DS_Store
 .codex/
 npm-debug.log*
+*.log
+*.pem
+*.key
+*.db
+*.sqlite
+*.sqlite3
 dist/
 coverage/
 data-prod/
