@@ -8,6 +8,10 @@ BOOTSTRAP_TOKEN=""
 HOSTNAME_OVERRIDE=""
 SSH_PORT_OVERRIDE=""
 SSH_PORT="22"
+SSH_USER_OVERRIDE=""
+PUBLIC_IPV4_OVERRIDE=""
+PUBLIC_IPV6_OVERRIDE=""
+PRIVATE_IPV4_OVERRIDE=""
 PROVIDER_LABEL=""
 REGION_LABEL=""
 ROLE_LABEL=""
@@ -19,7 +23,7 @@ RELAY_REGION=""
 ROUTE_NOTE=""
 
 usage() {
-  echo "Usage: sh scripts/bootstrap.sh --server <url> --token <bootstrap-token> [--hostname <name>] [--ssh-port <port>] [--provider <name>] [--region <code>] [--role <name>] [--access-mode <direct|relay>] [--entry-region <name>] [--relay-node-id <node_id>] [--relay-label <name>] [--relay-region <code>] [--route-note <text>]"
+  echo "Usage: sh scripts/bootstrap.sh --server <url> --token <bootstrap-token> [--hostname <name>] [--ssh-port <port>] [--ssh-user <name>] [--public-ipv4 <ip>] [--public-ipv6 <ip>] [--private-ipv4 <ip>] [--provider <name>] [--region <code>] [--role <name>] [--access-mode <direct|relay>] [--entry-region <name>] [--relay-node-id <node_id>] [--relay-label <name>] [--relay-region <code>] [--route-note <text>]"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -38,6 +42,22 @@ while [ "$#" -gt 0 ]; do
       ;;
     --ssh-port)
       SSH_PORT_OVERRIDE="$2"
+      shift 2
+      ;;
+    --ssh-user)
+      SSH_USER_OVERRIDE="$2"
+      shift 2
+      ;;
+    --public-ipv4)
+      PUBLIC_IPV4_OVERRIDE="$2"
+      shift 2
+      ;;
+    --public-ipv6)
+      PUBLIC_IPV6_OVERRIDE="$2"
+      shift 2
+      ;;
+    --private-ipv4)
+      PRIVATE_IPV4_OVERRIDE="$2"
       shift 2
       ;;
     --provider)
@@ -96,6 +116,102 @@ is_valid_port() {
   esac
 
   [ "$1" -ge 1 ] 2>/dev/null && [ "$1" -le 65535 ] 2>/dev/null
+}
+
+resolve_current_username() {
+  if command -v id >/dev/null 2>&1; then
+    id -un 2>/dev/null && return
+  fi
+
+  if command -v whoami >/dev/null 2>&1; then
+    whoami && return
+  fi
+
+  echo ""
+}
+
+running_as_root() {
+  if ! command -v id >/dev/null 2>&1; then
+    return 1
+  fi
+
+  [ "$(id -u 2>/dev/null || echo 1)" = "0" ]
+}
+
+resolve_target_ssh_user() {
+  if [ -n "$SSH_USER_OVERRIDE" ]; then
+    printf '%s' "$SSH_USER_OVERRIDE"
+    return
+  fi
+
+  if running_as_root; then
+    printf '%s' "root"
+    return
+  fi
+
+  resolve_current_username
+}
+
+resolve_user_home_dir() {
+  TARGET_USER="$1"
+  TARGET_HOME=""
+
+  if [ -z "$TARGET_USER" ]; then
+    printf '%s' ""
+    return
+  fi
+
+  if command -v getent >/dev/null 2>&1; then
+    TARGET_HOME="$(getent passwd "$TARGET_USER" 2>/dev/null | awk -F ':' 'NR == 1 { print $6 }')"
+  fi
+
+  if [ -z "$TARGET_HOME" ] && [ -r /etc/passwd ]; then
+    TARGET_HOME="$(awk -F ':' -v target_user="$TARGET_USER" '$1 == target_user { print $6; exit }' /etc/passwd)"
+  fi
+
+  if [ -z "$TARGET_HOME" ] && [ "$TARGET_USER" = "$(resolve_current_username)" ]; then
+    TARGET_HOME="${HOME:-}"
+  fi
+
+  if [ -z "$TARGET_HOME" ] && [ "$TARGET_USER" = "root" ]; then
+    TARGET_HOME="/root"
+  fi
+
+  printf '%s' "$TARGET_HOME"
+}
+
+install_platform_public_key() {
+  PUBLIC_KEY_VALUE="$1"
+  TARGET_USER="$2"
+  CURRENT_USER="$(resolve_current_username)"
+  TARGET_HOME="$(resolve_user_home_dir "$TARGET_USER")"
+
+  if [ -z "$TARGET_HOME" ]; then
+    echo "[bootstrap] 无法确定用户 ${TARGET_USER} 的 home 目录，平台公钥写入失败。" >&2
+    return 1
+  fi
+
+  if ! running_as_root && [ -n "$CURRENT_USER" ] && [ "$CURRENT_USER" != "$TARGET_USER" ]; then
+    echo "[bootstrap] 当前用户 ${CURRENT_USER} 无法为 ${TARGET_USER} 写入 authorized_keys，请切到目标用户或 root 后重试。" >&2
+    return 1
+  fi
+
+  mkdir -p "$TARGET_HOME/.ssh"
+  chmod 700 "$TARGET_HOME/.ssh"
+  touch "$TARGET_HOME/.ssh/authorized_keys"
+  chmod 600 "$TARGET_HOME/.ssh/authorized_keys"
+
+  if ! grep -Fq "$PUBLIC_KEY_VALUE" "$TARGET_HOME/.ssh/authorized_keys"; then
+    printf '%s\n' "$PUBLIC_KEY_VALUE" >> "$TARGET_HOME/.ssh/authorized_keys"
+  fi
+
+  if running_as_root && command -v chown >/dev/null 2>&1; then
+    chown "$TARGET_USER":"$TARGET_USER" "$TARGET_HOME/.ssh" "$TARGET_HOME/.ssh/authorized_keys" >/dev/null 2>&1 || \
+      chown "$TARGET_USER" "$TARGET_HOME/.ssh" "$TARGET_HOME/.ssh/authorized_keys" >/dev/null 2>&1 || true
+  fi
+
+  echo "[bootstrap] 已写入平台公钥到 ${TARGET_HOME}/.ssh/authorized_keys (user=${TARGET_USER})" >&2
+  return 0
 }
 
 if [ -n "$SSH_PORT_OVERRIDE" ] && ! is_valid_port "$SSH_PORT_OVERRIDE"; then
@@ -181,26 +297,63 @@ ensure_sshd_config_line() {
   printf '\n%s %s\n' "$KEY" "$VALUE" >> "$FILE_PATH"
 }
 
+read_ssh_port_from_file() {
+  FILE_PATH="$1"
+
+  if [ ! -f "$FILE_PATH" ]; then
+    printf '%s' ""
+    return
+  fi
+
+  awk '
+    /^[[:space:]]*#/ { next }
+    {
+      key = tolower($1)
+      if (key == "port" && $2 ~ /^[0-9]+$/) {
+        port = $2
+      }
+    }
+    END {
+      if (port != "") {
+        print port
+      }
+    }
+  ' "$FILE_PATH" 2>/dev/null || true
+}
+
+write_sshd_dropin_config() {
+  DROPIN_DIR="/etc/ssh/sshd_config.d"
+  DROPIN_FILE="$DROPIN_DIR/99-airport-bootstrap.conf"
+  DROPIN_PORT=""
+
+  if [ ! -d "$DROPIN_DIR" ]; then
+    return 0
+  fi
+
+  if [ -n "$SSH_PORT_OVERRIDE" ]; then
+    DROPIN_PORT="$SSH_PORT"
+  else
+    DROPIN_PORT="$(read_ssh_port_from_file "$DROPIN_FILE")"
+  fi
+
+  {
+    printf '%s\n' "# Managed by airport bootstrap"
+    if [ -n "$DROPIN_PORT" ] && is_valid_port "$DROPIN_PORT"; then
+      printf 'Port %s\n' "$DROPIN_PORT"
+    fi
+    printf '%s\n' "PermitRootLogin prohibit-password"
+    printf '%s\n' "PubkeyAuthentication yes"
+    printf '%s\n' "PasswordAuthentication no"
+  } >"$DROPIN_FILE"
+}
+
 detect_configured_ssh_port() {
   DETECTED_PORT=""
 
   for FILE_PATH in /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf; do
     [ -f "$FILE_PATH" ] || continue
 
-    FILE_PORT="$(awk '
-      /^[[:space:]]*#/ { next }
-      {
-        key = tolower($1)
-        if (key == "port" && $2 ~ /^[0-9]+$/) {
-          port = $2
-        }
-      }
-      END {
-        if (port != "") {
-          print port
-        }
-      }
-    ' "$FILE_PATH" 2>/dev/null || true)"
+    FILE_PORT="$(read_ssh_port_from_file "$FILE_PATH")"
 
     if [ -n "$FILE_PORT" ]; then
       DETECTED_PORT="$FILE_PORT"
@@ -294,6 +447,8 @@ ensure_ssh_server_ready() {
     ensure_sshd_config_line /etc/ssh/sshd_config PasswordAuthentication no
   fi
 
+  write_sshd_dropin_config
+
   if command -v rc-update >/dev/null 2>&1; then
     rc-update add sshd default >/dev/null 2>&1 || true
   fi
@@ -323,6 +478,8 @@ if [ -n "$SSH_PORT_OVERRIDE" ]; then
 else
   SSH_PORT="$(detect_configured_ssh_port)"
 fi
+
+TARGET_SSH_USER="$(resolve_target_ssh_user)"
 
 json_escape() {
   printf '%s' "$1" | awk '
@@ -551,11 +708,33 @@ is_public_ipv6() {
   return 0
 }
 
+is_ipv4_literal() {
+  VALUE="$(trim_inline "$1")"
+
+  printf '%s' "$VALUE" | awk '
+    BEGIN { ok = 1 }
+    /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {
+      split($0, parts, ".")
+      for (i = 1; i <= 4; i++) {
+        if (parts[i] < 0 || parts[i] > 255) ok = 0
+      }
+      exit(ok ? 0 : 1)
+    }
+    { exit 1 }
+  '
+}
+
 probe_public_ipv4() {
   PUBLIC_IPV4=""
   PUBLIC_IPV4_LOCATION=""
   PUBLIC_IPV4_OWNER=""
   PUBLIC_IPV4_SOURCE=""
+
+  if [ -n "$PUBLIC_IPV4_OVERRIDE" ]; then
+    PUBLIC_IPV4="$PUBLIC_IPV4_OVERRIDE"
+    PUBLIC_IPV4_SOURCE="manual_override"
+    return
+  fi
 
   CIP_TEXT="$(http_get_text "https://www.cip.cc" 4 2>/dev/null || true)"
   CANDIDATE_IP="$(trim_inline "$(read_cip_field "$CIP_TEXT" "IP")")"
@@ -580,6 +759,12 @@ probe_public_ipv6() {
   PUBLIC_IPV6_LOCATION=""
   PUBLIC_IPV6_OWNER=""
   PUBLIC_IPV6_SOURCE=""
+
+  if [ -n "$PUBLIC_IPV6_OVERRIDE" ]; then
+    PUBLIC_IPV6="$PUBLIC_IPV6_OVERRIDE"
+    PUBLIC_IPV6_SOURCE="manual_override"
+    return
+  fi
 
   CIP_TEXT="$(http_get_text "https://www.cip.cc" 6 2>/dev/null || true)"
   CANDIDATE_IP="$(trim_inline "$(read_cip_field "$CIP_TEXT" "IP")")"
@@ -608,9 +793,25 @@ KERNEL_VERSION="$(uname -r)"
 CPU_CORES="$(read_cpu_cores)"
 MEMORY_MB="$(read_memory_mb)"
 DISK_GB="$(read_disk_gb)"
-PRIVATE_IPV4="$(read_default_ip)"
+PRIVATE_IPV4="${PRIVATE_IPV4_OVERRIDE:-$(read_default_ip)}"
 NODE_MACHINE_ID="$(read_machine_id)"
 PRIMARY_MAC="$(read_primary_mac)"
+
+if [ -n "$PUBLIC_IPV4_OVERRIDE" ] && ! is_public_ipv4 "$PUBLIC_IPV4_OVERRIDE"; then
+  echo "Invalid public IPv4 override: $PUBLIC_IPV4_OVERRIDE" >&2
+  exit 1
+fi
+
+if [ -n "$PUBLIC_IPV6_OVERRIDE" ] && ! is_public_ipv6 "$PUBLIC_IPV6_OVERRIDE"; then
+  echo "Invalid public IPv6 override: $PUBLIC_IPV6_OVERRIDE" >&2
+  exit 1
+fi
+
+if [ -n "$PRIVATE_IPV4_OVERRIDE" ] && ! is_ipv4_literal "$PRIVATE_IPV4_OVERRIDE"; then
+  echo "Invalid private IPv4 override: $PRIVATE_IPV4_OVERRIDE" >&2
+  exit 1
+fi
+
 probe_public_ipv4
 probe_public_ipv6
 FINGERPRINT_SOURCE="node-v2"
@@ -697,16 +898,11 @@ PUBLIC_KEY="$(printf '%s\n' "$RESPONSE" | sed -n 's/.*"public_key": "\([^"]*\)".
 SSH_KEY_INSTALLED=false
 
 if [ -n "$PUBLIC_KEY" ]; then
-  mkdir -p "$HOME/.ssh"
-  chmod 700 "$HOME/.ssh"
-  touch "$HOME/.ssh/authorized_keys"
-  chmod 600 "$HOME/.ssh/authorized_keys"
-
-  if ! grep -Fq "$PUBLIC_KEY" "$HOME/.ssh/authorized_keys"; then
-    printf '%s\n' "$PUBLIC_KEY" >> "$HOME/.ssh/authorized_keys"
+  if install_platform_public_key "$PUBLIC_KEY" "$TARGET_SSH_USER"; then
+    SSH_KEY_INSTALLED=true
+  else
+    echo "[bootstrap] 平台公钥写入失败，控制面后续 SSH 接管可能不可用。" >&2
   fi
-
-  SSH_KEY_INSTALLED=true
 fi
 
 SSH_SERVICE_READY=false

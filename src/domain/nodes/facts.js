@@ -102,7 +102,7 @@ export function createNodeFactsDomain(dependencies = {}) {
       cpu_cores: facts.cpu_cores ?? null,
       memory_mb: facts.memory_mb ?? null,
       disk_gb: facts.disk_gb ?? null,
-      ssh_port: facts.ssh_port ?? 22,
+      ssh_port: facts.ssh_port ?? 19822,
     };
   }
 

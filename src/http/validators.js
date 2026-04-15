@@ -1,3 +1,35 @@
+function validateNullableIpField(errors, value, fieldName, options = {}) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (typeof value !== "string") {
+    errors.push(`${fieldName} must be a string`);
+    return;
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return;
+  }
+
+  const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+  const ipv6Pattern = /^[0-9a-fA-F:]+$/;
+
+  if (options.version === 4) {
+    if (!ipv4Pattern.test(normalized)) {
+      errors.push(`${fieldName} must be a valid IPv4 address`);
+    }
+    return;
+  }
+
+  if (options.version === 6) {
+    if (!normalized.includes(":") || !ipv6Pattern.test(normalized)) {
+      errors.push(`${fieldName} must be a valid IPv6 address`);
+    }
+  }
+}
+
 export function validateRegistration(payload) {
   const errors = [];
 

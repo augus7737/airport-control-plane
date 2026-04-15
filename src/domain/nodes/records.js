@@ -107,7 +107,20 @@ export function createNodeRecordBuilders({
       facts: normalizeNodeFacts(
         {
           ...currentFacts,
-          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? 22),
+          public_ipv4: sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null),
+          public_ipv6: sourceValue(payload, "public_ipv6", currentFacts.public_ipv6 ?? null),
+          private_ipv4: sourceValue(payload, "private_ipv4", currentFacts.private_ipv4 ?? null),
+          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? 19822),
+          public_ipv4_source:
+            sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null) !==
+            (currentFacts.public_ipv4 ?? null)
+              ? "manual_override"
+              : currentFacts.public_ipv4_source ?? null,
+          public_ipv6_source:
+            sourceValue(payload, "public_ipv6", currentFacts.public_ipv6 ?? null) !==
+            (currentFacts.public_ipv6 ?? null)
+              ? "manual_override"
+              : currentFacts.public_ipv6_source ?? null,
         },
         { existingFacts: currentFacts },
       ),

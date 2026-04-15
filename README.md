@@ -43,6 +43,26 @@ sh scripts/bootstrap.sh \
   --token demo-token
 ```
 
+The control plane uses `19822` as the default SSH connection port when a node has
+no explicit `ssh_port` recorded yet. `bootstrap.sh` itself will keep the current
+node `sshd` port unless you pass `--ssh-port`, so it does not force-change the
+host's default SSH port behavior.
+
+When the node's outbound public IP is not the same as its inbound SSH entrypoint
+(for example NAT, LXC/LXD, host port mapping, or relay-style providers), override
+the reported ingress endpoint explicitly:
+
+```bash
+sh scripts/bootstrap.sh \
+  --server http://localhost:8080 \
+  --token demo-token \
+  --public-ipv4 203.0.113.10 \
+  --ssh-port 2222
+```
+
+You can also override `--public-ipv6`, `--private-ipv4`, and `--ssh-user` when
+the node facts need to reflect the real SSH ingress user or routing path.
+
 Example registration request:
 
 ```bash

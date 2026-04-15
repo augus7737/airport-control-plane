@@ -115,6 +115,16 @@ Example response:
 
 Registers or refreshes a node.
 
+Notes:
+
+- `facts.public_ipv4` / `facts.public_ipv6` should describe the actual SSH ingress
+  endpoint that the control plane should probe, not only the node's outbound egress IP
+- when bootstrap runs behind NAT, containers, or provider port mapping, prefer passing
+  explicit overrides such as `--public-ipv4` and `--ssh-port`
+- the control plane defaults to SSH port `19822` when a node record has no explicit
+  `ssh_port`; `bootstrap.sh` itself keeps the machine's current `sshd` port unless
+  `--ssh-port` is passed explicitly
+
 Request body:
 
 ```json
@@ -136,7 +146,7 @@ Request body:
     "cpu_cores": 1,
     "memory_mb": 512,
     "disk_gb": 10,
-    "ssh_port": 22
+    "ssh_port": 19822
   },
   "labels": {
     "provider": "example-cloud",
@@ -535,9 +545,9 @@ Example response:
       "node_id": "node_xxx",
       "task_id": "task_xxx",
       "probe_type": "ssh_auth",
-      "target": "203.0.113.8:22",
+      "target": "203.0.113.8:19822",
       "target_host": "203.0.113.8",
-      "target_port": 22,
+      "target_port": 19822,
       "access_mode": "direct",
       "transport_kind": "ssh-direct",
       "transport_label": "SSH 直连",
@@ -671,7 +681,7 @@ Success response:
   "probe": {
     "id": "probe_xxx",
     "probe_type": "ssh_auth",
-    "target": "203.0.113.10:22",
+    "target": "203.0.113.10:19822",
     "latency_ms": 58,
     "success": true,
     "control_ready": true,
@@ -775,6 +785,10 @@ Request body:
 
 ```json
 {
+  "public_ipv4": "203.0.113.88",
+  "public_ipv6": "2408:xxxx::88",
+  "private_ipv4": "10.0.0.88",
+  "ssh_port": 2222,
   "provider": "Vultr",
   "region": "HKG",
   "role": "edge",
@@ -815,6 +829,11 @@ Success response:
 
 Supported route fields for `POST /api/v1/nodes/manual` and `PATCH /api/v1/nodes/:id/assets`:
 
+- `public_ipv4`: override the SSH ingress IPv4 used by probes / operations
+- `public_ipv6`: override the SSH ingress IPv6 used by probes / operations
+- `private_ipv4`: override the internal IPv4 used for LAN / relay routing decisions
+- `ssh_port`: override the SSH ingress port
+- when `public_ipv4` / `public_ipv6` are changed here, their source is stored as `manual_override`
 - `access_mode`: `direct` or `relay`
 - `entry_region`: entry area for the route
 - `relay_node_id`: optional internal node ID of the relay/jump node

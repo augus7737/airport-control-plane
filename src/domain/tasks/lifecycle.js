@@ -257,7 +257,7 @@ export function createTaskLifecycleDomain(dependencies) {
       payload: {
         probe_type: options.probe_type ?? "ssh_auth",
         target_host: target?.host ?? null,
-        target_port: target?.port ?? (Number(node?.facts?.ssh_port ?? 22) || 22),
+        target_port: target?.port ?? (Number(node?.facts?.ssh_port ?? 19822) || 19822),
         target_family: target?.family ?? null,
         access_mode: node?.networking?.access_mode ?? "direct",
         relay_node_id: node?.networking?.relay_node_id ?? null,

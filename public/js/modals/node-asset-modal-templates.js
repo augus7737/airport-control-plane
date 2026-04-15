@@ -43,7 +43,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="manual-ssh-port">SSH 端口</label>
-                <input id="manual-ssh-port" name="ssh_port" type="number" min="1" max="65535" placeholder="默认 22，可按节点实际端口填写" />
+                <input id="manual-ssh-port" name="ssh_port" type="number" min="1" max="65535" placeholder="默认 19822，可按节点实际端口填写" />
               </div>
               <div class="field">
                 <label for="manual-memory">内存 MB</label>
@@ -182,7 +182,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="asset-ssh-port">SSH 端口</label>
-                <input id="asset-ssh-port" name="ssh_port" type="number" min="1" max="65535" placeholder="默认 22，可按节点实际端口填写" />
+                <input id="asset-ssh-port" name="ssh_port" type="number" min="1" max="65535" placeholder="默认 19822，可按节点实际端口填写" />
               </div>
               <div class="field">
                 <label for="asset-relay-node-id">中转节点 ID</label>

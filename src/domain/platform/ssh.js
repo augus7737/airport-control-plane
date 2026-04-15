@@ -201,10 +201,10 @@ export function createPlatformSshDomain(dependencies) {
     }
 
     if (host.includes(":")) {
-      return `${defaultNodeSshUser}@[${host}]${port === 22 ? "" : `:${port}`}`;
+      return `${defaultNodeSshUser}@[${host}]${port === 19822 ? "" : `:${port}`}`;
     }
 
-    return `${defaultNodeSshUser}@${host}${port === 22 ? "" : `:${port}`}`;
+    return `${defaultNodeSshUser}@${host}${port === 19822 ? "" : `:${port}`}`;
   }
 
   function formatSshLoginTarget(host) {
@@ -326,7 +326,7 @@ export function createPlatformSshDomain(dependencies) {
     if (accessMode === "relay") {
       const relayHost =
         relayNode?.facts?.public_ipv4 || relayNode?.facts?.public_ipv6 || relayNode?.facts?.private_ipv4 || null;
-      const relayPort = relayNode?.facts?.ssh_port ?? 22;
+      const relayPort = relayNode?.facts?.ssh_port ?? 19822;
       const relayLoginTarget = formatSshLoginTarget(relayHost);
 
       if (relayHost && relayLoginTarget) {

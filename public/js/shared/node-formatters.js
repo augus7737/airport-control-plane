@@ -78,8 +78,8 @@ export function formatNodeConfigMeta(node) {
 }
 
 export function formatNodeSshPort(node) {
-  const port = Number(node?.facts?.ssh_port ?? 22);
-  return Number.isInteger(port) && port > 0 ? String(port) : "22";
+  const port = Number(node?.facts?.ssh_port ?? 19822);
+  return Number.isInteger(port) && port > 0 ? String(port) : "19822";
 }
 
 export function formatIpSourceLabel(value) {
@@ -88,6 +88,8 @@ export function formatIpSourceLabel(value) {
   if (source === "cip.cc") return "cip.cc 探测";
   if (source === "ipify") return "ipify 探测";
   if (source === "request-peer") return "控制面请求源";
+  if (source === "manual_override") return "手工覆盖";
+  if (source === "manual") return "手工指定";
   return value;
 }
 

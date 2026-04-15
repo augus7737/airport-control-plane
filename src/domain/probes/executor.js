@@ -52,7 +52,7 @@ export function createProbeExecutorDomain(dependencies) {
       relayCanReachTargetPrivately
         ? privateIpv4
         : publicIpv4 || publicIpv6 || privateIpv4 || null;
-    const port = Number(node?.facts?.ssh_port ?? 22) || 22;
+    const port = Number(node?.facts?.ssh_port ?? 19822) || 19822;
 
     if (!host) {
       return null;
