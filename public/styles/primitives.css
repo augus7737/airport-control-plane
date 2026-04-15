@@ -488,6 +488,12 @@ a.compact-action-item:focus-visible {
   align-items: center;
   max-width: 100%;
   min-width: 0;
+  z-index: 0;
+}
+
+.cell-hover-card:hover,
+.cell-hover-card:focus-within {
+  z-index: 48;
 }
 
 .compact-inline-summary,
@@ -568,7 +574,8 @@ a.compact-action-item:focus-visible {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  width: min(320px, calc(100vw - 32px));
+  width: min(var(--cell-hover-max-width, 320px), calc(100vw - 32px));
+  max-height: var(--cell-hover-max-height, min(360px, calc(100vh - 32px)));
   padding: 12px 13px;
   border: 1px solid rgba(20, 32, 43, 0.08);
   border-radius: 14px;
@@ -583,7 +590,23 @@ a.compact-action-item:focus-visible {
   transition:
     opacity 140ms ease,
     transform 140ms ease;
+  overflow: auto;
   z-index: 30;
+}
+
+.cell-hover-card:hover .cell-hover-panel,
+.cell-hover-card:focus-within .cell-hover-panel {
+  pointer-events: auto;
+}
+
+.cell-hover-card[data-panel-placement="top"] .cell-hover-panel {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.cell-hover-card[data-panel-align="right"] .cell-hover-panel {
+  right: 0;
+  left: auto;
 }
 
 .asset-cell-inline {

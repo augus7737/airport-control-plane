@@ -43,6 +43,7 @@ import {
   getPublicIpRecords,
   shortenIpAddress,
 } from "./js/shared/node-formatters.js";
+import { createHoverPanelsModule } from "./js/shared/hover-panels.js";
 import {
   formatProbeCapability,
   formatProbeLongSummary,
@@ -393,6 +394,10 @@ const { buildNodeRecommendations, nodeTable } = createNodeTableRenderer({
   renderPublicIpCell,
   statusClassName,
   statusText,
+});
+const { setupHoverPanels } = createHoverPanelsModule({
+  documentRef: document,
+  windowRef: window,
 });
 const {
   renderCountryDistribution,
@@ -780,6 +785,7 @@ pageRenderRuntime = createPageRenderRuntime({
   setupNodeDeleteActions,
   setupNodeDetailActions,
   setupNodeTerminal,
+  setupHoverPanels,
   setupNodesFilters,
   setupPlatformKeyActions,
   setupProxyProfilesPage,

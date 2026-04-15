@@ -30,6 +30,7 @@ export function createPageRenderRuntime({
   setupPlatformKeyActions,
   setupProxyProfilesPage,
   setupReleasesPage,
+  setupHoverPanels,
   setupSystemTemplatesPage,
   setupSystemUsersPage,
   setupTasksPage,
@@ -90,6 +91,7 @@ export function createPageRenderRuntime({
     setupProxyProfilesPage();
     setupReleasesPage();
     setupPlatformKeyActions();
+    setupHoverPanels();
     refreshBootstrapCommandDom();
   }
 
