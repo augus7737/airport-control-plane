@@ -9,15 +9,11 @@ export function createTokensPageModule(dependencies) {
     formatRelativeTime,
     formatTokenUsage,
     getBootstrapCommand,
-    getBootstrapEnrollCommand,
-    getBootstrapMirrorCommand,
-    getBootstrapPrepareCommand,
     getEffectiveTokenStatus,
     getPrimaryBootstrapToken,
     maskTokenValue,
     navigatorRef,
     page,
-    renderBootstrapCommandPair,
     renderCurrentContent,
     renderPlatformSshPanel,
     statusClassName,
@@ -61,7 +57,7 @@ export function createTokensPageModule(dependencies) {
             <td>${escapeHtml(token.note || "-")}</td>
             <td>
               <div class="token-actions">
-                <button class="button ghost token-table-button" type="button" data-token-copy="${escapeHtml(token.id)}">复制三步命令</button>
+                <button class="button ghost token-table-button" type="button" data-token-copy="${escapeHtml(token.id)}">复制接管命令</button>
                 ${
                   canToggle
                     ? `<button class="button ghost token-table-button" type="button" data-token-toggle="${escapeHtml(token.id)}" data-next-status="${effectiveStatus === "disabled" ? "active" : "disabled"}">${actionLabel}</button>`
@@ -106,25 +102,16 @@ export function createTokensPageModule(dependencies) {
           ${renderPlatformSshPanel()}
           <article class="panel">
             <div class="panel-body">
-              <div class="panel-title"><div><h3>当前默认纳管步骤</h3><p>${primaryToken ? "会优先使用第一条可用令牌，建议按步骤执行。" : "当前没有可用令牌，请先创建。"} </p></div></div>
+              <div class="panel-title"><div><h3>默认入口令牌</h3><p>${primaryToken ? "这里仅保留当前优先令牌的状态摘要，不再把纳管步骤铺在令牌页。" : "当前没有可用令牌，请先创建一条可用入口。"} </p></div></div>
               <div class="detail-kv">
                 <div class="kv-row"><span>主令牌</span><strong>${primaryToken ? escapeHtml(primaryToken.label || primaryToken.id) : "未配置"}</strong></div>
                 <div class="kv-row"><span>令牌值</span><strong class="mono">${primaryToken ? escapeHtml(maskTokenValue(primaryToken.token)) : "-"}</strong></div>
                 <div class="kv-row"><span>有效期</span><strong>${primaryToken ? formatDate(primaryToken.expires_at) : "-"}</strong></div>
+                <div class="kv-row"><span>累计使用</span><strong>${primaryToken ? formatTokenUsage(primaryToken) : "-"}</strong></div>
               </div>
-              <div id="token-page-command">${renderBootstrapCommandPair(null, {
-                mirrorId: "token-page-command-mirror",
-                prepareId: "token-page-command-prepare",
-                enrollId: "token-page-command-enroll",
-                mirrorHint: "国内 Alpine 节点建议先切换到阿里云镜像。",
-                prepareHint: "先补齐 curl、openssh 和证书。",
-                enrollHint: "前两步完成后，再执行接管。",
-              })}</div>
               <div class="modal-actions" style="margin-top:12px;">
-                <button class="button primary" type="button" id="copy-primary-token-mirror"${primaryToken ? "" : " disabled"}>复制步骤 1</button>
-                <button class="button ghost" type="button" id="copy-primary-token-prepare"${primaryToken ? "" : " disabled"}>复制步骤 2</button>
-                <button class="button ghost" type="button" id="copy-primary-token-command"${primaryToken ? "" : " disabled"}>复制步骤 3</button>
                 <button class="button ghost" type="button" id="copy-primary-token"${primaryToken ? "" : " disabled"}>复制令牌值</button>
+                <a class="button primary" href="/nodes.html">去节点清单纳管</a>
               </div>
             </div>
           </article>
@@ -158,21 +145,6 @@ export function createTokensPageModule(dependencies) {
     if (page !== "tokens") {
       return;
     }
-
-    documentRef.getElementById("copy-primary-token-mirror")?.addEventListener("click", async (event) => {
-      const ok = await navigatorRef.clipboard.writeText(getBootstrapMirrorCommand()).then(() => true, () => false);
-      event.currentTarget.textContent = ok ? "已复制步骤 1" : "复制失败";
-    });
-
-    documentRef.getElementById("copy-primary-token-prepare")?.addEventListener("click", async (event) => {
-      const ok = await navigatorRef.clipboard.writeText(getBootstrapPrepareCommand()).then(() => true, () => false);
-      event.currentTarget.textContent = ok ? "已复制步骤 2" : "复制失败";
-    });
-
-    documentRef.getElementById("copy-primary-token-command")?.addEventListener("click", async (event) => {
-      const ok = await navigatorRef.clipboard.writeText(getBootstrapEnrollCommand()).then(() => true, () => false);
-      event.currentTarget.textContent = ok ? "已复制步骤 3" : "复制失败";
-    });
 
     documentRef.getElementById("copy-primary-token")?.addEventListener("click", async (event) => {
       const token = getPrimaryBootstrapToken();

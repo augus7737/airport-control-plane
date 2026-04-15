@@ -52,7 +52,7 @@ export function createProvisioningModalsModule(dependencies) {
 
     documentRef
       .querySelectorAll(
-        "#bootstrap-command-mirror, #bootstrap-command-inline-mirror, #modal-command-mirror, #token-page-command-mirror",
+        "#bootstrap-command-mirror, #bootstrap-command-inline-mirror, #modal-command-mirror",
       )
       .forEach((element) => {
         element.textContent = mirrorCommand;
@@ -60,7 +60,7 @@ export function createProvisioningModalsModule(dependencies) {
 
     documentRef
       .querySelectorAll(
-        "#bootstrap-command-prepare, #bootstrap-command-inline-prepare, #modal-command-prepare, #token-page-command-prepare",
+        "#bootstrap-command-prepare, #bootstrap-command-inline-prepare, #modal-command-prepare",
       )
       .forEach((element) => {
         element.textContent = prepareCommand;
@@ -68,7 +68,7 @@ export function createProvisioningModalsModule(dependencies) {
 
     documentRef
       .querySelectorAll(
-        "#bootstrap-command-enroll, #bootstrap-command-inline-enroll, #modal-command-enroll, #token-page-command-enroll",
+        "#bootstrap-command-enroll, #bootstrap-command-inline-enroll, #modal-command-enroll",
       )
       .forEach((element) => {
         element.textContent = enrollCommand;
@@ -91,11 +91,11 @@ export function createProvisioningModalsModule(dependencies) {
   }
 
   function shouldShowBootstrapHero(targetPage = page) {
-    return ["tokens"].includes(targetPage);
+    return false;
   }
 
   function shouldShowProvisioningChips(targetPage = page) {
-    return ["tokens"].includes(targetPage);
+    return false;
   }
 
   function enrollModalTemplate() {
@@ -311,49 +311,28 @@ export function createProvisioningModalsModule(dependencies) {
         upsertBootstrapToken(result.token);
         renderCurrentContent();
 
-        const mirrorCommand = getBootstrapMirrorCommand();
-        const prepareCommand = getBootstrapPrepareCommand();
-        const enrollCommand = getBootstrapEnrollCommand(result.token.token);
+        const bootstrapCommand = getBootstrapCommand(result.token.token);
         message.innerHTML = `
           <div class="message success">
             <strong>令牌已创建。</strong><br />
-            把下面三步发给新机器，先换源，再装依赖，最后执行接管。
-            ${renderBootstrapCommandPair(result.token.token, {
-              mirrorId: "created-command-mirror",
-              prepareId: "created-command-prepare",
-              enrollId: "created-command-enroll",
-              mirrorHint: "国内 Alpine 推荐先执行这一步。",
-              prepareHint: "先补齐 curl、openssh 和证书。",
-              enrollHint: "前两步完成后，再执行接管。",
-            })}
+            注册令牌页只保留令牌管理，不再直接铺开纳管步骤。需要接管新机器时，请去节点清单或总览里的“纳管新节点”入口。
+            <div class="detail-kv" style="margin-top:12px;">
+              <div class="kv-row"><span>令牌标签</span><strong>${escapeHtml(result.token.label || result.token.id)}</strong></div>
+              <div class="kv-row"><span>令牌值</span><strong class="mono">${escapeHtml(result.token.token || "-")}</strong></div>
+            </div>
             <div class="modal-actions" style="margin-top:12px;">
-              <button class="button primary" type="button" id="copy-created-mirror-command">复制步骤 1</button>
-              <button class="button ghost" type="button" id="copy-created-prepare-command">复制步骤 2</button>
-              <button class="button ghost" type="button" id="copy-created-enroll-command">复制步骤 3</button>
+              <button class="button primary" type="button" id="copy-created-bootstrap-command">复制接管命令</button>
               <button class="button ghost" type="button" id="copy-created-token">复制令牌值</button>
+              <a class="button ghost" href="/nodes.html">去节点清单</a>
             </div>
           </div>
         `;
 
         documentRef
-          .getElementById("copy-created-mirror-command")
+          .getElementById("copy-created-bootstrap-command")
           ?.addEventListener("click", async (clickEvent) => {
-            const ok = await writeClipboard(mirrorCommand);
-            clickEvent.currentTarget.textContent = ok ? "已复制步骤 1" : "复制失败";
-          });
-
-        documentRef
-          .getElementById("copy-created-prepare-command")
-          ?.addEventListener("click", async (clickEvent) => {
-            const ok = await writeClipboard(prepareCommand);
-            clickEvent.currentTarget.textContent = ok ? "已复制步骤 2" : "复制失败";
-          });
-
-        documentRef
-          .getElementById("copy-created-enroll-command")
-          ?.addEventListener("click", async (clickEvent) => {
-            const ok = await writeClipboard(enrollCommand);
-            clickEvent.currentTarget.textContent = ok ? "已复制步骤 3" : "复制失败";
+            const ok = await writeClipboard(bootstrapCommand);
+            clickEvent.currentTarget.textContent = ok ? "已复制接管命令" : "复制失败";
           });
 
         documentRef.getElementById("copy-created-token")?.addEventListener("click", async (clickEvent) => {
