@@ -1,41 +1,10 @@
 import { getAccessMode, getNodeDisplayName } from "./node-formatters.js";
-
-export const locationCatalog = {
-  HKG: { country: "中国香港", code: "HK" },
-  HK: { country: "中国香港", code: "HK" },
-  NRT: { country: "日本", code: "JP" },
-  TYO: { country: "日本", code: "JP" },
-  TOK: { country: "日本", code: "JP" },
-  OSA: { country: "日本", code: "JP" },
-  SIN: { country: "新加坡", code: "SG" },
-  LAX: { country: "美国", code: "US" },
-  SJC: { country: "美国", code: "US" },
-  SEA: { country: "美国", code: "US" },
-  NBG: { country: "德国", code: "DE" },
-  FRA: { country: "德国", code: "DE" },
-  HEL: { country: "芬兰", code: "FI" },
-  ICN: { country: "韩国", code: "KR" },
-  SEL: { country: "韩国", code: "KR" },
-  TPE: { country: "中国台湾", code: "TW" },
-  LON: { country: "英国", code: "UK" },
-  AMS: { country: "荷兰", code: "NL" },
-  PAR: { country: "法国", code: "FR" },
-  SYD: { country: "澳大利亚", code: "AU" },
-  "中国大陆": { country: "中国大陆", code: "CN" },
-  中国: { country: "中国大陆", code: "CN" },
-  香港: { country: "中国香港", code: "HK" },
-  "中国香港": { country: "中国香港", code: "HK" },
-  日本: { country: "日本", code: "JP" },
-  新加坡: { country: "新加坡", code: "SG" },
-  美国: { country: "美国", code: "US" },
-  德国: { country: "德国", code: "DE" },
-  芬兰: { country: "芬兰", code: "FI" },
-  韩国: { country: "韩国", code: "KR" },
-  英国: { country: "英国", code: "UK" },
-  荷兰: { country: "荷兰", code: "NL" },
-  法国: { country: "法国", code: "FR" },
-  澳大利亚: { country: "澳大利亚", code: "AU" },
-};
+import {
+  formatLocationDisplay,
+  getLocationCode,
+  getLocationCountry,
+  normalizeLocationValue,
+} from "./location-suggestions.js";
 
 export function resolveRelayNode(node, nodes = []) {
   const relayId = node?.networking?.relay_node_id;
@@ -56,49 +25,18 @@ export function getRelayDisplayName(node, nodes = []) {
 }
 
 export function getLocationProfile(value) {
-  if (!value) {
+  const normalizedValue = normalizeLocationValue(value, { scope: "region" });
+  if (!normalizedValue) {
     return { country: "未识别", code: "--" };
   }
-
-  const raw = String(value).trim();
-  const upper = raw.toUpperCase();
-
-  if (locationCatalog[raw]) {
-    return locationCatalog[raw];
-  }
-
-  if (locationCatalog[upper]) {
-    return locationCatalog[upper];
-  }
-
-  if (raw.includes("香港")) {
-    return locationCatalog["中国香港"];
-  }
-
-  if (raw.includes("中国")) {
-    return locationCatalog["中国大陆"];
-  }
-
-  if (raw.includes("日本")) {
-    return locationCatalog["日本"];
-  }
-
-  if (raw.includes("新加坡")) {
-    return locationCatalog["新加坡"];
-  }
-
-  if (raw.includes("美国")) {
-    return locationCatalog["美国"];
-  }
-
   return {
-    country: raw,
-    code: raw.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase() || raw.slice(0, 2),
+    country: getLocationCountry(normalizedValue, { scope: "region" }),
+    code: getLocationCode(normalizedValue, { scope: "region" }),
   };
 }
 
 export function getEntryLabel(node) {
-  return node?.networking?.entry_region || "中国大陆";
+  return normalizeLocationValue(node?.networking?.entry_region, { scope: "entry" }) || "中国大陆";
 }
 
 export function getNodeCountry(node) {
@@ -115,13 +53,19 @@ export function getCountryCode(country) {
 
 export function formatRouteSummary(node, nodes = []) {
   const networking = node?.networking || {};
+  const entryLabel = formatLocationDisplay(networking.entry_region || "中国大陆", {
+    scope: "entry",
+    style: "name",
+  });
   if (networking.access_mode === "relay") {
     const relayName = getRelayDisplayName(node, nodes);
-    const relayRegion = networking.relay_region ? ` (${networking.relay_region})` : "";
-    return `${networking.entry_region || "中国大陆"} -> ${relayName}${relayRegion} -> ${getNodeDisplayName(node)}`;
+    const relayRegion = networking.relay_region
+      ? ` (${formatLocationDisplay(networking.relay_region, { scope: "region", style: "compact" })})`
+      : "";
+    return `${entryLabel} -> ${relayName}${relayRegion} -> ${getNodeDisplayName(node)}`;
   }
 
-  return `${networking.entry_region || "中国大陆"} -> ${getNodeDisplayName(node)}`;
+  return `${entryLabel} -> ${getNodeDisplayName(node)}`;
 }
 
 export function buildRelayGroups(nodes = []) {
@@ -140,7 +84,11 @@ export function buildRelayGroups(nodes = []) {
         key: relayKey,
         relayNode,
         relayLabel: relayNode ? getNodeDisplayName(relayNode) : getRelayDisplayName(node, nodes),
-        relayRegion: node.networking?.relay_region || relayNode?.labels?.region || "-",
+        relayRegion:
+          formatLocationDisplay(node.networking?.relay_region || relayNode?.labels?.region, {
+            scope: "region",
+            style: "compact",
+          }) || "-",
         entryRegion: getEntryLabel(node),
         members: [],
       };
@@ -179,8 +127,9 @@ export function getCountryStats(nodes = []) {
     if (node.labels?.provider) {
       existing.providers.add(node.labels.provider);
     }
-    if (node.labels?.region) {
-      existing.regions.add(node.labels.region);
+    const normalizedRegion = normalizeLocationValue(node.labels?.region, { scope: "region" });
+    if (normalizedRegion) {
+      existing.regions.add(normalizedRegion);
     }
 
     stats.set(country, existing);

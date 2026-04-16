@@ -85,6 +85,7 @@ export const appState = {
   nodes: [],
   tasks: [],
   probes: [],
+  diagnostics: [],
   operations: [],
   tokens: [],
   accessUsers: [],
@@ -96,6 +97,13 @@ export const appState = {
   configReleases: [],
   systemTemplateReleases: [],
   systemUserReleases: [],
+  costs: {
+    summary: null,
+    nodes: [],
+    providers: [],
+    releases: [],
+    accessUsers: [],
+  },
   platform: createDefaultPlatformState(),
   assetEditor: {
     targetNodeId: null,
@@ -293,6 +301,18 @@ export function setProbes(probes) {
   appState.probes = sortProbes(probes);
 }
 
+export function sortDiagnostics(diagnostics) {
+  return [...diagnostics].sort((a, b) =>
+    String(b.started_at || b.created_at || "").localeCompare(
+      String(a.started_at || a.created_at || ""),
+    ),
+  );
+}
+
+export function setDiagnostics(diagnostics) {
+  appState.diagnostics = sortDiagnostics(diagnostics);
+}
+
 export function setOperations(operations) {
   appState.operations = [...operations].sort((a, b) =>
     String(b.created_at).localeCompare(String(a.created_at)),
@@ -374,6 +394,26 @@ export function setProviders(providers) {
   appState.providers = sortProviders(providers);
 }
 
+export function setCostSummary(summary) {
+  appState.costs.summary = summary && typeof summary === "object" ? { ...summary } : null;
+}
+
+export function setCostNodes(items) {
+  appState.costs.nodes = Array.isArray(items) ? [...items] : [];
+}
+
+export function setCostProviders(items) {
+  appState.costs.providers = Array.isArray(items) ? [...items] : [];
+}
+
+export function setCostReleases(items) {
+  appState.costs.releases = Array.isArray(items) ? [...items] : [];
+}
+
+export function setCostAccessUsers(items) {
+  appState.costs.accessUsers = Array.isArray(items) ? [...items] : [];
+}
+
 export function sortConfigReleases(configReleases) {
   return [...configReleases].sort((a, b) =>
     String(b.created_at || "").localeCompare(String(a.created_at || "")),
@@ -424,6 +464,17 @@ export function upsertTask(task) {
     nextTasks.unshift(task);
   }
   setTasks(nextTasks);
+}
+
+export function upsertDiagnostic(diagnostic) {
+  const nextDiagnostics = [...appState.diagnostics];
+  const index = nextDiagnostics.findIndex((item) => item.id === diagnostic.id);
+  if (index >= 0) {
+    nextDiagnostics[index] = diagnostic;
+  } else {
+    nextDiagnostics.unshift(diagnostic);
+  }
+  setDiagnostics(nextDiagnostics);
 }
 
 export function upsertAccessUser(accessUser) {

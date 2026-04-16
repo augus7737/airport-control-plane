@@ -1,3 +1,8 @@
+import {
+  findCostItemByReleaseId,
+  formatCurrencyTotals,
+} from "../shared/cost-formatters.js";
+
 function createEmptyGroupDraft() {
   return {
     name: "",
@@ -199,6 +204,7 @@ export function createReleasesPageModule(dependencies) {
             const nodeGroupCount = Array.isArray(release.node_group_ids)
               ? release.node_group_ids.length
               : 0;
+            const releaseCost = findCostItemByReleaseId(appState.costs.releases, release.id);
             return `
               <tr>
                 <td>
@@ -217,6 +223,12 @@ export function createReleasesPageModule(dependencies) {
                   <div class="ops-inline-meta">
                     <strong>${escapeHtml(getProfileName(release.profile_id))}</strong>
                     <span class="tiny">${escapeHtml(summary.change_summary || `${accessUserCount} 个接入用户 / ${nodeGroupCount} 个节点组`)}</span>
+                    <span class="tiny">估算月成本 ${escapeHtml(
+                      formatCurrencyTotals(
+                        releaseCost?.totals_by_currency,
+                        releaseCost?.incomplete_node_count ? "部分节点成本缺失" : "待补",
+                      ),
+                    )}</span>
                   </div>
                   ${renderReleaseMetaBadges(summary)}
                 </td>
@@ -224,6 +236,12 @@ export function createReleasesPageModule(dependencies) {
                   ${renderGroupSummary(release.node_group_ids)}
                   <div class="ops-inline-meta">
                     <span class="tiny">${escapeHtml(formatApplySummary(summary))}</span>
+                    <span class="tiny">单用户约 ${escapeHtml(
+                      formatCurrencyTotals(
+                        releaseCost?.per_user_totals_by_currency,
+                        releaseCost?.active_access_user_count ? "待补" : "未参与分摊",
+                      ),
+                    )}</span>
                   </div>
                 </td>
                 <td>

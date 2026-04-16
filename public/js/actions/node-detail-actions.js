@@ -4,20 +4,69 @@ export function createNodeDetailActionsModule(dependencies) {
     documentRef = document,
     fetchImpl = fetch,
     getCurrentNode,
+    getDiagnosticsForNode = () => [],
     getNodeDisplayName,
     getNodeShellAutoLaunchHandled = () => false,
     nodeShellHref,
     page,
     refreshRuntimeData,
+    runNodeDiagnostic,
     renderCurrentContent,
     setNodeShellAutoLaunchHandled = () => {},
+    setDiagnostics,
     setOperations,
     setProbes,
+    sortDiagnostics = (items) => items,
     statusText,
+    upsertDiagnostic,
     upsertNode,
     upsertTask,
     windowRef = window,
   } = dependencies;
+
+  let diagnosticPollTimer = null;
+
+  function clearDiagnosticPoll() {
+    if (diagnosticPollTimer) {
+      windowRef.clearTimeout(diagnosticPollTimer);
+      diagnosticPollTimer = null;
+    }
+  }
+
+  function getNodeDiagnostics(node) {
+    return getDiagnosticsForNode(node, appState.diagnostics, sortDiagnostics);
+  }
+
+  function hasRunningDiagnostic(node) {
+    return getNodeDiagnostics(node).some((item) =>
+      ["queued", "running"].includes(String(item?.status || "").toLowerCase()),
+    );
+  }
+
+  function scheduleDiagnosticPoll(nodeId, remaining = 60) {
+    clearDiagnosticPoll();
+    if (remaining <= 0) {
+      return;
+    }
+
+    diagnosticPollTimer = windowRef.setTimeout(async () => {
+      const currentNode = appState.nodes.find((item) => item.id === nodeId);
+      if (!currentNode) {
+        clearDiagnosticPoll();
+        return;
+      }
+
+      await refreshRuntimeData();
+      renderCurrentContent();
+
+      const refreshedNode = appState.nodes.find((item) => item.id === nodeId);
+      if (refreshedNode && hasRunningDiagnostic(refreshedNode)) {
+        scheduleDiagnosticPoll(nodeId, remaining - 1);
+      } else {
+        clearDiagnosticPoll();
+      }
+    }, 5000);
+  }
 
   async function deleteManagedNode(nodeId, options = {}) {
     const node = appState.nodes.find((item) => item.id === nodeId);
@@ -137,6 +186,8 @@ export function createNodeDetailActionsModule(dependencies) {
     const node = getCurrentNode(appState.nodes);
     const shellShortcutButton = documentRef.getElementById("open-node-shell-shortcut");
     const probeButton = documentRef.getElementById("probe-node");
+    const lightDiagnosticButton = documentRef.getElementById("run-light-diagnostic");
+    const deepDiagnosticButton = documentRef.getElementById("run-deep-diagnostic");
     const initTemplateSelect = documentRef.getElementById("node-init-template-select");
     const applyTemplateSelect = documentRef.getElementById("node-apply-template-select");
     const runInitButton = documentRef.getElementById("run-node-init-template");
@@ -145,6 +196,12 @@ export function createNodeDetailActionsModule(dependencies) {
     const nodeDetailState = getNodeDetailState();
     if (!node) {
       return;
+    }
+
+    if (hasRunningDiagnostic(node)) {
+      scheduleDiagnosticPoll(node.id);
+    } else {
+      clearDiagnosticPoll();
     }
 
     const focusNodeShell = (options = {}) => {
@@ -223,6 +280,43 @@ export function createNodeDetailActionsModule(dependencies) {
         windowRef.alert(error instanceof Error ? error.message : "探测失败");
       }
     });
+
+    const bindDiagnosticAction = (button, profile) => {
+      button?.addEventListener("click", async () => {
+        const originalLabel = button.textContent;
+        button.disabled = true;
+        button.textContent = profile === "deep" ? "深度诊断中..." : "轻量诊断中...";
+
+        try {
+          const result = await runNodeDiagnostic(node.id, { profile });
+          if (result.task) {
+            upsertTask(result.task);
+          }
+          if (result.diagnostic) {
+            upsertDiagnostic(result.diagnostic);
+            setDiagnostics([
+              result.diagnostic,
+              ...appState.diagnostics.filter((item) => item.id !== result.diagnostic.id),
+            ]);
+          }
+
+          renderCurrentContent();
+          scheduleDiagnosticPoll(node.id);
+          windowRef.alert(
+            profile === "deep"
+              ? "深度诊断已提交，控制面会先做资源保护预检，再尝试生成网络质量报告。"
+              : "轻量诊断已提交，控制面会尝试生成硬件和 IP 质量报告。",
+          );
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = originalLabel;
+          windowRef.alert(error instanceof Error ? error.message : "诊断提交失败");
+        }
+      });
+    };
+
+    bindDiagnosticAction(lightDiagnosticButton, "light");
+    bindDiagnosticAction(deepDiagnosticButton, "deep");
 
     documentRef.querySelectorAll("[data-node-detail-command]").forEach((button) => {
       button.addEventListener("click", () => {

@@ -1,5 +1,6 @@
 export function createNodeLifecycleDomain(dependencies) {
   const {
+    diagnosticStore,
     nodeStore,
     operationStore,
     probeStore,
@@ -101,6 +102,15 @@ export function createNodeLifecycleDomain(dependencies) {
     return changed;
   }
 
+  function pruneDiagnosticsForNode(nodeId) {
+    const nextDiagnostics = diagnosticStore.filter((diagnostic) => diagnostic?.node_id !== nodeId);
+    const changed = nextDiagnostics.length !== diagnosticStore.length;
+    if (changed) {
+      replaceStoreItems(diagnosticStore, nextDiagnostics);
+    }
+    return changed;
+  }
+
   function detachRelayNodeReferences(nodeId, deletedNode) {
     let changed = false;
     const fallbackRelayLabel =
@@ -150,6 +160,7 @@ export function createNodeLifecycleDomain(dependencies) {
     pruneOperationsForNode,
     pruneTasksForNode,
     pruneProbesForNode,
+    pruneDiagnosticsForNode,
     detachRelayNodeReferences,
   };
 }

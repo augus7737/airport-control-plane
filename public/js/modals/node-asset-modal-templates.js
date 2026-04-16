@@ -22,6 +22,13 @@ export function createNodeAssetModalTemplatesModule() {
                 <input id="manual-provider" name="provider" placeholder="例如 Vultr / Oracle / DMIT" />
               </div>
               <div class="field">
+                <label for="manual-provider-id">厂商台账</label>
+                <select id="manual-provider-id" name="provider_id">
+                  <option value="">未绑定厂商台账</option>
+                </select>
+                <div class="field-note">优先绑定稳定 provider_id，云厂商文本继续保留给兼容展示。</div>
+              </div>
+              <div class="field">
                 <label for="manual-region">区域</label>
                 <input id="manual-region" name="region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
                 <div class="field-note">支持中英文和常见机房代码联想，选择后会自动写成统一区域值。</div>
@@ -73,8 +80,35 @@ export function createNodeAssetModalTemplatesModule() {
                   <option value="月付">月付</option>
                   <option value="季付">季付</option>
                   <option value="年付">年付</option>
+                  <option value="周付">周付</option>
+                  <option value="日付">日付</option>
+                  <option value="小时付">小时付</option>
                   <option value="一次性">一次性</option>
                 </select>
+              </div>
+              <div class="field">
+                <label for="manual-billing-amount">账单金额</label>
+                <input id="manual-billing-amount" name="billing_amount" type="number" min="0" step="0.01" placeholder="例如 12.5" />
+              </div>
+              <div class="field">
+                <label for="manual-billing-currency">币种</label>
+                <input id="manual-billing-currency" name="billing_currency" placeholder="例如 USD / CNY" />
+              </div>
+              <div class="field">
+                <label for="manual-amortization-months">折旧月数</label>
+                <input id="manual-amortization-months" name="amortization_months" type="number" min="1" step="1" placeholder="一次性账单常用，例如 24" />
+              </div>
+              <div class="field">
+                <label for="manual-overage-price">超额单价 / GB</label>
+                <input id="manual-overage-price" name="overage_price_per_gb" type="number" min="0" step="0.01" placeholder="例如 0.8" />
+              </div>
+              <div class="field">
+                <label for="manual-extra-fixed-cost">额外月固定成本</label>
+                <input id="manual-extra-fixed-cost" name="extra_fixed_monthly_cost" type="number" min="0" step="0.01" placeholder="例如 3" />
+              </div>
+              <div class="field">
+                <label for="manual-billing-started-at">账单开始时间</label>
+                <input id="manual-billing-started-at" name="billing_started_at" type="date" />
               </div>
               <div class="field full">
                 <label>业务链路</label>
@@ -166,6 +200,10 @@ export function createNodeAssetModalTemplatesModule() {
                 </label>
               </div>
               <div class="field full">
+                <label for="manual-cost-note">成本备注</label>
+                <textarea id="manual-cost-note" name="cost_note" placeholder="例如：年付折算、带宽升级补差价、月底才结超额流量。"></textarea>
+              </div>
+              <div class="field full">
                 <label for="manual-note">备注</label>
                 <textarea id="manual-note" name="note" placeholder="例如：月底到期，先观察质量，再决定是否续费。"></textarea>
                 <div class="field-note">这一步先解决“账目和资产台账”问题，等接入厂商 API 后再做自动同步。</div>
@@ -204,6 +242,13 @@ export function createNodeAssetModalTemplatesModule() {
                 <input id="asset-provider" name="provider" placeholder="例如 Vultr / Oracle / DMIT" />
               </div>
               <div class="field">
+                <label for="asset-provider-id">厂商台账</label>
+                <select id="asset-provider-id" name="provider_id">
+                  <option value="">未绑定厂商台账</option>
+                </select>
+                <div class="field-note">优先绑定稳定 provider_id，后续汇总和预算才不会只靠文本名称对齐。</div>
+              </div>
+              <div class="field">
                 <label for="asset-region">区域</label>
                 <input id="asset-region" name="region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
                 <div class="field-note">可直接输入中文、英文或代码，系统会统一成规范区域值。</div>
@@ -219,12 +264,39 @@ export function createNodeAssetModalTemplatesModule() {
                   <option value="月付">月付</option>
                   <option value="季付">季付</option>
                   <option value="年付">年付</option>
+                  <option value="周付">周付</option>
+                  <option value="日付">日付</option>
+                  <option value="小时付">小时付</option>
                   <option value="一次性">一次性</option>
                 </select>
               </div>
               <div class="field">
                 <label for="asset-expire">到期时间</label>
                 <input id="asset-expire" name="expires_at" type="date" />
+              </div>
+              <div class="field">
+                <label for="asset-billing-amount">账单金额</label>
+                <input id="asset-billing-amount" name="billing_amount" type="number" min="0" step="0.01" placeholder="例如 12.5" />
+              </div>
+              <div class="field">
+                <label for="asset-billing-currency">币种</label>
+                <input id="asset-billing-currency" name="billing_currency" placeholder="例如 USD / CNY" />
+              </div>
+              <div class="field">
+                <label for="asset-amortization-months">折旧月数</label>
+                <input id="asset-amortization-months" name="amortization_months" type="number" min="1" step="1" placeholder="一次性账单常用，例如 24" />
+              </div>
+              <div class="field">
+                <label for="asset-overage-price">超额单价 / GB</label>
+                <input id="asset-overage-price" name="overage_price_per_gb" type="number" min="0" step="0.01" placeholder="例如 0.8" />
+              </div>
+              <div class="field">
+                <label for="asset-extra-fixed-cost">额外月固定成本</label>
+                <input id="asset-extra-fixed-cost" name="extra_fixed_monthly_cost" type="number" min="0" step="0.01" placeholder="例如 3" />
+              </div>
+              <div class="field">
+                <label for="asset-billing-started-at">账单开始时间</label>
+                <input id="asset-billing-started-at" name="billing_started_at" type="date" />
               </div>
               <div class="field">
                 <label for="asset-public-ip">公网 IPv4</label>
@@ -342,6 +414,10 @@ export function createNodeAssetModalTemplatesModule() {
               <div class="field full">
                 <label for="asset-management-route-note">管理链路说明</label>
                 <textarea id="asset-management-route-note" name="management_route_note" placeholder="例如：控制面 -> 香港 SSH 代理 -> 节点。"></textarea>
+              </div>
+              <div class="field full">
+                <label for="asset-cost-note">成本备注</label>
+                <textarea id="asset-cost-note" name="cost_note" placeholder="例如：超额流量跟随厂商月底结算，带宽升级单独计费。"></textarea>
               </div>
               <div class="field full">
                 <label for="asset-note">备注</label>

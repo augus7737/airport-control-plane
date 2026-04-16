@@ -1,3 +1,5 @@
+import { formatLocationDisplay } from "../shared/location-suggestions.js";
+
 export function createRoutesPageModule(dependencies) {
   const {
     buildCurvePath,
@@ -65,6 +67,14 @@ export function createRoutesPageModule(dependencies) {
     `;
   }
 
+  function formatRegionChip(value, scope = "region", fallback = "-") {
+    return formatLocationDisplay(value, {
+      scope,
+      style: "compact",
+      fallback,
+    });
+  }
+
   function renderRouteGraph(nodes) {
     const graph = buildRouteGraph(nodes);
     const maxWeight = Math.max(...graph.lines.map((line) => line.weight), 1);
@@ -91,7 +101,7 @@ export function createRoutesPageModule(dependencies) {
     const renderGraphNode = (item, kind) => `
       <div class="route-orb route-orb-${kind}" style="left:${item.x}%;top:${item.y}%;">
         <span class="route-orb-code">${item.code}</span>
-        <strong>${item.label}</strong>
+        <strong>${kind === "country" ? formatRegionChip(item.label, "region") : item.label}</strong>
         <span class="route-orb-meta">${
           kind === "country"
             ? `共 ${item.count} 台 · 直连 ${item.direct} / 中转 ${item.relay}`
@@ -138,14 +148,14 @@ export function createRoutesPageModule(dependencies) {
             <article class="route-card">
               <div class="panel-title">
                 <div>
-                  <div class="route-caption">入口 ${group.entryRegion}</div>
+                  <div class="route-caption">入口 ${formatRegionChip(group.entryRegion, "entry")}</div>
                   <h3>${group.relayLabel}</h3>
-                  <p>${group.relayRegion} · 承载 ${group.members.length} 台落地节点</p>
+                  <p>${formatRegionChip(group.relayRegion, "region")} · 承载 ${group.members.length} 台落地节点</p>
                 </div>
                 <div class="provider-pill">${group.relayNode ? "已绑定节点" : "仅记录标签"}</div>
               </div>
               <div class="route-flow">
-                <span class="route-node route-entry">${group.entryRegion}</span>
+                <span class="route-node route-entry">${formatRegionChip(group.entryRegion, "entry")}</span>
                 <span class="route-arrow">→</span>
                 <span class="route-node route-relay">${group.relayLabel}</span>
                 <span class="route-arrow">→</span>
@@ -157,7 +167,7 @@ export function createRoutesPageModule(dependencies) {
                     <a class="route-member" href="/node.html?id=${node.id}">
                       <div class="route-member-meta">
                         <strong>${getNodeDisplayName(node)}</strong>
-                        <span>${node.labels?.provider || "未标记"} / ${node.labels?.region || "-"}</span>
+                        <span>${node.labels?.provider || "未标记"} / ${formatRegionChip(node.labels?.region, "region")}</span>
                       </div>
                       <div class="route-member-extra">
                         <span class="${statusClassName(node.status)}">${statusText(node.status)}</span>
@@ -214,7 +224,7 @@ export function createRoutesPageModule(dependencies) {
                           const count = relayNodes.filter(
                             (node) => (node.networking?.entry_region || "中国大陆") === region,
                           ).length;
-                          return `<div class="event"><strong>${region}</strong><p>共有 ${count} 台节点通过该入口区域进入。</p></div>`;
+                          return `<div class="event"><strong>${formatRegionChip(region, "entry")}</strong><p>共有 ${count} 台节点通过该入口区域进入。</p></div>`;
                         })
                         .join("")
                     : '<div class="event"><strong>暂无入口区域数据</strong><p>录入经中转节点后，这里会自动统计不同入口区域的分布。</p></div>'

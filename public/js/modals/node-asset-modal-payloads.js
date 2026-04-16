@@ -63,9 +63,12 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
   }
 
   function buildManualNodePayload(formData) {
+    const providerId = String(formData.get("provider_id") || "").trim() || null;
+    const providerName = String(formData.get("provider") || "").trim() || null;
     return {
       hostname: String(formData.get("hostname") || "").trim(),
-      provider: String(formData.get("provider") || "").trim() || null,
+      provider_id: providerId,
+      provider: providerName || null,
       region: normalizeLocationValue(formData.get("region"), { scope: "region" }),
       role: String(formData.get("role") || "").trim() || null,
       public_ipv4: String(formData.get("public_ipv4") || "").trim() || null,
@@ -78,7 +81,14 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       traffic_used_gb: toNumberOrNull(formData.get("traffic_used_gb")),
       expires_at: String(formData.get("expires_at") || "").trim() || null,
       billing_cycle: String(formData.get("billing_cycle") || "").trim() || null,
+      billing_amount: toNumberOrNull(formData.get("billing_amount")),
+      billing_currency: String(formData.get("billing_currency") || "").trim() || null,
+      amortization_months: toNumberOrNull(formData.get("amortization_months")),
+      overage_price_per_gb: toNumberOrNull(formData.get("overage_price_per_gb")),
+      extra_fixed_monthly_cost: toNumberOrNull(formData.get("extra_fixed_monthly_cost")),
+      billing_started_at: String(formData.get("billing_started_at") || "").trim() || null,
       auto_renew: formData.get("auto_renew") === "on",
+      cost_note: String(formData.get("cost_note") || "").trim() || null,
       note: String(formData.get("note") || "").trim() || null,
       os_name: "待补充",
       status: "active",
@@ -88,7 +98,9 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
   }
 
   function buildAssetPayload(formData) {
+    const providerId = String(formData.get("provider_id") || "").trim() || null;
     return {
+      provider_id: providerId,
       provider: String(formData.get("provider") || "").trim() || null,
       region: normalizeLocationValue(formData.get("region"), { scope: "region" }),
       role: String(formData.get("role") || "").trim() || null,
@@ -96,12 +108,19 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       public_ipv6: String(formData.get("public_ipv6") || "").trim() || null,
       private_ipv4: String(formData.get("private_ipv4") || "").trim() || null,
       billing_cycle: String(formData.get("billing_cycle") || "").trim() || null,
+      billing_amount: toNumberOrNull(formData.get("billing_amount")),
+      billing_currency: String(formData.get("billing_currency") || "").trim() || null,
+      amortization_months: toNumberOrNull(formData.get("amortization_months")),
+      overage_price_per_gb: toNumberOrNull(formData.get("overage_price_per_gb")),
+      extra_fixed_monthly_cost: toNumberOrNull(formData.get("extra_fixed_monthly_cost")),
+      billing_started_at: String(formData.get("billing_started_at") || "").trim() || null,
       expires_at: String(formData.get("expires_at") || "").trim() || null,
       auto_renew: formData.get("auto_renew") === "on",
       ssh_port: toNumberOrNull(formData.get("ssh_port")),
       bandwidth_mbps: toNumberOrNull(formData.get("bandwidth_mbps")),
       traffic_quota_gb: toNumberOrNull(formData.get("traffic_quota_gb")),
       traffic_used_gb: toNumberOrNull(formData.get("traffic_used_gb")),
+      cost_note: String(formData.get("cost_note") || "").trim() || null,
       note: String(formData.get("note") || "").trim() || null,
       networking: collectBusinessRoutePayload(formData),
       management: collectManagementPayload(formData),

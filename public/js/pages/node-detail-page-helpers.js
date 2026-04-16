@@ -1,3 +1,8 @@
+import {
+  formatCostStatus,
+  formatCurrencyTotals,
+} from "../shared/cost-formatters.js";
+
 export function normalizePercent(value, fallback = 0) {
   if (!Number.isFinite(value)) return fallback;
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -187,6 +192,45 @@ export function renderTemplateSelectOptions(escapeHtml, options, selectedValue, 
     .join("");
 }
 
+function isRunningStatus(status) {
+  return ["queued", "running"].includes(String(status || "").toLowerCase());
+}
+
+function latestDiagnosticByProfile(items, profile) {
+  return items.find((item) => String(item?.profile || "").toLowerCase() === profile) || null;
+}
+
+function summarizeDiagnosticBlockers(diagnostic) {
+  const blockers = [
+    ...(Array.isArray(diagnostic?.guard?.static_blockers) ? diagnostic.guard.static_blockers : []),
+    ...(Array.isArray(diagnostic?.guard?.runtime_blockers) ? diagnostic.guard.runtime_blockers : []),
+  ];
+
+  return blockers.length > 0 ? blockers.join(" / ") : null;
+}
+
+function buildDiagnosticReportCard(title, section, diagnostic, statusClassName, statusText) {
+  if (!diagnostic || !section) {
+    return {
+      title,
+      statusClass: "badge badge-new",
+      statusText: "未执行",
+      summary: "还没有诊断记录。",
+      reportUrl: null,
+      happenedAt: null,
+    };
+  }
+
+  return {
+    title,
+    statusClass: statusClassName(section.status || diagnostic.status || "new"),
+    statusText: statusText(section.status || diagnostic.status || "new"),
+    summary: section.summary || diagnostic.summary || "已生成报告。",
+    reportUrl: section.report_url || null,
+    happenedAt: diagnostic.finished_at || diagnostic.started_at || diagnostic.created_at || null,
+  };
+}
+
 export function buildNodeDetailViewModel({
   buildNodeRecommendations,
   daysUntil,
@@ -207,7 +251,10 @@ export function buildNodeDetailViewModel({
   formatTaskAttempt,
   formatTraffic,
   getAccessMode,
+  getDiagnostics,
+  getDiagnosticsForNode,
   getNodeDisplayName,
+  getNodeCostSnapshot,
   getPrimaryPublicIpRecord,
   getProbes,
   getProbesForNode,
@@ -222,6 +269,7 @@ export function buildNodeDetailViewModel({
   nodeDetailState,
   nodes,
   resolveRelayNode,
+  sortDiagnostics,
   sortProbes,
   sortTasks,
   statusClassName,
@@ -248,6 +296,10 @@ export function buildNodeDetailViewModel({
   const nodeTasks = getTasksForNode(node, getTasks(), sortTasks);
   const recentNodeTasks = nodeTasks.slice(0, 4);
   const nodeProbes = getProbesForNode(node, getProbes(), sortProbes).slice(0, 4);
+  const nodeDiagnostics = getDiagnosticsForNode(node, getDiagnostics(), sortDiagnostics).slice(0, 8);
+  const latestLightDiagnostic = latestDiagnosticByProfile(nodeDiagnostics, "light");
+  const latestDeepDiagnostic = latestDiagnosticByProfile(nodeDiagnostics, "deep");
+  const runningDiagnostic = nodeDiagnostics.find((item) => isRunningStatus(item?.status)) || null;
   const latestProbe = nodeProbes[0] || null;
   const recommendedActions = buildNodeRecommendations(node, latestProbe, nodeTasks);
   const accessMode = getAccessMode(node);
@@ -432,12 +484,83 @@ export function buildNodeDetailViewModel({
       latestSystemTemplateRelease.template_id ||
       "未知模板"
     : null;
+  const nodeCost =
+    typeof getNodeCostSnapshot === "function" ? getNodeCostSnapshot(node.id) : null;
+  const knownMemoryMb = Number(node?.facts?.memory_mb ?? 0);
+  const knownDiskGb = Number(node?.facts?.disk_gb ?? 0);
+  const lightFactBlocked = Number.isFinite(knownMemoryMb) && knownMemoryMb > 0 && knownMemoryMb < 256;
+  const deepFactBlocked =
+    (Number.isFinite(knownMemoryMb) && knownMemoryMb > 0 && knownMemoryMb < 1024) ||
+    (Number.isFinite(knownDiskGb) && knownDiskGb > 0 && knownDiskGb < 5);
+  const latestDiagnosticSummary =
+    runningDiagnostic?.summary ||
+    latestDeepDiagnostic?.summary ||
+    latestLightDiagnostic?.summary ||
+    "轻量诊断默认以快速模式生成硬件 / IP 报告，深度诊断只在手动触发时运行。";
+  const latestDiagnosticBlockers =
+    summarizeDiagnosticBlockers(runningDiagnostic) ||
+    summarizeDiagnosticBlockers(latestDeepDiagnostic) ||
+    summarizeDiagnosticBlockers(latestLightDiagnostic) ||
+    null;
+  const diagnosticActionMeta = {
+    lightDisabled: Boolean(runningDiagnostic) || lightFactBlocked,
+    deepDisabled: Boolean(runningDiagnostic) || deepFactBlocked,
+    lightLabel:
+      runningDiagnostic?.profile === "light"
+        ? "轻量诊断中..."
+        : "运行轻量诊断",
+    deepLabel:
+      runningDiagnostic?.profile === "deep"
+        ? "深度诊断中..."
+        : "运行深度诊断",
+    foot:
+      runningDiagnostic
+        ? `当前正在执行${runningDiagnostic.profile === "deep" ? "深度" : "轻量"}诊断`
+        : deepFactBlocked
+          ? "深度诊断需要至少 1GB 内存和 5GB 磁盘"
+          : "深度诊断会先做资源保护预检，再决定是否继续执行",
+  };
+  const diagnosticOverviewRows = [
+    ["最近轻量", latestLightDiagnostic ? formatRelativeTime(latestLightDiagnostic.started_at || latestLightDiagnostic.created_at) : "尚未执行"],
+    ["最近深度", latestDeepDiagnostic ? formatRelativeTime(latestDeepDiagnostic.started_at || latestDeepDiagnostic.created_at) : "尚未执行"],
+    ["当前状态", runningDiagnostic ? "执行中" : "空闲"],
+    ["资源保护", deepFactBlocked ? "深度诊断已预锁定" : "运行前动态校验"],
+  ];
+  const diagnosticReportCards = [
+    buildDiagnosticReportCard(
+      "硬件报告",
+      latestLightDiagnostic?.reports?.hardware,
+      latestLightDiagnostic,
+      statusClassName,
+      statusText,
+    ),
+    buildDiagnosticReportCard(
+      "IP 质量",
+      latestLightDiagnostic?.reports?.ip,
+      latestLightDiagnostic,
+      statusClassName,
+      statusText,
+    ),
+    buildDiagnosticReportCard(
+      "网络质量",
+      latestDeepDiagnostic?.reports?.net,
+      latestDeepDiagnostic,
+      statusClassName,
+      statusText,
+    ),
+  ];
   const commercialOverview = [
     ["到期时间", expiryText],
     ["续费方式", formatRenewal(node.commercial?.auto_renew)],
     ["计费周期", node.commercial?.billing_cycle || "-"],
+    ["账单金额", nodeCost?.billing_amount != null ? `${nodeCost.billing_amount} ${nodeCost.billing_currency || ""}`.trim() : "-"],
     ["带宽", node.commercial?.bandwidth_mbps ? `${node.commercial.bandwidth_mbps} Mbps` : "-"],
     ["流量", formatTraffic(node.commercial?.traffic_used_gb, node.commercial?.traffic_quota_gb)],
+    ["基础月成本", nodeCost ? formatCurrencyTotals([{ currency: nodeCost.effective_currency, amount: nodeCost.base_monthly_cost }], "-") : "-"],
+    ["超额成本", nodeCost ? formatCurrencyTotals([{ currency: nodeCost.effective_currency, amount: nodeCost.overage_cost }], "-") : "-"],
+    ["总月成本", nodeCost ? formatCurrencyTotals(nodeCost, nodeCost.problems?.[0] || "-") : "-"],
+    ["成本状态", formatCostStatus(nodeCost?.cost_status, "-")],
+    ["成本备注", node.commercial?.cost_note || "-"],
     ["备注", node.commercial?.note || "-"],
   ];
   const routeOverview = [
@@ -463,6 +586,12 @@ export function buildNodeDetailViewModel({
     activityItems,
     commercialOverview,
     dashboardCards,
+    diagnosticActionMeta,
+    diagnosticOverviewRows,
+    diagnosticReportCards,
+    diagnosticSummaryMeta: latestDiagnosticBlockers
+      ? `${latestDiagnosticSummary} · ${latestDiagnosticBlockers}`
+      : latestDiagnosticSummary,
     healthOverviewRows,
     healthSummaryMeta: `${lastProbeText} · ${primaryPublicLabel}`,
     healthSummaryText: probeLongSummary,
@@ -793,7 +922,16 @@ export function renderNodeDetailMain({ escapeHtml, formatRelativeTime, viewModel
 }
 
 export function renderNodeDetailAside({ escapeHtml, formatRelativeTime, viewModel }) {
-  const { healthOverviewRows, healthSummaryMeta, healthSummaryText, recommendationItems } = viewModel;
+  const {
+    diagnosticActionMeta,
+    diagnosticOverviewRows,
+    diagnosticReportCards,
+    diagnosticSummaryMeta,
+    healthOverviewRows,
+    healthSummaryMeta,
+    healthSummaryText,
+    recommendationItems,
+  } = viewModel;
 
   return `
     <aside class="aside-stack node-detail-side">
@@ -811,6 +949,56 @@ export function renderNodeDetailAside({ escapeHtml, formatRelativeTime, viewMode
           <strong>当前判断</strong>
           <p>${escapeHtml(healthSummaryText)}</p>
           <p class="tiny">${escapeHtml(healthSummaryMeta)}</p>
+        </div>
+      </section>
+      <section class="node-detail-section" id="node-detail-external-diagnostics">
+        <div class="node-detail-section-head">
+          <div>
+            <h4>外部诊断</h4>
+            <p>轻量诊断默认以快速模式跑硬件 / IP，深度诊断只在手动触发时运行网络质量体检。</p>
+          </div>
+        </div>
+        <div class="node-detail-diagnostic-grid">
+          ${renderDiagnosticRows(escapeHtml, diagnosticOverviewRows)}
+        </div>
+        <div class="node-detail-template-action-row">
+          <button class="button" type="button" id="run-light-diagnostic"${
+            diagnosticActionMeta.lightDisabled ? ' disabled aria-busy="true"' : ""
+          }>${escapeHtml(diagnosticActionMeta.lightLabel)}</button>
+          <button class="button ghost" type="button" id="run-deep-diagnostic"${
+            diagnosticActionMeta.deepDisabled ? ' disabled aria-busy="true"' : ""
+          }>${escapeHtml(diagnosticActionMeta.deepLabel)}</button>
+        </div>
+        <div class="event">
+          <strong>诊断说明</strong>
+          <p>${escapeHtml(diagnosticSummaryMeta)}</p>
+          <p class="tiny">${escapeHtml(diagnosticActionMeta.foot)}</p>
+        </div>
+        <div class="node-detail-template-stack">
+          ${diagnosticReportCards
+            .map(
+              (card) => `
+                <article class="node-detail-template-card">
+                  <div class="node-detail-template-card-head">
+                    <div>
+                      <span class="node-detail-template-kicker">诊断报告</span>
+                      <strong>${escapeHtml(card.title)}</strong>
+                    </div>
+                    <span class="${card.statusClass}">${escapeHtml(card.statusText)}</span>
+                  </div>
+                  <p>${escapeHtml(card.summary)}</p>
+                  <div class="node-detail-template-foot">
+                    <span>${escapeHtml(card.happenedAt ? formatRelativeTime(card.happenedAt) : "暂无记录")}</span>
+                    ${
+                      card.reportUrl
+                        ? `<a class="button ghost" href="${escapeHtml(card.reportUrl)}" target="_blank" rel="noreferrer">打开报告</a>`
+                        : '<span class="button ghost" aria-disabled="true">暂无报告</span>'
+                    }
+                  </div>
+                </article>
+              `,
+            )
+            .join("")}
         </div>
       </section>
       ${renderNodeDetailTemplateActions({ escapeHtml, formatRelativeTime, viewModel })}

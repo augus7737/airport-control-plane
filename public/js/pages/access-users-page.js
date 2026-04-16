@@ -1,3 +1,8 @@
+import {
+  findCostItemByAccessUserId,
+  formatCurrencyTotals,
+} from "../shared/cost-formatters.js";
+
 function createEmptyDraft() {
   return {
     name: "",
@@ -325,6 +330,7 @@ export function createAccessUsersPageModule(dependencies) {
       value,
       qrSvg,
       copyKind,
+      tone = "neutral",
       targetIndex = "",
       emptyText = "当前暂无可用链接。",
     } = options;
@@ -334,7 +340,7 @@ export function createAccessUsersPageModule(dependencies) {
     const dataTargetIndex = targetIndex === "" ? "" : ` data-target-index="${targetIndex}"`;
 
     return `
-      <section class="share-link-block">
+      <section class="share-link-block share-link-block-${escapeHtml(tone)}">
         <div class="share-link-head">
           <strong>${escapeHtml(title)}</strong>
           ${description ? `<span class="tiny">${escapeHtml(description)}</span>` : ""}
@@ -366,15 +372,113 @@ export function createAccessUsersPageModule(dependencies) {
     `;
   }
 
-  function renderTargetShareCard(target, index) {
+  function normalizeShareAccessMode(value) {
+    return String(value || "direct").trim().toLowerCase() === "relay" ? "relay" : "direct";
+  }
+
+  function getShareModeMeta(accessMode) {
+    if (normalizeShareAccessMode(accessMode) === "relay") {
+      return {
+        key: "relay",
+        badgeLabel: "中转",
+        badgeDescription: "中转入口",
+        sectionTitle: "中转订阅与二维码",
+        sectionDescription: "这组线路会把用户入口固定到入口节点公网 IPv4，不再把落地节点地址直接发给用户。",
+        subscriptionTitle: "中转订阅链接",
+        subscriptionDescription: "节点级订阅会返回这条中转线路当前生效的入口地址。",
+        shareTitle: "中转分享链接",
+        shareDescription: "客户端直连入口节点公网 IPv4，对应二维码也按中转入口生成。",
+      };
+    }
+
+    return {
+      key: "direct",
+      badgeLabel: "直连",
+      badgeDescription: "落地直连",
+      sectionTitle: "直连订阅与二维码",
+      sectionDescription: "这组线路直接使用落地节点公网 IPv4，对应订阅和二维码会保持直连入口语义。",
+      subscriptionTitle: "直连订阅链接",
+      subscriptionDescription: "节点级订阅会返回这条直连线路当前生效的落地入口。",
+      shareTitle: "直连分享链接",
+      shareDescription: "直接投给客户端的单条 vless:// / vmess://，入口就是落地节点本身。",
+    };
+  }
+
+  function getShareMixMeta(relayCount, directCount) {
+    if (relayCount > 0 && directCount > 0) {
+      return {
+        key: "mixed",
+        label: "混合线路",
+        description: "当前用户同时拥有中转入口和落地直连两种发布结果，适合并排比对可用入口。",
+      };
+    }
+
+    if (relayCount > 0) {
+      return {
+        key: "relay",
+        label: "全量中转",
+        description: "当前用户所有可发布线路都经由入口节点对外暴露，分享地址不会直接暴露落地节点。",
+      };
+    }
+
+    if (directCount > 0) {
+      return {
+        key: "direct",
+        label: "全量直连",
+        description: "当前用户所有可发布线路都直接使用落地节点公网 IPv4，对外入口没有额外中转层。",
+      };
+    }
+
+    return {
+      key: "empty",
+      label: "暂无线路",
+      description: "当前还没有回溯到任何可发布线路，先刷新分享结果或检查发布状态。",
+    };
+  }
+
+  function renderShareSummaryCard(options) {
+    const {
+      label,
+      value,
+      note = "",
+      tone = "neutral",
+    } = options;
+
     return `
-      <article class="share-target-card">
+      <div class="share-summary-card share-summary-card-${escapeHtml(tone)}">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+        ${note ? `<small>${escapeHtml(note)}</small>` : ""}
+      </div>
+    `;
+  }
+
+  function renderTargetShareCard(target, index) {
+    const modeMeta = getShareModeMeta(target.access_mode);
+    const routeTitle = target.route_label || target.node_name || target.node_id || "未命名线路";
+    const subtitleParts = [];
+    if (target.node_name && target.node_name !== routeTitle) {
+      subtitleParts.push(target.node_name);
+    }
+    if (target.node_id) {
+      subtitleParts.push(target.node_id);
+    }
+    const routeSubtitle = subtitleParts.join(" · ") || "当前线路未附带节点标识";
+
+    return `
+      <article class="share-target-card share-target-card-${escapeHtml(modeMeta.key)}">
         <div class="share-target-head">
           <div class="share-target-title">
-            <strong>${escapeHtml(target.node_name || target.node_id || "未命名节点")}</strong>
-            <span class="tiny mono">${escapeHtml(target.node_id || "-")}</span>
+            <strong>${escapeHtml(routeTitle)}</strong>
+            <span class="tiny">${escapeHtml(routeSubtitle)}</span>
+            <p class="share-target-caption">${escapeHtml(modeMeta.badgeDescription)} · 用户入口 ${escapeHtml(
+              target.endpoint_host ? `${target.endpoint_host}:${target.endpoint_port || "-"}` : "暂未识别",
+            )}</p>
           </div>
           <div class="ops-chip-list">
+            <span class="pill share-mode-pill share-mode-pill-${escapeHtml(modeMeta.key)}" title="${escapeHtml(
+              modeMeta.badgeDescription,
+            )}">${escapeHtml(modeMeta.badgeLabel)}</span>
             <span class="pill">${escapeHtml(String(target.protocol || "vless").toUpperCase())}</span>
             <span class="pill">${escapeHtml(String(target.security || "none").toUpperCase())}</span>
             <span class="pill">${escapeHtml(String(target.transport || "tcp").toUpperCase())}</span>
@@ -393,20 +497,22 @@ export function createAccessUsersPageModule(dependencies) {
 
         <div class="share-link-grid">
           ${renderShareLinkBlock({
-            title: "节点订阅链接",
-            description: "这个节点当前生效配置的单节点订阅入口。",
+            title: modeMeta.subscriptionTitle,
+            description: modeMeta.subscriptionDescription,
             value: target.subscription_url,
             qrSvg: target.subscription_qr_svg,
             copyKind: "target_subscription",
+            tone: modeMeta.key,
             targetIndex: index,
             emptyText: "当前暂无单节点订阅链接。",
           })}
           ${renderShareLinkBlock({
-            title: "直连分享链接",
-            description: "直接投给客户端的单条 vless:// / vmess://。",
+            title: modeMeta.shareTitle,
+            description: modeMeta.shareDescription,
             value: target.share_url,
             qrSvg: target.share_qr_svg,
             copyKind: "target_share",
+            tone: modeMeta.key,
             targetIndex: index,
             emptyText: "当前模板参数不足，暂无法生成直连分享链接。",
           })}
@@ -415,53 +521,76 @@ export function createAccessUsersPageModule(dependencies) {
     `;
   }
 
+  function renderTargetShareSection(options) {
+    const {
+      title,
+      description,
+      mode,
+      items,
+    } = options;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return "";
+    }
+
+    return `
+      <section class="share-target-section share-target-section-${escapeHtml(mode)}">
+        <div class="share-target-section-head">
+          <div>
+            <h4>${escapeHtml(title)}</h4>
+            <p>${escapeHtml(description)}</p>
+          </div>
+          <span class="pill share-target-section-count">${escapeHtml(String(items.length))} 条</span>
+        </div>
+        <div class="share-target-list">
+          ${items
+            .map(({ target, index }) => renderTargetShareCard(target, index))
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
   function renderSharePanel(selectedUser) {
     const shareData = getVisibleShareData(selectedUser);
     const warnings = Array.isArray(shareData?.warnings) ? shareData.warnings : [];
     const targets = Array.isArray(shareData?.targets) ? shareData.targets : [];
+    const indexedTargets = targets.map((target, index) => ({ target, index }));
+    const relayTargets = indexedTargets.filter(({ target }) => normalizeShareAccessMode(target.access_mode) === "relay");
+    const directTargets = indexedTargets.filter(({ target }) => normalizeShareAccessMode(target.access_mode) === "direct");
+    const mixMeta = getShareMixMeta(relayTargets.length, directTargets.length);
+    const aggregateTargetCount = shareData ? Number(shareData.aggregate?.target_count ?? 0) : 0;
 
     if (!selectedUser) {
       return `
-        <article class="panel" id="access-user-share-panel">
-          <div class="panel-body">
+        <article class="panel share-panel" id="access-user-share-panel">
+          <div class="panel-body share-panel-body">
             <div class="panel-title">
               <div>
-                <h3>分享与订阅</h3>
-                <p>选中一个接入用户后，这里会展示聚合订阅和节点级分享结果。</p>
+                <h3>订阅与分享工作区</h3>
+                <p>选中一个接入用户后，这里会展示聚合订阅、线路分组和实际可交付的二维码结果。</p>
               </div>
             </div>
-            <div class="ops-empty-block">先从左侧选择一个接入用户，或者点击列表里的“订阅”按钮。</div>
+            <div class="share-empty-card">
+              <strong>还没有打开任何订阅对象</strong>
+              <p>先从左侧选择一个接入用户，或者点击列表里的“订阅”按钮，这里会自动切换成完整的订阅工作区。</p>
+            </div>
           </div>
         </article>
       `;
     }
 
     return `
-      <article class="panel" id="access-user-share-panel">
-        <div class="panel-body">
+      <article class="panel share-panel" id="access-user-share-panel">
+        <div class="panel-body share-panel-body">
           <div class="panel-title">
             <div>
-              <h3>分享与订阅</h3>
+              <h3>订阅与分享工作区</h3>
               <p>按“当前各节点最近一次成功发布”回溯这个用户的真实生效结果，不按理论节点组猜测。</p>
             </div>
             <div class="ops-table-actions">
               <button class="button ghost" type="button" id="access-user-share-refresh">刷新结果</button>
               <button class="button ghost" type="button" id="access-user-share-regenerate">重置令牌</button>
-            </div>
-          </div>
-
-          <div class="share-summary-strip">
-            <div>
-              <span>当前用户</span>
-              <strong>${escapeHtml(selectedUser.name || selectedUser.id)}</strong>
-            </div>
-            <div>
-              <span>当前模板</span>
-              <strong>${escapeHtml(getProfileName(selectedUser.profile_id))}</strong>
-            </div>
-            <div>
-              <span>当前生效节点</span>
-              <strong>${shareData ? String(shareData.aggregate?.target_count ?? 0) : "-"}</strong>
             </div>
           </div>
 
@@ -480,17 +609,63 @@ export function createAccessUsersPageModule(dependencies) {
 
           ${
             state.shareLoading
-              ? '<div class="ops-empty-block">正在从后端加载聚合订阅、节点订阅和直连分享结果…</div>'
+              ? `
+                <div class="share-empty-card">
+                  <strong>正在加载订阅结果</strong>
+                  <p>后端正在回溯聚合订阅、节点订阅和分享二维码，请稍候片刻。</p>
+                </div>
+              `
               : shareData
                 ? `
-                  ${renderShareLinkBlock({
-                    title: "聚合订阅链接",
-                    description: `当前共 ${shareData.aggregate?.target_count ?? 0} 个生效节点，聚合订阅会一次返回所有可生成的直连链接。`,
-                    value: shareData.aggregate?.subscription_url,
-                    qrSvg: shareData.aggregate?.subscription_qr_svg,
-                    copyKind: "aggregate_subscription",
-                    emptyText: "当前暂无聚合订阅链接。",
-                  })}
+                  <div class="share-workspace-shell">
+                    <section class="share-overview-card">
+                      <div class="share-overview-head">
+                        <div class="share-overview-copy">
+                          <span class="mini-label">当前订阅对象</span>
+                          <h4>${escapeHtml(selectedUser.name || selectedUser.id)}</h4>
+                          <p>${escapeHtml(mixMeta.description)}</p>
+                        </div>
+                        <span class="pill share-mix-pill share-mix-pill-${escapeHtml(mixMeta.key)}">${escapeHtml(
+                          mixMeta.label,
+                        )}</span>
+                      </div>
+
+                      <div class="share-summary-strip">
+                        ${renderShareSummaryCard({
+                          label: "当前模板",
+                          value: getProfileName(selectedUser.profile_id),
+                          note: String(selectedUser.protocol || "vless").toUpperCase(),
+                        })}
+                        ${renderShareSummaryCard({
+                          label: "当前生效节点",
+                          value: String(aggregateTargetCount),
+                          note: "按最近成功发布回溯",
+                        })}
+                        ${renderShareSummaryCard({
+                          label: "中转线路",
+                          value: String(relayTargets.length),
+                          note: relayTargets.length ? "入口节点对外暴露" : "当前没有中转线路",
+                          tone: relayTargets.length ? "relay" : "neutral",
+                        })}
+                        ${renderShareSummaryCard({
+                          label: "直连线路",
+                          value: String(directTargets.length),
+                          note: directTargets.length ? "落地节点直接对外" : "当前没有直连线路",
+                          tone: directTargets.length ? "direct" : "neutral",
+                        })}
+                      </div>
+                    </section>
+
+                    ${renderShareLinkBlock({
+                      title: "聚合订阅链接",
+                      description: `当前共 ${aggregateTargetCount} 个生效节点，其中中转 ${relayTargets.length} 条、直连 ${directTargets.length} 条；聚合订阅会一次返回全部可用线路。`,
+                      value: shareData.aggregate?.subscription_url,
+                      qrSvg: shareData.aggregate?.subscription_qr_svg,
+                      copyKind: "aggregate_subscription",
+                      tone: "aggregate",
+                      emptyText: "当前暂无聚合订阅链接。",
+                    })}
+                  </div>
 
                   ${
                     warnings.length
@@ -509,18 +684,37 @@ export function createAccessUsersPageModule(dependencies) {
 
                   ${
                     targets.length
-                      ? `<div class="share-target-list">${targets
-                          .map((target, index) => renderTargetShareCard(target, index))
-                          .join("")}</div>`
-                      : '<div class="ops-empty-block">这个接入用户当前没有任何生效节点，所以暂时不会生成节点级订阅结果。</div>'
+                      ? `
+                        <div class="share-route-sections">
+                          ${renderTargetShareSection({
+                            title: getShareModeMeta("relay").sectionTitle,
+                            description: getShareModeMeta("relay").sectionDescription,
+                            mode: "relay",
+                            items: relayTargets,
+                          })}
+                          ${renderTargetShareSection({
+                            title: getShareModeMeta("direct").sectionTitle,
+                            description: getShareModeMeta("direct").sectionDescription,
+                            mode: "direct",
+                            items: directTargets,
+                          })}
+                        </div>
+                      `
+                      : `
+                        <div class="share-empty-card">
+                          <strong>当前没有可展示的线路</strong>
+                          <p>这个接入用户暂时没有任何生效节点，所以还不会生成节点级订阅结果。</p>
+                        </div>
+                      `
                   }
                 `
                 : `
-                  <div class="ops-empty-block">
-                    还没加载当前用户的订阅结果。点击下面按钮后，后端会统一生成聚合订阅、节点订阅、直连分享链接和二维码。
-                  </div>
-                  <div class="ops-action-row">
-                    <button class="button primary" type="button" id="access-user-share-load">加载分享结果</button>
+                  <div class="share-empty-card">
+                    <strong>还没加载当前订阅结果</strong>
+                    <p>点击下面按钮后，后端会统一生成聚合订阅、节点订阅、直连分享链接和二维码。</p>
+                    <div class="ops-action-row">
+                      <button class="button primary" type="button" id="access-user-share-load">加载分享结果</button>
+                    </div>
                   </div>
                 `
           }
@@ -654,6 +848,9 @@ export function createAccessUsersPageModule(dependencies) {
     hydrateFromQuery();
 
     const selectedUser = getSelectedUser();
+    const selectedUserCost = selectedUser
+      ? findCostItemByAccessUserId(appState.costs.accessUsers, selectedUser.id)
+      : null;
     const draft = getDraft(selectedUser);
     const filteredUsers = getFilteredUsers();
     const activeCount = appState.accessUsers.filter((user) => String(user.status || "active") === "active").length;
@@ -667,12 +864,22 @@ export function createAccessUsersPageModule(dependencies) {
     const linkedProfilesCount = new Set(
       appState.accessUsers.map((user) => user.profile_id).filter(Boolean),
     ).size;
+    const estimableCount = appState.costs.accessUsers.filter(
+      (item) => item.cost_status === "ok",
+    ).length;
     const rows = filteredUsers.length
       ? filteredUsers
           .map((user) => {
             const uuid = resolveUserUuid(user);
             const alterId = resolveUserAlterId(user);
             const displayName = user.name || user.id;
+            const userCost = findCostItemByAccessUserId(appState.costs.accessUsers, user.id);
+            const costLabel = userCost
+              ? formatCurrencyTotals(
+                  userCost.estimated_totals_by_currency,
+                  userCost.problems?.[0] || "待发布",
+                )
+              : "待发布";
             return `
               <tr class="${state.selectedId === user.id ? "is-selected" : ""}">
                 <td>
@@ -684,7 +891,7 @@ export function createAccessUsersPageModule(dependencies) {
                 <td>
                   <div class="ops-inline-meta">
                     <strong>${escapeHtml(getProfileName(user.profile_id))}</strong>
-                    <span class="tiny">协议 ${escapeHtml(String(user.protocol || "vless").toUpperCase())}</span>
+                    <span class="tiny">协议 ${escapeHtml(String(user.protocol || "vless").toUpperCase())} · 估算 ${escapeHtml(costLabel)}</span>
                   </div>
                 </td>
                 <td>${renderUserGroupSummary(user.node_group_ids)}</td>
@@ -729,7 +936,7 @@ export function createAccessUsersPageModule(dependencies) {
         <article class="panel"><div class="panel-body"><div class="stat-label">接入用户</div><div class="stat-value">${appState.accessUsers.length}</div><div class="stat-foot">内部管理视角的代理接入身份台账。</div></div></article>
         <article class="panel"><div class="panel-body"><div class="stat-label">当前可用</div><div class="stat-value">${activeCount}</div><div class="stat-foot">状态为可用，且可继续参与发布的用户数。</div></div></article>
         <article class="panel"><div class="panel-body"><div class="stat-label">7 天内到期</div><div class="stat-value">${expiringSoonCount}</div><div class="stat-foot">适合提前做续期或替换，避免发布后很快失效。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">已关联模板</div><div class="stat-value">${linkedProfilesCount}</div><div class="stat-foot">当前接入用户绑定过的协议模板数量。</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">已可估算成本</div><div class="stat-value">${estimableCount}</div><div class="stat-foot">已有最新成功发布、可做月成本分摊的接入用户数量。</div></div></article>
       </section>
 
       <section class="workspace fade-up ops-page-grid">
@@ -769,6 +976,30 @@ export function createAccessUsersPageModule(dependencies) {
                 </div>
                 ${selectedUser ? `<span class="pill mono">${escapeHtml(selectedUser.id)}</span>` : ""}
               </div>
+              ${
+                selectedUser
+                  ? `
+                    <div class="detail-kv" style="margin-bottom:14px;">
+                      <div class="kv-row"><span>当前归属发布</span><strong>${escapeHtml(
+                        selectedUserCost?.current_release_title ||
+                          selectedUserCost?.current_release_id ||
+                          "暂无最新成功发布",
+                      )}</strong></div>
+                      <div class="kv-row"><span>当前估算月成本</span><strong>${escapeHtml(
+                        formatCurrencyTotals(
+                          selectedUserCost?.estimated_totals_by_currency,
+                          selectedUserCost?.problems?.[0] || "待发布",
+                        ),
+                      )}</strong></div>
+                      <div class="kv-row"><span>分摊口径</span><strong>${escapeHtml(
+                        selectedUserCost?.active_access_user_count
+                          ? `按 ${selectedUserCost.active_access_user_count} 个活跃用户均摊`
+                          : "等待可用发布",
+                      )}</strong></div>
+                    </div>
+                  `
+                  : ""
+              }
 
               <form id="access-user-form" class="ops-form-grid">
                 <div class="field">
@@ -867,8 +1098,6 @@ export function createAccessUsersPageModule(dependencies) {
             </div>
           </article>
 
-          ${renderSharePanel(selectedUser)}
-
           <article class="panel">
             <div class="panel-body">
               <div class="panel-title">
@@ -886,6 +1115,8 @@ export function createAccessUsersPageModule(dependencies) {
           </article>
         </aside>
       </section>
+
+      ${renderSharePanel(selectedUser)}
     `;
   }
 

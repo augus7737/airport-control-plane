@@ -2,6 +2,7 @@ export function statusText(status) {
   const value = String(status || "new").toLowerCase();
   if (value === "active" || value === "success" || value === "stable") return "可用";
   if (value === "partial") return "部分成功";
+  if (value === "queued") return "排队中";
   if (value === "running") return "执行中";
   if (value === "disabled") return "已停用";
   if (value === "exhausted") return "已用尽";
@@ -16,7 +17,7 @@ export function statusClassName(status) {
   if (value === "active" || value === "success" || value === "stable") {
     return "badge badge-active";
   }
-  if (value === "partial" || value === "running") {
+  if (value === "partial" || value === "queued" || value === "running") {
     return "badge badge-running";
   }
   if (

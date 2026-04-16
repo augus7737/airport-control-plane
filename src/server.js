@@ -63,6 +63,7 @@ import { createPlatformSshDomain } from "./domain/platform/ssh.js";
 import { createPlatformSingBoxDistributionDomain } from "./domain/platform/sing-box-distribution.js";
 import { createOperationsExecutorDomain } from "./domain/operations/executor.js";
 import { createProbeExecutorDomain } from "./domain/probes/executor.js";
+import { createNodeDiagnosticsDomain } from "./domain/diagnostics/node-quality.js";
 import {
   buildSingBoxConfig,
   buildSingBoxPublishScript,
@@ -81,6 +82,14 @@ import { createTaskLifecycleDomain } from "./domain/tasks/lifecycle.js";
 import { createTaskStoreDomain } from "./domain/tasks/store.js";
 import { createTrafficRouteDomain } from "./domain/routes/traffic.js";
 import { createManagementRouteDomain } from "./domain/routes/management.js";
+import { buildCostViews } from "./domain/costs/summary.js";
+import {
+  normalizeBillingCycle,
+  normalizeBudgetThreshold,
+  normalizeCostCurrency,
+  normalizeNullableInteger,
+  normalizeNullableNumber,
+} from "./domain/costs/normalize.js";
 import { createStorePersistenceInfrastructure } from "./infrastructure/store-persistence.js";
 import { createProbeSchedulerRuntime } from "./runtime/probe-scheduler.js";
 import { createServerStartupRuntime } from "./runtime/startup.js";
@@ -94,6 +103,7 @@ const nodesFile = path.join(dataDir, "nodes.json");
 const operationsFile = path.join(dataDir, "operations.json");
 const tasksFile = path.join(dataDir, "tasks.json");
 const probesFile = path.join(dataDir, "probes.json");
+const diagnosticsFile = path.join(dataDir, "diagnostics.json");
 const bootstrapTokensFile = path.join(dataDir, "bootstrap-tokens.json");
 const accessUsersFile = path.join(dataDir, "access-users.json");
 const systemTemplatesFile = path.join(dataDir, "system-templates.json");
@@ -159,6 +169,7 @@ const fingerprintIndex = new Map();
 const operationStore = [];
 const taskStore = [];
 const probeStore = [];
+const diagnosticStore = [];
 const shellSessionStore = new Map();
 const bootstrapTokenStore = new Map();
 const bootstrapTokenIndex = new Map();
@@ -553,6 +564,7 @@ const {
   ensureDataDir,
   loadAccessUserStore,
   loadConfigReleaseStore,
+  loadDiagnosticStore,
   loadNodeStore,
   loadNodeGroupStore,
   loadOperationStore,
@@ -566,6 +578,7 @@ const {
   loadTaskStore,
   persistAccessUserStore,
   persistConfigReleaseStore,
+  persistDiagnosticStore,
   persistNodeStore,
   persistNodeGroupStore,
   persistOperationStore,
@@ -583,6 +596,8 @@ const {
   configReleaseStore,
   configReleasesFile,
   dataDir,
+  diagnosticStore,
+  diagnosticsFile,
   fingerprintIndex,
   mkdir,
   nodeStore,
@@ -682,10 +697,12 @@ const { resolveManagementRoute } = createManagementRouteDomain({
 
 const {
   detachRelayNodeReferences,
+  pruneDiagnosticsForNode,
   pruneOperationsForNode,
   pruneProbesForNode,
   pruneTasksForNode,
 } = createNodeLifecycleDomain({
+  diagnosticStore,
   nodeStore,
   operationStore,
   probeStore,
@@ -810,6 +827,25 @@ const {
   resolveNodeSshTransport: async (node, options) => resolveNodeSshTransport(node, options),
   samePrivateIpv4Subnet,
   setNodeRecord: (node) => nodeStore.set(node.id, node),
+  spawn,
+  terminateChildProcess,
+  upsertTaskRecord,
+});
+
+const {
+  listDiagnostics,
+  triggerDiagnostic,
+} = createNodeDiagnosticsDomain({
+  cwdProvider: () => process.cwd(),
+  defaultNodeSshUser,
+  diagnosticStore,
+  getNodeById: (nodeId) => nodeStore.get(nodeId),
+  nowIso,
+  persistDiagnosticStore,
+  persistTaskStore,
+  randomUUID,
+  resolveNodeSshTransport: async (node, options) => resolveNodeSshTransport(node, options),
+  buildTaskRecord,
   spawn,
   terminateChildProcess,
   upsertTaskRecord,
@@ -1015,6 +1051,47 @@ function normalizeTimestampValue(value, fallback = null) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : fallback;
 }
 
+function normalizeNodeCommercialRecord(commercial = {}) {
+  const source = commercial && typeof commercial === "object" ? commercial : {};
+  const extraFixedMonthlyCost =
+    normalizeNullableNumber(source.extra_fixed_monthly_cost, 0) ?? 0;
+
+  return {
+    expires_at: normalizeTimestampValue(source.expires_at, source.expires_at ?? null),
+    auto_renew: Boolean(source.auto_renew),
+    bandwidth_mbps: normalizeNullableNumber(source.bandwidth_mbps),
+    traffic_quota_gb: normalizeNullableNumber(source.traffic_quota_gb),
+    traffic_used_gb: normalizeNullableNumber(source.traffic_used_gb),
+    billing_cycle:
+      normalizeBillingCycle(source.billing_cycle) ?? normalizeNullableString(source.billing_cycle) ?? null,
+    billing_amount: normalizeNullableNumber(source.billing_amount),
+    billing_currency: normalizeCostCurrency(source.billing_currency),
+    amortization_months: normalizeNullableInteger(source.amortization_months),
+    overage_price_per_gb: normalizeNullableNumber(source.overage_price_per_gb),
+    extra_fixed_monthly_cost: extraFixedMonthlyCost,
+    billing_started_at: normalizeTimestampValue(
+      source.billing_started_at,
+      source.billing_started_at ?? null,
+    ),
+    cost_note: normalizeNullableString(source.cost_note) ?? null,
+    note: normalizeNullableString(source.note) ?? null,
+  };
+}
+
+function normalizeProviderRecord(provider = {}) {
+  const source = provider && typeof provider === "object" ? provider : {};
+  return {
+    ...source,
+    regions: normalizeLocationList(source.regions, "region"),
+    default_currency: normalizeCostCurrency(source.default_currency),
+    monthly_budget: normalizeNullableNumber(source.monthly_budget),
+    budget_alert_threshold: normalizeBudgetThreshold(source.budget_alert_threshold),
+    default_overage_price_per_gb: normalizeNullableNumber(source.default_overage_price_per_gb),
+    billing_contact: normalizeNullableString(source.billing_contact) ?? null,
+    cost_note: normalizeNullableString(source.cost_note) ?? null,
+  };
+}
+
 function sortByUpdatedAt(items) {
   return [...items].sort((a, b) =>
     String(b.updated_at ?? b.created_at ?? "").localeCompare(String(a.updated_at ?? a.created_at ?? "")),
@@ -1073,6 +1150,15 @@ function findAccessUserByShareToken(shareToken) {
 
 function generateAccessUserShareToken() {
   return randomUUID().replace(/-/g, "");
+}
+
+function buildLiveCostViews() {
+  return buildCostViews({
+    accessUsers: accessUserStore,
+    nodes: [...nodeStore.values()],
+    providers: providerStore,
+    releases: configReleaseStore,
+  });
 }
 
 function serializeAccessUser(accessUser) {
@@ -1566,7 +1652,7 @@ function buildNodeGroupRecord(payload, existing = null) {
 function buildProviderRecord(payload, existing = null) {
   const timestamp = nowIso();
 
-  return {
+  return normalizeProviderRecord({
     id: existing?.id ?? `provider_${randomUUID()}`,
     name: normalizeNullableString(payload.name) ?? existing?.name ?? "未命名厂商",
     account_name: hasOwn(payload, "account_name")
@@ -1584,14 +1670,32 @@ function buildProviderRecord(payload, existing = null) {
     auto_provision_enabled: hasOwn(payload, "auto_provision_enabled")
       ? Boolean(payload.auto_provision_enabled)
       : existing?.auto_provision_enabled ?? false,
+    default_currency: hasOwn(payload, "default_currency")
+      ? normalizeCostCurrency(payload.default_currency)
+      : normalizeCostCurrency(existing?.default_currency) ?? null,
+    monthly_budget: hasOwn(payload, "monthly_budget")
+      ? normalizeNullableNumber(payload.monthly_budget)
+      : normalizeNullableNumber(existing?.monthly_budget),
+    budget_alert_threshold: hasOwn(payload, "budget_alert_threshold")
+      ? normalizeBudgetThreshold(payload.budget_alert_threshold)
+      : normalizeBudgetThreshold(existing?.budget_alert_threshold),
+    default_overage_price_per_gb: hasOwn(payload, "default_overage_price_per_gb")
+      ? normalizeNullableNumber(payload.default_overage_price_per_gb)
+      : normalizeNullableNumber(existing?.default_overage_price_per_gb),
+    billing_contact: hasOwn(payload, "billing_contact")
+      ? normalizeNullableString(payload.billing_contact)
+      : existing?.billing_contact ?? null,
     status:
       normalizeNullableString(payload.status ?? existing?.status)?.toLowerCase() ?? "active",
+    cost_note: hasOwn(payload, "cost_note")
+      ? normalizeNullableString(payload.cost_note)
+      : existing?.cost_note ?? null,
     note: hasOwn(payload, "note")
       ? normalizeNullableString(payload.note)
       : existing?.note ?? null,
     created_at: existing?.created_at ?? timestamp,
     updated_at: timestamp,
-  };
+  });
 }
 
 function buildSystemTemplateReleaseRecord(payload, template, resolved, options = {}) {
@@ -1803,15 +1907,13 @@ async function ensureProviderRegionNormalization() {
 
   for (let index = 0; index < providerStore.length; index += 1) {
     const provider = providerStore[index];
-    const normalizedRegions = normalizeLocationList(provider?.regions, "region");
-    const currentRegions = Array.isArray(provider?.regions) ? provider.regions : [];
-    if (JSON.stringify(normalizedRegions) === JSON.stringify(currentRegions)) {
+    const normalizedProvider = normalizeProviderRecord(provider);
+    if (JSON.stringify(normalizedProvider) === JSON.stringify(provider)) {
       continue;
     }
 
     providerStore[index] = {
-      ...provider,
-      regions: normalizedRegions,
+      ...normalizedProvider,
       updated_at: nowIso(),
     };
     changed = true;
@@ -1823,7 +1925,44 @@ async function ensureProviderRegionNormalization() {
   }
 
   await persistProviderStore();
-  console.log(`[startup] normalized provider regions for ${migratedCount} providers`);
+  console.log(`[startup] normalized provider records for ${migratedCount} providers`);
+  return true;
+}
+
+async function ensureNodeProviderLinkMigration() {
+  let changed = false;
+  let migratedCount = 0;
+
+  for (const [nodeId, node] of nodeStore.entries()) {
+    const normalizedCommercial = normalizeNodeCommercialRecord(node?.commercial);
+    const matchedProvider =
+      findProviderById(node?.provider_id) ??
+      findProviderByName(node?.labels?.provider) ??
+      null;
+    const nextProviderId = matchedProvider?.id ?? normalizeNullableString(node?.provider_id) ?? null;
+    const commercialChanged =
+      JSON.stringify(normalizedCommercial) !== JSON.stringify(node?.commercial ?? {});
+    const providerChanged = nextProviderId !== (node?.provider_id ?? null);
+
+    if (!commercialChanged && !providerChanged) {
+      continue;
+    }
+
+    nodeStore.set(nodeId, {
+      ...node,
+      provider_id: nextProviderId,
+      commercial: normalizedCommercial,
+    });
+    changed = true;
+    migratedCount += 1;
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  await persistNodeStore();
+  console.log(`[startup] normalized node commercial records for ${migratedCount} nodes`);
   return true;
 }
 
@@ -3068,6 +3207,7 @@ const server = createServer(async (request, reply) => {
       const relayReferenceUpdated = detachRelayNodeReferences(nodeId, existingNode);
       const tasksPruned = pruneTasksForNode(nodeId);
       const probesPruned = pruneProbesForNode(nodeId);
+      const diagnosticsPruned = pruneDiagnosticsForNode(nodeId);
       const operationsPruned = pruneOperationsForNode(nodeId);
       const nodeGroupsUpdated = pruneNodeFromGroups(nodeId);
       closeShellSessionsForNode(nodeId);
@@ -3085,6 +3225,7 @@ const server = createServer(async (request, reply) => {
         nodeGroupsUpdated ? persistNodeGroupStore() : Promise.resolve(),
         tasksPruned ? persistTaskStore() : Promise.resolve(),
         probesPruned ? persistProbeStore() : Promise.resolve(),
+        diagnosticsPruned ? persistDiagnosticStore() : Promise.resolve(),
         operationsPruned ? persistOperationStore() : Promise.resolve(),
         tokenChanged ? persistBootstrapTokens() : Promise.resolve(),
       ]);
@@ -3097,6 +3238,7 @@ const server = createServer(async (request, reply) => {
           node_groups_updated: nodeGroupsUpdated,
           tasks_pruned: tasksPruned,
           probes_pruned: probesPruned,
+          diagnostics_pruned: diagnosticsPruned,
           operations_pruned: operationsPruned,
         },
       });
@@ -3122,6 +3264,14 @@ const server = createServer(async (request, reply) => {
     const items = nodeId ? listNodeProbes(nodeId) : sortProbes(probeStore);
     jsonResponse(reply, 200, {
       items,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/v1/diagnostics") {
+    const nodeId = normalizeNullableString(url.searchParams.get("node_id"));
+    jsonResponse(reply, 200, {
+      items: listDiagnostics(nodeId),
     });
     return;
   }
@@ -4225,6 +4375,46 @@ const server = createServer(async (request, reply) => {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/v1/costs/summary") {
+    const costViews = buildLiveCostViews();
+    jsonResponse(reply, 200, {
+      summary: costViews.summary,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/v1/costs/nodes") {
+    const costViews = buildLiveCostViews();
+    jsonResponse(reply, 200, {
+      items: costViews.nodes,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/v1/costs/providers") {
+    const costViews = buildLiveCostViews();
+    jsonResponse(reply, 200, {
+      items: costViews.providers,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/v1/costs/releases") {
+    const costViews = buildLiveCostViews();
+    jsonResponse(reply, 200, {
+      items: costViews.releases,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/v1/costs/access-users") {
+    const costViews = buildLiveCostViews();
+    jsonResponse(reply, 200, {
+      items: costViews.access_users,
+    });
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/v1/config-releases") {
     jsonResponse(reply, 200, {
       items: sortByUpdatedAt(configReleaseStore),
@@ -4668,6 +4858,45 @@ const server = createServer(async (request, reply) => {
     return;
   }
 
+  const nodeDiagnosticMatch = url.pathname.match(/^\/api\/v1\/nodes\/([^/]+)\/diagnostics$/);
+  if (request.method === "POST" && nodeDiagnosticMatch) {
+    try {
+      const nodeId = decodeURIComponent(nodeDiagnosticMatch[1]);
+      const node = nodeStore.get(nodeId);
+
+      if (!node) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "node not found",
+        });
+        return;
+      }
+
+      const payload = await readJsonBody(request);
+      const profile =
+        String(payload?.profile || "light").trim().toLowerCase() === "deep" ? "deep" : "light";
+      const result = await triggerDiagnostic(node, {
+        profile,
+        trigger: "manual_diagnostic",
+        reason: "manual_diagnostic",
+      });
+
+      jsonResponse(reply, 202, {
+        task: result.task,
+        diagnostic: result.diagnostic,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      jsonResponse(reply, message.includes("当前节点已有诊断") || message.includes("同一公网入口宿主已有深度诊断")
+        ? 409
+        : 400, {
+        error: "bad_request",
+        message,
+      });
+    }
+    return;
+  }
+
   const nodeProbeMatch = url.pathname.match(/^\/api\/v1\/nodes\/([^/]+)\/probe$/);
   if (request.method === "POST" && nodeProbeMatch) {
     try {
@@ -4876,6 +5105,7 @@ const server = createServer(async (request, reply) => {
 const { start } = createServerStartupRuntime({
   ensureNodeManagementMigration,
   ensureProviderRegionNormalization,
+  ensureNodeProviderLinkMigration,
   ensureBootstrapInitTasks,
   listen: () => {
     server.listen(port, () => {
@@ -4889,6 +5119,7 @@ const { start } = createServerStartupRuntime({
   },
   loadBootstrapTokens,
   loadConfigReleaseStore,
+  loadDiagnosticStore,
   loadNodeStore,
   loadNodeGroupStore,
   loadOperationStore,

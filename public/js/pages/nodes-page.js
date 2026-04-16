@@ -1,3 +1,8 @@
+import {
+  formatLocationDisplay,
+  normalizeLocationValue,
+} from "../shared/location-suggestions.js";
+
 export function createNodesPageModule(dependencies) {
   const {
     appState,
@@ -82,7 +87,7 @@ export function createNodesPageModule(dependencies) {
     return nodes.filter((node) => {
       const query = appState.filters.query.trim().toLowerCase();
       const provider = node.labels?.provider || "";
-      const region = node.labels?.region || "";
+      const region = normalizeLocationValue(node.labels?.region, { scope: "region" }) || "";
       const hostname = node.facts?.hostname || "";
       const ip = [
         node.facts?.public_ipv4 || "",
@@ -97,7 +102,15 @@ export function createNodesPageModule(dependencies) {
       const accessMode = getAccessMode(node);
 
       if (query) {
-        const haystack = [hostname, ip, provider, region].join(" ").toLowerCase();
+        const haystack = [
+          hostname,
+          ip,
+          provider,
+          region,
+          formatLocationDisplay(region, { scope: "region", style: "full" }),
+        ]
+          .join(" ")
+          .toLowerCase();
         if (!haystack.includes(query)) {
           return false;
         }
@@ -141,7 +154,13 @@ export function createNodesPageModule(dependencies) {
 
   function renderNodesPage(nodes) {
     const providers = [...new Set(nodes.map((node) => node.labels?.provider).filter(Boolean))];
-    const regions = [...new Set(nodes.map((node) => node.labels?.region).filter(Boolean))];
+    const regions = [
+      ...new Set(
+        nodes
+          .map((node) => normalizeLocationValue(node.labels?.region, { scope: "region" }))
+          .filter(Boolean),
+      ),
+    ];
     const filteredNodes = applyNodeFilters(nodes);
     const expiringSoon = filteredNodes.filter((node) => {
       const days = daysUntil(node.commercial?.expires_at);
@@ -185,7 +204,15 @@ export function createNodesPageModule(dependencies) {
               <label for="filter-region">区域</label>
               <select id="filter-region">
                 <option value="">全部</option>
-                ${regions.map((region) => `<option value="${region}"${appState.filters.region === region ? " selected" : ""}>${region}</option>`).join("")}
+                ${regions
+                  .map(
+                    (region) => `
+                      <option value="${region}"${appState.filters.region === region ? " selected" : ""}>
+                        ${formatLocationDisplay(region, { scope: "region", style: "compact" })}
+                      </option>
+                    `,
+                  )
+                  .join("")}
               </select>
             </div>
             <div class="field">

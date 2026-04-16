@@ -5,6 +5,8 @@ export function createStorePersistenceInfrastructure(dependencies) {
     configReleaseStore,
     configReleasesFile,
     dataDir,
+    diagnosticStore,
+    diagnosticsFile,
     fingerprintIndex,
     mkdir,
     nodeStore,
@@ -205,6 +207,55 @@ export function createStorePersistenceInfrastructure(dependencies) {
       const items = Array.isArray(payload.items) ? payload.items : [];
       probeStore.length = 0;
       probeStore.push(...items);
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        await ensureDataDir();
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  async function persistDiagnosticStore() {
+    await ensureDataDir();
+    const payload = {
+      items: diagnosticStore,
+    };
+    await writeFile(diagnosticsFile, JSON.stringify(payload, null, 2), "utf8");
+  }
+
+  async function loadDiagnosticStore() {
+    try {
+      const raw = await readFile(diagnosticsFile, "utf8");
+      const payload = JSON.parse(raw);
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      let mutated = false;
+      diagnosticStore.length = 0;
+
+      for (const item of items) {
+        const status = String(item?.status || "").toLowerCase();
+        if (status === "running" || status === "queued") {
+          diagnosticStore.push({
+            ...item,
+            status: "failed",
+            result_quality: item?.result_quality ?? "failed",
+            finished_at: item?.finished_at || nowIso(),
+            updated_at: nowIso(),
+            summary:
+              item?.summary ||
+              "控制面重启后发现诊断仍停留在执行中，已按异常中断回收。",
+          });
+          mutated = true;
+          continue;
+        }
+
+        diagnosticStore.push(item);
+      }
+
+      if (mutated) {
+        await persistDiagnosticStore();
+      }
     } catch (error) {
       if (isMissingFileError(error)) {
         await ensureDataDir();
@@ -419,6 +470,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     ensureDataDir,
     loadAccessUserStore,
     loadConfigReleaseStore,
+    loadDiagnosticStore,
     loadNodeStore,
     loadNodeGroupStore,
     loadOperationStore,
@@ -432,6 +484,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     loadTaskStore,
     persistAccessUserStore,
     persistConfigReleaseStore,
+    persistDiagnosticStore,
     persistNodeStore,
     persistNodeGroupStore,
     persistOperationStore,

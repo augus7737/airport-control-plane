@@ -13,6 +13,7 @@ export function createNodeAssetModalsModule(dependencies) {
     getCurrentNode,
     getNodeDisplayName,
     page,
+    refreshRuntimeData,
     renderCurrentContent,
     toNumberOrNull,
     upsertNode,
@@ -35,6 +36,34 @@ export function createNodeAssetModalsModule(dependencies) {
     appState.assetEditor.targetNodeId = nodeId || null;
   }
 
+  function getProviderOptionsHtml(selectedId = null) {
+    const normalizedSelectedId = String(selectedId || "").trim();
+    return [
+      '<option value="">未绑定厂商台账</option>',
+      ...appState.providers.map((provider) => {
+        const providerId = String(provider.id || "");
+        const selected = providerId === normalizedSelectedId ? " selected" : "";
+        const label = provider.account_name
+          ? `${provider.name || provider.id} · ${provider.account_name}`
+          : provider.name || provider.id;
+        return `<option value="${escapeHtml(providerId)}"${selected}>${escapeHtml(label)}</option>`;
+      }),
+    ].join("");
+  }
+
+  function syncProviderField(selectElement, inputElement) {
+    if (!selectElement || !inputElement) {
+      return;
+    }
+
+    const selectedProvider = appState.providers.find(
+      (provider) => provider.id === selectElement.value,
+    );
+    if (selectedProvider && !String(inputElement.value || "").trim()) {
+      inputElement.value = selectedProvider.name || "";
+    }
+  }
+
   function getAssetEditorNode(nodes = appState.nodes) {
     const targetNodeId = appState.assetEditor.targetNodeId;
     if (targetNodeId) {
@@ -54,12 +83,19 @@ export function createNodeAssetModalsModule(dependencies) {
     const form = documentRef.getElementById("manual-node-form");
     const resetButton = documentRef.getElementById("manual-reset");
     const message = documentRef.getElementById("manual-message");
+    const providerSelect = documentRef.getElementById("manual-provider-id");
+    const providerInput = documentRef.getElementById("manual-provider");
 
     if (!modal || !closeButton || !form || !message) return;
     if (modal.dataset.bound === "1") return;
     modal.dataset.bound = "1";
 
-    const open = () => modal.classList.add("open");
+    const open = () => {
+      if (providerSelect) {
+        providerSelect.innerHTML = getProviderOptionsHtml();
+      }
+      modal.classList.add("open");
+    };
     const close = () => modal.classList.remove("open");
 
     bindManualModalEvents({
@@ -73,6 +109,9 @@ export function createNodeAssetModalsModule(dependencies) {
       close,
     });
     bindLocationAutocomplete(modal);
+    providerSelect?.addEventListener("change", () => {
+      syncProviderField(providerSelect, providerInput);
+    });
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -96,6 +135,7 @@ export function createNodeAssetModalsModule(dependencies) {
         }
 
         upsertNode(result.node);
+        await refreshRuntimeData?.();
         renderCurrentContent();
         message.innerHTML = '<div class="message success">节点已录入成功，列表已更新。</div>';
         setTimeout(() => {
@@ -137,6 +177,10 @@ export function createNodeAssetModalsModule(dependencies) {
         summary.textContent = `当前编辑节点：${getNodeDisplayName(node)} · ${node.id}`;
       }
 
+      const assetProviderSelect = documentRef.getElementById("asset-provider-id");
+      if (assetProviderSelect) {
+        assetProviderSelect.innerHTML = getProviderOptionsHtml(node.provider_id || null);
+      }
       documentRef.getElementById("asset-provider").value = node.labels?.provider || "";
       documentRef.getElementById("asset-region").value =
         normalizeLocationValue(node.labels?.region, { scope: "region" }) || "";
@@ -145,6 +189,17 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-public-ipv6").value = node.facts?.public_ipv6 || "";
       documentRef.getElementById("asset-private-ip").value = node.facts?.private_ipv4 || "";
       documentRef.getElementById("asset-billing").value = node.commercial?.billing_cycle || "";
+      documentRef.getElementById("asset-billing-amount").value = node.commercial?.billing_amount ?? "";
+      documentRef.getElementById("asset-billing-currency").value =
+        node.commercial?.billing_currency || "";
+      documentRef.getElementById("asset-amortization-months").value =
+        node.commercial?.amortization_months ?? "";
+      documentRef.getElementById("asset-overage-price").value =
+        node.commercial?.overage_price_per_gb ?? "";
+      documentRef.getElementById("asset-extra-fixed-cost").value =
+        node.commercial?.extra_fixed_monthly_cost ?? "";
+      documentRef.getElementById("asset-billing-started-at").value =
+        formatDateInput(node.commercial?.billing_started_at);
       documentRef.getElementById("asset-expire").value = formatDateInput(node.commercial?.expires_at);
       documentRef.getElementById("asset-access-mode").value = node.networking?.access_mode || "direct";
       documentRef.getElementById("asset-entry-region").value =
@@ -180,6 +235,7 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-route-note").value = node.networking?.route_note || "";
       documentRef.getElementById("asset-management-route-note").value =
         node.management?.route_note || "";
+      documentRef.getElementById("asset-cost-note").value = node.commercial?.cost_note || "";
       documentRef.getElementById("asset-note").value = node.commercial?.note || "";
     };
 
@@ -198,6 +254,12 @@ export function createNodeAssetModalsModule(dependencies) {
     if (modal.dataset.coreBound !== "1") {
       modal.dataset.coreBound = "1";
       bindLocationAutocomplete(modal);
+      documentRef.getElementById("asset-provider-id")?.addEventListener("change", () => {
+        syncProviderField(
+          documentRef.getElementById("asset-provider-id"),
+          documentRef.getElementById("asset-provider"),
+        );
+      });
       bindAssetModalCoreEvents({
         modal,
         closeButton,
@@ -233,6 +295,7 @@ export function createNodeAssetModalsModule(dependencies) {
           }
 
           upsertNode(result.node);
+          await refreshRuntimeData?.();
           renderCurrentContent();
           message.innerHTML = '<div class="message success">资产信息已更新。</div>';
           setTimeout(() => {

@@ -239,12 +239,12 @@
 }
 
 .button.primary {
-  border-color: rgba(156, 107, 28, 0.18);
+  border-color: rgba(31, 111, 127, 0.2);
   background:
-    linear-gradient(135deg, rgba(20, 32, 43, 0.96), rgba(45, 59, 72, 0.92)),
-    rgba(20, 32, 43, 0.96);
-  color: #fcfaf5;
-  box-shadow: 0 8px 18px rgba(20, 32, 43, 0.12);
+    linear-gradient(135deg, rgba(31, 111, 127, 0.96), rgba(47, 111, 182, 0.88)),
+    rgba(31, 111, 127, 0.94);
+  color: #fdfcf8;
+  box-shadow: 0 10px 20px rgba(31, 111, 127, 0.18);
 }
 
 .button.ghost {
@@ -284,8 +284,8 @@
 
 .button.primary:hover,
 .button.primary:focus-visible {
-  border-color: rgba(20, 32, 43, 0.24);
-  box-shadow: 0 10px 20px rgba(20, 32, 43, 0.14);
+  border-color: rgba(31, 111, 127, 0.3);
+  box-shadow: 0 12px 24px rgba(31, 111, 127, 0.22);
 }
 
 .button.primary:visited {
@@ -309,10 +309,10 @@ button:disabled {
 }
 
 .button.primary:disabled {
-  border-color: rgba(20, 32, 43, 0.14);
+  border-color: rgba(31, 111, 127, 0.12);
   background:
-    linear-gradient(135deg, rgba(79, 92, 107, 0.96), rgba(99, 112, 126, 0.9)),
-    rgba(79, 92, 107, 0.96);
+    linear-gradient(135deg, rgba(136, 169, 177, 0.9), rgba(152, 176, 198, 0.88)),
+    rgba(136, 169, 177, 0.92);
   color: rgba(252, 250, 245, 0.94);
 }
 

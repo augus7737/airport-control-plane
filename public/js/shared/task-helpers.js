@@ -14,6 +14,14 @@ export function getProbesForNode(node, probes = [], sortProbes = (items) => item
   return sortProbes(probes.filter((probe) => probe.node_id === node.id));
 }
 
+export function getDiagnosticsForNode(node, diagnostics = [], sortDiagnostics = (items) => items) {
+  if (!node) {
+    return [];
+  }
+
+  return sortDiagnostics(diagnostics.filter((diagnostic) => diagnostic.node_id === node.id));
+}
+
 export function resolveTaskNode(task, nodes = []) {
   return nodes.find((node) => node.id === task.node_id) || null;
 }
@@ -42,6 +50,10 @@ export function getTaskDisplayTitle(task) {
       return "手动复探";
     }
     return "节点健康探测";
+  }
+  if (task?.type === "node_diagnostic") {
+    const profile = String(task?.payload?.profile || "").toLowerCase();
+    return profile === "deep" ? "深度诊断" : "轻量诊断";
   }
   return task?.type || "平台任务";
 }

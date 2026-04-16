@@ -2,6 +2,12 @@ import {
   setAccessUsers,
   setBootstrapTokens,
   setConfigReleases,
+  setCostAccessUsers,
+  setCostNodes,
+  setCostProviders,
+  setCostReleases,
+  setCostSummary,
+  setDiagnostics,
   setNodeGroups,
   setNodes,
   setOperations,
@@ -128,6 +134,10 @@ export function getLiveProbes() {
   return fetchCollection("/api/v1/probes");
 }
 
+export function getLiveDiagnostics() {
+  return fetchCollection("/api/v1/diagnostics");
+}
+
 export function getLiveOperations() {
   return fetchCollection("/api/v1/operations");
 }
@@ -164,6 +174,38 @@ export function getLiveConfigReleases() {
   return fetchCollection("/api/v1/config-releases");
 }
 
+export async function getLiveCostSummary() {
+  try {
+    const response = await fetchWithAuth("/api/v1/costs/summary");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    return payload?.summary && typeof payload.summary === "object" ? payload.summary : null;
+  } catch (error) {
+    if (isUnauthorizedError(error)) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+export function getLiveCostNodes() {
+  return fetchCollection("/api/v1/costs/nodes");
+}
+
+export function getLiveCostProviders() {
+  return fetchCollection("/api/v1/costs/providers");
+}
+
+export function getLiveCostReleases() {
+  return fetchCollection("/api/v1/costs/releases");
+}
+
+export function getLiveCostAccessUsers() {
+  return fetchCollection("/api/v1/costs/access-users");
+}
+
 export function getLiveSystemTemplateReleases() {
   return fetchCollection("/api/v1/system-template-releases");
 }
@@ -192,6 +234,7 @@ export async function refreshRuntimeData() {
     nodes,
     tasks,
     probes,
+    diagnostics,
     operations,
     accessUsers,
     systemUsers,
@@ -202,12 +245,18 @@ export async function refreshRuntimeData() {
     configReleases,
     systemTemplateReleases,
     systemUserReleases,
+    costSummary,
+    costNodes,
+    costProviders,
+    costReleases,
+    costAccessUsers,
     platformContext,
   ] =
     await Promise.all([
     getLiveNodes(),
     getLiveTasks(),
     getLiveProbes(),
+    getLiveDiagnostics(),
     getLiveOperations(),
     getLiveAccessUsers(),
     getLiveSystemUsers(),
@@ -218,12 +267,18 @@ export async function refreshRuntimeData() {
     getLiveConfigReleases(),
     getLiveSystemTemplateReleases(),
     getLiveSystemUserReleases(),
+    getLiveCostSummary(),
+    getLiveCostNodes(),
+    getLiveCostProviders(),
+    getLiveCostReleases(),
+    getLiveCostAccessUsers(),
     getPlatformContext(),
   ]);
   setPlatformContext(platformContext);
   setNodes(nodes);
   setTasks(tasks);
   setProbes(probes);
+  setDiagnostics(diagnostics);
   setOperations(operations);
   setAccessUsers(accessUsers);
   setSystemUsers(systemUsers);
@@ -234,6 +289,11 @@ export async function refreshRuntimeData() {
   setConfigReleases(configReleases);
   setSystemTemplateReleases(systemTemplateReleases);
   setSystemUserReleases(systemUserReleases);
+  setCostSummary(costSummary);
+  setCostNodes(costNodes);
+  setCostProviders(costProviders);
+  setCostReleases(costReleases);
+  setCostAccessUsers(costAccessUsers);
 }
 
 export async function hydrateRuntimeStore() {
@@ -241,6 +301,7 @@ export async function hydrateRuntimeStore() {
     nodes,
     tasks,
     probes,
+    diagnostics,
     operations,
     tokens,
     platformContext,
@@ -253,10 +314,16 @@ export async function hydrateRuntimeStore() {
     configReleases,
     systemTemplateReleases,
     systemUserReleases,
+    costSummary,
+    costNodes,
+    costProviders,
+    costReleases,
+    costAccessUsers,
   ] = await Promise.all([
     getLiveNodes(),
     getLiveTasks(),
     getLiveProbes(),
+    getLiveDiagnostics(),
     getLiveOperations(),
     getLiveBootstrapTokens(),
     getPlatformContext(),
@@ -269,11 +336,17 @@ export async function hydrateRuntimeStore() {
     getLiveConfigReleases(),
     getLiveSystemTemplateReleases(),
     getLiveSystemUserReleases(),
+    getLiveCostSummary(),
+    getLiveCostNodes(),
+    getLiveCostProviders(),
+    getLiveCostReleases(),
+    getLiveCostAccessUsers(),
   ]);
   setPlatformContext(platformContext);
   setNodes(nodes);
   setTasks(tasks);
   setProbes(probes);
+  setDiagnostics(diagnostics);
   setOperations(operations);
   setBootstrapTokens(tokens);
   setAccessUsers(accessUsers);
@@ -285,11 +358,23 @@ export async function hydrateRuntimeStore() {
   setConfigReleases(configReleases);
   setSystemTemplateReleases(systemTemplateReleases);
   setSystemUserReleases(systemUserReleases);
+  setCostSummary(costSummary);
+  setCostNodes(costNodes);
+  setCostProviders(costProviders);
+  setCostReleases(costReleases);
+  setCostAccessUsers(costAccessUsers);
 }
 
 export async function refreshOperations() {
   const operations = await getLiveOperations();
   setOperations(operations);
+}
+
+export async function runNodeDiagnostic(nodeId, payload = {}) {
+  return requestJson(
+    `/api/v1/nodes/${encodeURIComponent(nodeId)}/diagnostics`,
+    jsonRequest(payload),
+  );
 }
 
 export async function createAccessUser(payload) {

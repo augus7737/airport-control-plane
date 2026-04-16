@@ -1,3 +1,10 @@
+import {
+  normalizeBillingCycle,
+  normalizeCostCurrency,
+  normalizeNullableInteger,
+  normalizeNullableNumber,
+} from "../costs/normalize.js";
+
 function sourceValue(source, key, fallback = null) {
   return Object.prototype.hasOwnProperty.call(source, key) ? source[key] : fallback;
 }
@@ -27,6 +34,15 @@ function normalizeBooleanValue(value, fallback = false) {
   }
 
   return Boolean(fallback);
+}
+
+function normalizeNullableStringValue(value, fallback = null) {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+
+  const normalized = String(value).trim();
+  return normalized ? normalized : fallback;
 }
 
 function normalizePort(value) {
@@ -215,6 +231,38 @@ function resolveManagedSshPort(source = {}, existingNode = {}, management = {}, 
 }
 
 function buildCommercialRecord(source = {}, existingCommercial = {}) {
+  const billingCycle = sourceValue(
+    source,
+    "billing_cycle",
+    normalizeBillingCycle(existingCommercial.billing_cycle) ?? existingCommercial.billing_cycle ?? null,
+  );
+  const billingAmount = sourceValue(
+    source,
+    "billing_amount",
+    normalizeNullableNumber(existingCommercial.billing_amount),
+  );
+  const billingCurrency = sourceValue(
+    source,
+    "billing_currency",
+    normalizeCostCurrency(existingCommercial.billing_currency),
+  );
+  const amortizationMonths = sourceValue(
+    source,
+    "amortization_months",
+    normalizeNullableInteger(existingCommercial.amortization_months),
+  );
+  const overagePricePerGb = sourceValue(
+    source,
+    "overage_price_per_gb",
+    normalizeNullableNumber(existingCommercial.overage_price_per_gb),
+  );
+  const extraFixedMonthlyCost =
+    sourceValue(
+      source,
+      "extra_fixed_monthly_cost",
+      normalizeNullableNumber(existingCommercial.extra_fixed_monthly_cost, 0) ?? 0,
+    ) ?? 0;
+
   return {
     expires_at: sourceValue(source, "expires_at", existingCommercial.expires_at ?? null),
     auto_renew: sourceValue(source, "auto_renew", existingCommercial.auto_renew ?? false),
@@ -233,10 +281,21 @@ function buildCommercialRecord(source = {}, existingCommercial = {}) {
       "traffic_used_gb",
       existingCommercial.traffic_used_gb ?? null,
     ),
-    billing_cycle: sourceValue(
+    billing_cycle: normalizeBillingCycle(billingCycle) ?? billingCycle ?? null,
+    billing_amount: normalizeNullableNumber(billingAmount),
+    billing_currency: normalizeCostCurrency(billingCurrency),
+    amortization_months: normalizeNullableInteger(amortizationMonths),
+    overage_price_per_gb: normalizeNullableNumber(overagePricePerGb),
+    extra_fixed_monthly_cost: normalizeNullableNumber(extraFixedMonthlyCost, 0) ?? 0,
+    billing_started_at: sourceValue(
       source,
-      "billing_cycle",
-      existingCommercial.billing_cycle ?? null,
+      "billing_started_at",
+      existingCommercial.billing_started_at ?? null,
+    ),
+    cost_note: sourceValue(
+      source,
+      "cost_note",
+      existingCommercial.cost_note ?? null,
     ),
     note: sourceValue(source, "note", existingCommercial.note ?? null),
   };
@@ -488,6 +547,10 @@ export function createNodeRecordBuilders({
       last_probe_at: existingNode?.last_probe_at ?? null,
       health_score: existingNode?.health_score ?? null,
       labels,
+      provider_id: normalizeNullableStringValue(
+        sourceValue(payload, "provider_id", existingNode?.provider_id ?? null),
+        null,
+      ),
       source: existingNode?.source ?? "bootstrap",
       bootstrap_token_id: existingNode?.bootstrap_token_id ?? null,
       facts,
@@ -518,6 +581,10 @@ export function createNodeRecordBuilders({
         ),
         role: sourceValue(payload, "role", existingNode.labels?.role ?? null),
       },
+      provider_id: normalizeNullableStringValue(
+        sourceValue(payload, "provider_id", existingNode.provider_id ?? null),
+        null,
+      ),
       facts: normalizeNodeFacts(
         {
           ...currentFacts,
@@ -592,6 +659,7 @@ export function createNodeRecordBuilders({
         region: normalizeLocationValue(payload.region, "region"),
         role: payload.role ?? null,
       },
+      provider_id: normalizeNullableStringValue(payload.provider_id),
       source: "manual",
       facts,
       commercial: buildCommercialRecord(payload),

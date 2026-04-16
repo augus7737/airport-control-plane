@@ -1,3 +1,5 @@
+import { SUPPORTED_BILLING_CYCLES } from "../domain/costs/normalize.js";
+
 function validateNullableIpField(errors, value, fieldName, options = {}) {
   if (value === undefined || value === null || value === "") {
     return;
@@ -38,6 +40,103 @@ function validateNullablePortField(errors, value, fieldName) {
   if (!Number.isInteger(value) || value < 1 || value > 65535) {
     errors.push(`${fieldName} must be an integer between 1 and 65535`);
   }
+}
+
+function validateNullableStringField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (typeof value !== "string") {
+    errors.push(`${fieldName} must be a string`);
+  }
+}
+
+function validateNullableNonNegativeNumberField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (!Number.isFinite(value) || value < 0) {
+    errors.push(`${fieldName} must be a non-negative number`);
+  }
+}
+
+function validateNullablePositiveIntegerField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (!Number.isInteger(value) || value <= 0) {
+    errors.push(`${fieldName} must be a positive integer`);
+  }
+}
+
+function validateNullableCurrencyField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (typeof value !== "string") {
+    errors.push(`${fieldName} must be a string`);
+    return;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9_-]{1,9}$/.test(normalized)) {
+    errors.push(`${fieldName} must be a valid currency code`);
+  }
+}
+
+function validateNullableBillingCycleField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (typeof value !== "string") {
+    errors.push(`${fieldName} must be a string`);
+    return;
+  }
+
+  const normalized = value.trim();
+  if (!SUPPORTED_BILLING_CYCLES.includes(normalized)) {
+    errors.push(`${fieldName} must be one of ${SUPPORTED_BILLING_CYCLES.join(", ")}`);
+  }
+}
+
+function validateNullableDateField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (typeof value !== "string") {
+    errors.push(`${fieldName} must be a string`);
+    return;
+  }
+
+  if (Number.isNaN(Date.parse(value.trim()))) {
+    errors.push(`${fieldName} must be a valid timestamp`);
+  }
+}
+
+function validateNodeCostFields(errors, payload) {
+  validateNullableStringField(errors, payload.provider_id, "provider_id");
+  validateNullableBillingCycleField(errors, payload.billing_cycle, "billing_cycle");
+  validateNullableNonNegativeNumberField(errors, payload.billing_amount, "billing_amount");
+  validateNullableCurrencyField(errors, payload.billing_currency, "billing_currency");
+  validateNullablePositiveIntegerField(errors, payload.amortization_months, "amortization_months");
+  validateNullableNonNegativeNumberField(
+    errors,
+    payload.overage_price_per_gb,
+    "overage_price_per_gb",
+  );
+  validateNullableNonNegativeNumberField(
+    errors,
+    payload.extra_fixed_monthly_cost,
+    "extra_fixed_monthly_cost",
+  );
+  validateNullableDateField(errors, payload.billing_started_at, "billing_started_at");
+  validateNullableStringField(errors, payload.cost_note, "cost_note");
 }
 
 function validateAccessModeField(errors, value, fieldName) {
@@ -197,7 +296,12 @@ export function validateManualNode(payload) {
 
   validateNullablePortField(errors, payload.ssh_port, "ssh_port");
   validateNullablePortField(errors, payload.entry_port, "entry_port");
+  validateNullableStringField(errors, payload.provider, "provider");
+  validateNullableStringField(errors, payload.region, "region");
+  validateNullableStringField(errors, payload.role, "role");
+  validateNullableStringField(errors, payload.note, "note");
   validateAccessModeField(errors, payload.access_mode, "access_mode");
+  validateNodeCostFields(errors, payload);
   validateRouteSection(errors, payload.networking, "networking", {
     allowEntryPort: true,
   });
@@ -231,7 +335,12 @@ export function validateAssetUpdate(payload) {
 
   validateNullablePortField(errors, payload.ssh_port, "ssh_port");
   validateNullablePortField(errors, payload.entry_port, "entry_port");
+  validateNullableStringField(errors, payload.provider, "provider");
+  validateNullableStringField(errors, payload.region, "region");
+  validateNullableStringField(errors, payload.role, "role");
+  validateNullableStringField(errors, payload.note, "note");
   validateAccessModeField(errors, payload.access_mode, "access_mode");
+  validateNodeCostFields(errors, payload);
   validateRouteSection(errors, payload.networking, "networking", {
     allowEntryPort: true,
   });
@@ -565,7 +674,15 @@ export function validateProviderCreate(payload) {
 
   validateStringArray(errors, payload.regions, "regions");
 
-  for (const field of ["account_name", "website", "api_endpoint", "note"]) {
+  for (const field of [
+    "account_name",
+    "website",
+    "api_endpoint",
+    "note",
+    "default_currency",
+    "billing_contact",
+    "cost_note",
+  ]) {
     if (
       payload[field] !== undefined &&
       payload[field] !== null &&
@@ -582,6 +699,19 @@ export function validateProviderCreate(payload) {
   ) {
     errors.push("auto_provision_enabled must be a boolean");
   }
+
+  validateNullableCurrencyField(errors, payload.default_currency, "default_currency");
+  validateNullableNonNegativeNumberField(errors, payload.monthly_budget, "monthly_budget");
+  validateNullableNonNegativeNumberField(
+    errors,
+    payload.budget_alert_threshold,
+    "budget_alert_threshold",
+  );
+  validateNullableNonNegativeNumberField(
+    errors,
+    payload.default_overage_price_per_gb,
+    "default_overage_price_per_gb",
+  );
 
   return errors;
 }

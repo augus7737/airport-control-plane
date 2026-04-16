@@ -1,3 +1,12 @@
+import {
+  formatLocationDisplay,
+  normalizeLocationValue,
+} from "../shared/location-suggestions.js";
+import {
+  findCostItemByProviderId,
+  formatCurrencyTotals,
+} from "../shared/cost-formatters.js";
+
 function splitCommaList(value) {
   return [...new Set(
     String(value || "")
@@ -9,6 +18,25 @@ function splitCommaList(value) {
 
 function joinCommaList(value) {
   return Array.isArray(value) ? value.filter(Boolean).join(", ") : "";
+}
+
+function normalizeProviderRegions(values = []) {
+  return [...new Set(
+    (Array.isArray(values) ? values : [values])
+      .map((value) => normalizeLocationValue(value, { scope: "region" }) || String(value || "").trim())
+      .filter(Boolean),
+  )];
+}
+
+function formatProviderRegions(regions = []) {
+  return normalizeProviderRegions(regions)
+    .map((region) =>
+      formatLocationDisplay(region, {
+        scope: "region",
+        style: "compact",
+      }),
+    )
+    .join(" / ");
 }
 
 export function createProvidersPageModule(dependencies) {
@@ -40,11 +68,9 @@ export function createProvidersPageModule(dependencies) {
   }
 
   function normalizeNodeRegionName(node) {
-    return (
-      String(node?.labels?.region || "").trim() ||
-      String(node?.networking?.entry_region || "").trim() ||
-      null
-    );
+    return normalizeLocationValue(node?.labels?.region, { scope: "region" })
+      || normalizeLocationValue(node?.networking?.entry_region, { scope: "entry" })
+      || null;
   }
 
   function summarizeProviders(nodes = appState.nodes) {
@@ -60,6 +86,7 @@ export function createProvidersPageModule(dependencies) {
       if (!providerMap.has(name)) {
         providerMap.set(name, {
           name,
+          providerIds: new Set(),
           total: 0,
           active: 0,
           degraded: 0,
@@ -75,6 +102,9 @@ export function createProvidersPageModule(dependencies) {
 
       const summary = providerMap.get(name);
       summary.total += 1;
+      if (node?.provider_id) {
+        summary.providerIds.add(node.provider_id);
+      }
       if (region) {
         summary.regions.add(region);
       }
@@ -125,9 +155,17 @@ export function createProvidersPageModule(dependencies) {
 
         return {
           ...summary,
+          provider_id: summary.providerIds.size === 1 ? [...summary.providerIds][0] : null,
           health,
           sourceLabel,
-          regionList: [...summary.regions].sort((a, b) => a.localeCompare(b, "zh-Hans-CN")),
+          regionList: [...summary.regions]
+            .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))
+            .map((region) =>
+              formatLocationDisplay(region, {
+                scope: region === "中国大陆" ? "entry" : "region",
+                style: "compact",
+              }),
+            ),
         };
       })
       .sort(
@@ -150,6 +188,12 @@ export function createProvidersPageModule(dependencies) {
         regions: "",
         status: "active",
         auto_provision_enabled: false,
+        default_currency: "",
+        monthly_budget: "",
+        budget_alert_threshold: "",
+        default_overage_price_per_gb: "",
+        billing_contact: "",
+        cost_note: "",
         note: "",
       };
     }
@@ -159,9 +203,25 @@ export function createProvidersPageModule(dependencies) {
       account_name: String(provider.account_name || ""),
       website: String(provider.website || ""),
       api_endpoint: String(provider.api_endpoint || ""),
-      regions: joinCommaList(provider.regions),
+      regions: joinCommaList(normalizeProviderRegions(provider.regions)),
       status: String(provider.status || "active"),
       auto_provision_enabled: Boolean(provider.auto_provision_enabled),
+      default_currency: String(provider.default_currency || ""),
+      monthly_budget:
+        provider.monthly_budget === undefined || provider.monthly_budget === null
+          ? ""
+          : String(provider.monthly_budget),
+      budget_alert_threshold:
+        provider.budget_alert_threshold === undefined || provider.budget_alert_threshold === null
+          ? ""
+          : String(provider.budget_alert_threshold),
+      default_overage_price_per_gb:
+        provider.default_overage_price_per_gb === undefined ||
+        provider.default_overage_price_per_gb === null
+          ? ""
+          : String(provider.default_overage_price_per_gb),
+      billing_contact: String(provider.billing_contact || ""),
+      cost_note: String(provider.cost_note || ""),
       note: String(provider.note || ""),
     };
   }
@@ -244,10 +304,16 @@ export function createProvidersPageModule(dependencies) {
     }
   }
 
-  function renderProviderNodeStats(summary) {
+  function renderProviderNodeStats(summary, costSummary = null) {
     if (!summary) {
       return '<span class="tiny">当前还没有节点绑定到这个厂商。</span>';
     }
+    const costLine = costSummary
+      ? `总月成本 ${formatCurrencyTotals(costSummary, "待补")} · 闲置 ${formatCurrencyTotals(
+          costSummary.idle_totals_by_currency,
+          "0",
+        )}`
+      : "成本台账待补";
 
     return `
       <div class="ops-inline-meta">
@@ -255,6 +321,7 @@ export function createProvidersPageModule(dependencies) {
         <span class="tiny">直连 ${summary.direct} / 中转 ${summary.relay} · 可用 ${summary.active} / 异常 ${
           summary.failed + summary.degraded
         }</span>
+        <span class="tiny">${escapeHtml(costLine)}</span>
       </div>
     `;
   }
@@ -272,11 +339,18 @@ export function createProvidersPageModule(dependencies) {
     const activeProviderCount = appState.providers.filter(
       (provider) => String(provider.status || "").toLowerCase() === "active",
     ).length;
+    const costSummary = appState.costs.summary || {};
+    const budgetAlertCount = appState.costs.providers.filter((item) => item.budget_alert).length;
     const providerRows = filteredProviders.length
       ? filteredProviders
           .map((provider) => {
             const nodeSummary =
               nodeSummaryByName.get(String(provider.name || "").trim().toLowerCase()) || null;
+            const providerCost = findCostItemByProviderId(appState.costs.providers, provider.id);
+            const budgetUsage =
+              providerCost && Number.isFinite(providerCost.budget_usage_percent)
+                ? `${providerCost.budget_usage_percent}%`
+                : "未设预算";
 
             return `
               <tr>
@@ -289,14 +363,15 @@ export function createProvidersPageModule(dependencies) {
                 <td>
                   <div class="ops-inline-meta">
                     <strong>${escapeHtml(provider.account_name || "未设置账号")}</strong>
-                    <span class="tiny">${escapeHtml(joinCommaList(provider.regions) || "区域待补充")}</span>
+                    <span class="tiny">${escapeHtml(formatProviderRegions(provider.regions) || "区域待补充")}</span>
                   </div>
                 </td>
-                <td>${renderProviderNodeStats(nodeSummary)}</td>
+                <td>${renderProviderNodeStats(nodeSummary, providerCost)}</td>
                 <td>
                   <div class="ops-inline-meta">
                     <strong>${provider.auto_provision_enabled ? "已预留自动建机" : "先手工纳管"}</strong>
                     <span class="tiny">${escapeHtml(provider.api_endpoint || provider.website || "尚未填写 API / 控制台地址")}</span>
+                    <span class="tiny">预算 ${escapeHtml(budgetUsage)}${providerCost?.budget_alert ? " · 已触线" : ""}</span>
                   </div>
                 </td>
                 <td><span class="${statusClassName(provider.status)}">${statusText(provider.status)}</span></td>
@@ -344,6 +419,16 @@ export function createProvidersPageModule(dependencies) {
               <div class="kv-row"><span>链路结构</span><strong>直连 ${provider.direct} / 中转 ${provider.relay}</strong></div>
               <div class="kv-row"><span>接入来源</span><strong>${escapeHtml(provider.sourceLabel)}</strong></div>
               <div class="kv-row"><span>台账状态</span><strong>${escapeHtml(matchedProvider ? "已建档" : "仅节点标签")}</strong></div>
+              ${
+                matchedProvider
+                  ? `<div class="kv-row"><span>总月成本</span><strong>${escapeHtml(
+                      formatCurrencyTotals(
+                        findCostItemByProviderId(appState.costs.providers, matchedProvider.id),
+                        "待补",
+                      ),
+                    )}</strong></div>`
+                  : ""
+              }
             </div>
           </article>
         `;
@@ -353,9 +438,9 @@ export function createProvidersPageModule(dependencies) {
     return `
       <section class="metrics-grid fade-up">
         <article class="panel"><div class="panel-body"><div class="stat-label">已建档厂商</div><div class="stat-value">${appState.providers.length}</div><div class="stat-foot">现在可以手工录入、编辑和维护厂商账号信息。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">活跃厂商</div><div class="stat-value">${activeProviderCount}</div><div class="stat-foot">状态为可用的厂商账号数量。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">自动建机预留</div><div class="stat-value">${autoProvisionCount}</div><div class="stat-foot">已标记为后续可接自动建机的厂商。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">节点中出现的厂商</div><div class="stat-value">${totalNodeProviders}</div><div class="stat-foot">${nodeOnlySummaries.length > 0 ? `还有 ${nodeOnlySummaries.length} 个厂商只存在于节点标签里。` : "节点标签与厂商台账已基本对齐。"}</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">月成本总额</div><div class="stat-value">${escapeHtml(formatCurrencyTotals(costSummary, "待补"))}</div><div class="stat-foot">按节点实时折算，不做汇率换算。</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">闲置成本</div><div class="stat-value">${escapeHtml(formatCurrencyTotals(costSummary.idle_totals_by_currency, "0"))}</div><div class="stat-foot">当前不在任何活跃发布里的节点成本。</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">预算预警</div><div class="stat-value">${budgetAlertCount}</div><div class="stat-foot">${autoProvisionCount} 个厂商已预留自动化；${nodeOnlySummaries.length > 0 ? `另有 ${nodeOnlySummaries.length} 个只存在于节点标签。` : "节点标签与厂商台账已基本对齐。"}</div></div></article>
       </section>
 
       <section class="ops-page-grid fade-up">
@@ -398,7 +483,7 @@ export function createProvidersPageModule(dependencies) {
             <div class="panel-title">
               <div>
                 <h3>${selectedProvider ? "编辑厂商" : "接入新厂商"}</h3>
-                <p>${selectedProvider ? "更新这个厂商的账号、区域和自动建机预留信息。" : "先录入厂商名称和账号信息，后续节点资产就能逐步对齐。"}</p>
+                <p>${selectedProvider ? "更新这个厂商的账号、区域、预算和成本默认值。" : "先录入厂商名称和账号信息，后续节点资产和成本台账就能逐步对齐。"}</p>
               </div>
               ${selectedProvider ? `<span class="provider-pill">编辑中</span>` : '<span class="provider-pill">新建</span>'}
             </div>
@@ -424,6 +509,7 @@ export function createProvidersPageModule(dependencies) {
                 <label class="field">
                   <span>区域标签</span>
                   <input name="regions" value="${escapeHtml(draft.regions)}" placeholder="HKG, LAX, NRT" />
+                  <span class="field-note">支持输入香港、HK、HKG这类别名，保存后会自动统一成规范区域。</span>
                 </label>
                 <label class="field">
                   <span>状态</span>
@@ -431,6 +517,30 @@ export function createProvidersPageModule(dependencies) {
                     <option value="active"${draft.status === "active" ? " selected" : ""}>可用</option>
                     <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
                   </select>
+                </label>
+                <label class="field">
+                  <span>默认币种</span>
+                  <input name="default_currency" value="${escapeHtml(draft.default_currency)}" placeholder="例如 USD" />
+                </label>
+                <label class="field">
+                  <span>月预算</span>
+                  <input name="monthly_budget" type="number" min="0" step="0.01" value="${escapeHtml(draft.monthly_budget)}" placeholder="例如 500" />
+                </label>
+                <label class="field">
+                  <span>预算告警阈值</span>
+                  <input name="budget_alert_threshold" type="number" min="0" step="0.01" value="${escapeHtml(draft.budget_alert_threshold)}" placeholder="例如 80 或 0.8" />
+                </label>
+                <label class="field">
+                  <span>默认超额单价 / GB</span>
+                  <input name="default_overage_price_per_gb" type="number" min="0" step="0.01" value="${escapeHtml(draft.default_overage_price_per_gb)}" placeholder="例如 0.8" />
+                </label>
+                <label class="field">
+                  <span>账单联系人</span>
+                  <input name="billing_contact" value="${escapeHtml(draft.billing_contact)}" placeholder="例如 ops@example.com" />
+                </label>
+                <label class="field" style="grid-column: 1 / -1;">
+                  <span>成本备注</span>
+                  <textarea name="cost_note" rows="3" placeholder="记录预算口径、折旧规则、超额流量结算方式。">${escapeHtml(draft.cost_note)}</textarea>
                 </label>
                 <label class="field" style="grid-column: 1 / -1;">
                   <span>备注</span>
@@ -535,9 +645,24 @@ export function createProvidersPageModule(dependencies) {
         account_name: String(formData.get("account_name") || "").trim() || null,
         website: String(formData.get("website") || "").trim() || null,
         api_endpoint: String(formData.get("api_endpoint") || "").trim() || null,
-        regions: splitCommaList(formData.get("regions")),
+        regions: normalizeProviderRegions(splitCommaList(formData.get("regions"))),
         status: String(formData.get("status") || "active").trim() || "active",
         auto_provision_enabled: formData.get("auto_provision_enabled") === "on",
+        default_currency: String(formData.get("default_currency") || "").trim() || null,
+        monthly_budget:
+          formData.get("monthly_budget") === ""
+            ? null
+            : Number(formData.get("monthly_budget")),
+        budget_alert_threshold:
+          formData.get("budget_alert_threshold") === ""
+            ? null
+            : Number(formData.get("budget_alert_threshold")),
+        default_overage_price_per_gb:
+          formData.get("default_overage_price_per_gb") === ""
+            ? null
+            : Number(formData.get("default_overage_price_per_gb")),
+        billing_contact: String(formData.get("billing_contact") || "").trim() || null,
+        cost_note: String(formData.get("cost_note") || "").trim() || null,
         note: String(formData.get("note") || "").trim() || null,
       };
 

@@ -1,3 +1,5 @@
+import { formatLocationDisplay } from "../shared/location-suggestions.js";
+
 export function createNodeCellHelpersModule(dependencies = {}) {
   const {
     escapeHtml,
@@ -57,7 +59,11 @@ export function createNodeCellHelpersModule(dependencies = {}) {
   function renderPublicIpCell(node) {
     const records = getPublicIpRecords(node);
     const privateIpv4 = node?.facts?.private_ipv4 || null;
-    const regionLabel = node?.labels?.region || "未标记";
+    const regionLabel = formatLocationDisplay(node?.labels?.region, {
+      scope: "region",
+      style: "compact",
+      fallback: "未标记",
+    });
     const primaryRecord = getPrimaryPublicIpRecord(records);
     const secondaryRecords = primaryRecord
       ? records.filter((record) => record.address !== primaryRecord.address)

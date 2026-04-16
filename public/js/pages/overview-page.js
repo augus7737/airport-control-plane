@@ -1,9 +1,12 @@
+import { formatLocationDisplay } from "../shared/location-suggestions.js";
+
 export function createOverviewPageRenderer({
   daysUntil,
   escapeHtml,
   formatNodeConfiguration,
   formatPlatformSshBootstrapState,
   formatRelativeTime,
+  getCostSummary,
   getCountryStats,
   getEffectiveTokenStatus,
   getNodeDisplayName,
@@ -166,6 +169,14 @@ export function createOverviewPageRenderer({
     };
   }
 
+  function formatRegionMeta(value) {
+    return formatLocationDisplay(value, {
+      scope: "region",
+      style: "compact",
+      fallback: "-",
+    });
+  }
+
   function renderMetrics(nodes) {
     const counts = nodes.reduce(
       (acc, node) => {
@@ -230,6 +241,47 @@ export function createOverviewPageRenderer({
             `,
           )
           .join("")}
+      </section>
+      <section class="metrics-grid fade-up">
+        <article class="panel"><div class="panel-body"><div class="stat-label">月成本总额</div><div class="stat-value">${escapeHtml(
+          (() => {
+            const summary = typeof getCostSummary === "function" ? getCostSummary() || {} : {};
+            const totals = Array.isArray(summary?.totals_by_currency) ? summary.totals_by_currency : [];
+            return totals.length > 0
+              ? totals.map((item) => `${item.currency} ${Number(item.amount).toFixed(2)}`).join(" / ")
+              : "待补";
+          })(),
+        )}</div><div class="stat-foot">节点月成本实时折算，不做自动汇率换算。</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">闲置成本</div><div class="stat-value">${escapeHtml(
+          (() => {
+            const summary = typeof getCostSummary === "function" ? getCostSummary() || {} : {};
+            const totals = Array.isArray(summary?.idle_totals_by_currency)
+              ? summary.idle_totals_by_currency
+              : [];
+            return totals.length > 0
+              ? totals.map((item) => `${item.currency} ${Number(item.amount).toFixed(2)}`).join(" / ")
+              : "0";
+          })(),
+        )}</div><div class="stat-foot">当前不在任何活跃发布里的节点成本。</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">7 天内到期成本</div><div class="stat-value">${escapeHtml(
+          (() => {
+            const summary = typeof getCostSummary === "function" ? getCostSummary() || {} : {};
+            const totals = Array.isArray(summary?.expiring_7d_totals_by_currency)
+              ? summary.expiring_7d_totals_by_currency
+              : [];
+            return totals.length > 0
+              ? totals.map((item) => `${item.currency} ${Number(item.amount).toFixed(2)}`).join(" / ")
+              : "0";
+          })(),
+        )}</div><div class="stat-foot">适合提前续费或替换，避免线路中断。</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">成本信息缺失</div><div class="stat-value">${escapeHtml(
+          String(
+            (() => {
+              const summary = typeof getCostSummary === "function" ? getCostSummary() || {} : {};
+              return Number(summary?.cost_missing_node_count || 0);
+            })(),
+          ),
+        )}</div><div class="stat-foot">缺金额、缺周期或缺超额单价的节点数量。</div></div></article>
       </section>
     `;
   }
@@ -341,7 +393,7 @@ export function createOverviewPageRenderer({
         (node) => `
           <div class="event">
             <strong>${getNodeDisplayName(node)}</strong>
-            <p>${statusText(node.status)} · ${node.labels?.provider || "未标记"} / ${node.labels?.region || "-"}</p>
+            <p>${statusText(node.status)} · ${node.labels?.provider || "未标记"} / ${formatRegionMeta(node.labels?.region)}</p>
             <p class="tiny">${formatRelativeTime(node.last_seen_at || node.registered_at)}</p>
           </div>
         `,
@@ -471,7 +523,7 @@ export function createOverviewPageRenderer({
                 const node = item.node;
                 const metaParts = [
                   node.labels?.provider || "未标记",
-                  node.labels?.region || "-",
+                  formatRegionMeta(node.labels?.region),
                   formatNodeConfiguration(node),
                 ].filter(Boolean);
 

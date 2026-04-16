@@ -1,3 +1,9 @@
+import { formatLocationDisplay } from "../shared/location-suggestions.js";
+import {
+  formatCostStatus,
+  formatCurrencyTotals,
+} from "../shared/cost-formatters.js";
+
 export function createNodeTableCellsModule(dependencies = {}) {
   const {
     daysUntil,
@@ -18,6 +24,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
     getExpiryTone,
     getLatestProbeForNode,
     getNodeCountry,
+    getNodeCostSnapshot,
     getNodeDisplayName,
     getProbeSchedulerState,
     getRouteNodes,
@@ -103,7 +110,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
   function renderNodeIdentityCell(node, options = {}) {
     const variant = options.variant || "ledger";
     const provider = node.labels?.provider || "未标记";
-    const region = node.labels?.region || "-";
+    const region = formatLocationDisplay(node.labels?.region, { scope: "region", style: "compact" });
     const accessMode = formatAccessMode(getAccessMode(node));
     const subline = variant === "preview" ? `${provider} / ${region} · ${accessMode}` : node.id;
 
@@ -117,7 +124,11 @@ export function createNodeTableCellsModule(dependencies = {}) {
 
   function renderNodePlacementCell(node) {
     const provider = node.labels?.provider || "未标记厂商";
-    const region = node.labels?.region || "未标记区域";
+    const region = formatLocationDisplay(node.labels?.region, {
+      scope: "region",
+      style: "compact",
+      fallback: "未标记区域",
+    });
     const accessMode = formatAccessMode(getAccessMode(node));
     const country = getNodeCountry(node);
     const routeSummary = formatRouteSummary(node, getRouteNodes());
@@ -165,13 +176,22 @@ export function createNodeTableCellsModule(dependencies = {}) {
     const renewal = formatRenewal(node.commercial?.auto_renew);
     const bandwidth = node.commercial?.bandwidth_mbps ? `${node.commercial.bandwidth_mbps} Mbps` : "未记录";
     const traffic = formatTraffic(node.commercial?.traffic_used_gb, node.commercial?.traffic_quota_gb);
+    const costSnapshot =
+      typeof getNodeCostSnapshot === "function" ? getNodeCostSnapshot(node.id) : null;
+    const costLabel = costSnapshot
+      ? formatCurrencyTotals(
+          costSnapshot,
+          costSnapshot.problems?.[0] || "待补",
+        )
+      : "待补";
+    const costStatus = formatCostStatus(costSnapshot?.cost_status);
     const inlineMeta = compact ? renewal : [renewal, bandwidth].filter(Boolean).join(" · ");
 
     return `
       <div class="cell-hover-card asset-cell-card">
         <div class="asset-cell-inline">
           <span class="asset-expiry-pill tone-${expiryTone}">${escapeHtml(expiryLabel)}</span>
-          <span class="asset-inline-note">${escapeHtml(inlineMeta)}</span>
+          <span class="asset-inline-note">${escapeHtml([inlineMeta, `月成本 ${costLabel}`].filter(Boolean).join(" · "))}</span>
         </div>
         <div class="cell-hover-panel">
           <div class="cell-hover-title">资产信息</div>
@@ -195,6 +215,14 @@ export function createNodeTableCellsModule(dependencies = {}) {
             <div class="cell-hover-row">
               <span>流量</span>
               <strong>${escapeHtml(traffic)}</strong>
+            </div>
+            <div class="cell-hover-row">
+              <span>月成本</span>
+              <strong>${escapeHtml(costLabel)}</strong>
+            </div>
+            <div class="cell-hover-row">
+              <span>成本状态</span>
+              <strong>${escapeHtml(costStatus)}</strong>
             </div>
           </div>
         </div>

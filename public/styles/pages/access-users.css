@@ -185,18 +185,130 @@ body[data-page="access-users"] tr.is-selected td {
   background: rgba(31, 111, 127, 0.06);
 }
 
-body[data-page="access-users"] .share-summary-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
+body[data-page="access-users"] .share-panel {
+  margin-top: 14px;
 }
 
-body[data-page="access-users"] .share-summary-strip > div {
+body[data-page="access-users"] .share-panel-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+body[data-page="access-users"] .share-empty-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px dashed rgba(31, 111, 127, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 252, 0.92)),
+    rgba(255, 255, 255, 0.9);
+}
+
+body[data-page="access-users"] .share-empty-card strong,
+body[data-page="access-users"] .share-overview-copy h4 {
+  letter-spacing: -0.04em;
+}
+
+body[data-page="access-users"] .share-empty-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.65;
+  max-width: 64ch;
+}
+
+body[data-page="access-users"] .share-workspace-shell {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.88fr) minmax(0, 1.12fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+body[data-page="access-users"] .share-overview-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(31, 111, 127, 0.14);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(247, 252, 253, 0.98), rgba(255, 255, 255, 0.94)),
+    rgba(255, 255, 255, 0.92);
+}
+
+body[data-page="access-users"] .share-overview-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+body[data-page="access-users"] .share-overview-copy {
+  display: grid;
+  gap: 6px;
+}
+
+body[data-page="access-users"] .share-overview-copy h4,
+body[data-page="access-users"] .share-target-section-head h4 {
+  margin: 0;
+}
+
+body[data-page="access-users"] .share-overview-copy h4 {
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+body[data-page="access-users"] .share-overview-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.65;
+  max-width: 58ch;
+}
+
+body[data-page="access-users"] .share-mix-pill {
+  min-height: 30px;
+  padding-inline: 12px;
+  font-weight: 700;
+}
+
+body[data-page="access-users"] .share-mix-pill-relay {
+  border-color: rgba(13, 148, 136, 0.2);
+  background: rgba(204, 251, 241, 0.9);
+  color: #115e59;
+}
+
+body[data-page="access-users"] .share-mix-pill-direct {
+  border-color: rgba(217, 119, 6, 0.18);
+  background: rgba(254, 243, 199, 0.92);
+  color: #9a3412;
+}
+
+body[data-page="access-users"] .share-mix-pill-mixed {
+  border-color: rgba(8, 145, 178, 0.18);
+  background: rgba(224, 242, 254, 0.95);
+  color: #0f4c81;
+}
+
+body[data-page="access-users"] .share-mix-pill-empty {
+  border-color: rgba(100, 116, 139, 0.12);
+  background: rgba(241, 245, 249, 0.95);
+  color: #475569;
+}
+
+body[data-page="access-users"] .share-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+body[data-page="access-users"] .share-summary-card {
   display: grid;
   gap: 4px;
-  min-height: 58px;
-  padding: 10px 12px;
+  min-height: 72px;
+  padding: 12px;
   border: 1px solid rgba(31, 111, 127, 0.12);
   border-radius: 14px;
   background:
@@ -204,16 +316,36 @@ body[data-page="access-users"] .share-summary-strip > div {
     rgba(255, 255, 255, 0.9);
 }
 
-body[data-page="access-users"] .share-summary-strip span,
+body[data-page="access-users"] .share-summary-card-relay {
+  border-color: rgba(13, 148, 136, 0.16);
+  background:
+    linear-gradient(180deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.94)),
+    rgba(255, 255, 255, 0.9);
+}
+
+body[data-page="access-users"] .share-summary-card-direct {
+  border-color: rgba(217, 119, 6, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.94)),
+    rgba(255, 255, 255, 0.9);
+}
+
+body[data-page="access-users"] .share-summary-card span,
 body[data-page="access-users"] .share-target-meta span,
 body[data-page="access-users"] .share-link-head span {
   color: var(--muted);
   font-size: 11px;
 }
 
-body[data-page="access-users"] .share-summary-strip strong,
+body[data-page="access-users"] .share-summary-card strong,
 body[data-page="access-users"] .share-target-meta strong {
   line-height: 1.35;
+}
+
+body[data-page="access-users"] .share-summary-card small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 body[data-page="access-users"] .share-link-block {
@@ -225,6 +357,43 @@ body[data-page="access-users"] .share-link-block {
   border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 252, 0.95)),
+    rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+body[data-page="access-users"] .share-link-block-aggregate {
+  border-color: rgba(31, 111, 127, 0.16);
+  background:
+    linear-gradient(180deg, rgba(246, 251, 253, 0.98), rgba(255, 255, 255, 0.95)),
+    rgba(255, 255, 255, 0.92);
+  grid-template-columns: minmax(0, 1.18fr) 220px;
+  gap: 12px 14px;
+  align-items: start;
+}
+
+body[data-page="access-users"] .share-link-block-aggregate .share-link-head,
+body[data-page="access-users"] .share-link-block-aggregate .share-readonly,
+body[data-page="access-users"] .share-link-block-aggregate .share-action-row {
+  grid-column: 1;
+}
+
+body[data-page="access-users"] .share-link-block-aggregate .share-qr-shell {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  min-height: 100%;
+}
+
+body[data-page="access-users"] .share-link-block-relay {
+  border-color: rgba(13, 148, 136, 0.18);
+  background:
+    linear-gradient(180deg, rgba(240, 253, 250, 0.98), rgba(236, 253, 245, 0.95)),
+    rgba(255, 255, 255, 0.92);
+}
+
+body[data-page="access-users"] .share-link-block-direct {
+  border-color: rgba(217, 119, 6, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 247, 237, 0.95)),
     rgba(255, 255, 255, 0.92);
 }
 
@@ -249,6 +418,7 @@ body[data-page="access-users"] .share-readonly {
 
 body[data-page="access-users"] .share-action-row {
   align-items: center;
+  gap: 8px;
 }
 
 body[data-page="access-users"] .share-qr-shell {
@@ -279,7 +449,6 @@ body[data-page="access-users"] .share-qr-empty {
 body[data-page="access-users"] .share-warning-list {
   display: grid;
   gap: 8px;
-  margin-top: 12px;
 }
 
 body[data-page="access-users"] .share-warning-item {
@@ -292,16 +461,76 @@ body[data-page="access-users"] .share-warning-item {
   line-height: 1.55;
 }
 
+body[data-page="access-users"] .share-route-sections {
+  display: grid;
+  gap: 18px;
+}
+
 body[data-page="access-users"] .share-target-list {
   display: grid;
   gap: 12px;
-  margin-top: 14px;
+}
+
+body[data-page="access-users"] .share-target-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+    rgba(255, 255, 255, 0.92);
+}
+
+body[data-page="access-users"] .share-target-section-relay {
+  border-color: rgba(13, 148, 136, 0.16);
+  background:
+    linear-gradient(180deg, rgba(240, 253, 250, 0.92), rgba(255, 255, 255, 0.95)),
+    rgba(255, 255, 255, 0.92);
+}
+
+body[data-page="access-users"] .share-target-section-direct {
+  border-color: rgba(217, 119, 6, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, 0.92), rgba(255, 255, 255, 0.95)),
+    rgba(255, 255, 255, 0.92);
+}
+
+body[data-page="access-users"] .share-target-section-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+body[data-page="access-users"] .share-target-section-head > div {
+  display: grid;
+  gap: 6px;
+}
+
+body[data-page="access-users"] .share-target-section-head h4,
+body[data-page="access-users"] .share-target-section-head p {
+  margin: 0;
+}
+
+body[data-page="access-users"] .share-target-section-head p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+body[data-page="access-users"] .share-target-section-count {
+  align-self: start;
+  white-space: nowrap;
 }
 
 body[data-page="access-users"] .share-target-card {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  grid-template-columns: minmax(260px, 0.82fr) minmax(0, 1.18fr);
+  gap: 14px 16px;
+  padding: 16px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 18px;
   background:
@@ -309,18 +538,27 @@ body[data-page="access-users"] .share-target-card {
     rgba(255, 255, 255, 0.92);
 }
 
+body[data-page="access-users"] .share-target-card-relay {
+  border-color: rgba(13, 148, 136, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+body[data-page="access-users"] .share-target-card-direct {
+  border-color: rgba(217, 119, 6, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
 body[data-page="access-users"] .share-target-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 10px;
+  align-content: start;
 }
 
 body[data-page="access-users"] .share-target-meta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  align-content: start;
 }
 
 body[data-page="access-users"] .share-target-meta > div {
@@ -332,10 +570,52 @@ body[data-page="access-users"] .share-target-meta > div {
   background: rgba(248, 250, 252, 0.92);
 }
 
+body[data-page="access-users"] .share-target-title strong {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+body[data-page="access-users"] .share-target-title .tiny {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+body[data-page="access-users"] .share-target-caption {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body[data-page="access-users"] .share-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding-inline: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+body[data-page="access-users"] .share-mode-pill-relay {
+  border-color: rgba(13, 148, 136, 0.2);
+  background: rgba(204, 251, 241, 0.9);
+  color: #115e59;
+}
+
+body[data-page="access-users"] .share-mode-pill-direct {
+  border-color: rgba(217, 119, 6, 0.18);
+  background: rgba(254, 243, 199, 0.92);
+  color: #9a3412;
+}
+
 body[data-page="access-users"] .share-link-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: stretch;
 }
 
 body[data-page="releases"] .release-message-row {
@@ -371,10 +651,21 @@ body[data-page="system-users"] .checkbox-row input {
     grid-template-columns: 1fr;
   }
 
-  body[data-page="access-users"] .share-summary-strip,
+  body[data-page="access-users"] .share-workspace-shell,
+  body[data-page="access-users"] .share-link-block-aggregate,
+  body[data-page="access-users"] .share-target-card,
   body[data-page="access-users"] .share-target-meta,
   body[data-page="access-users"] .share-link-grid {
     grid-template-columns: 1fr;
+  }
+
+  body[data-page="access-users"] .share-link-block-aggregate .share-link-head,
+  body[data-page="access-users"] .share-link-block-aggregate .share-readonly,
+  body[data-page="access-users"] .share-link-block-aggregate .share-action-row,
+  body[data-page="access-users"] .share-link-block-aggregate .share-qr-shell,
+  body[data-page="access-users"] .share-link-grid {
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 
@@ -385,5 +676,15 @@ body[data-page="system-users"] .checkbox-row input {
   body[data-page="proxy-profiles"] .ops-form-grid,
   body[data-page="releases"] .ops-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  body[data-page="access-users"] .share-panel-body,
+  body[data-page="access-users"] .share-target-section {
+    padding: 14px;
+  }
+
+  body[data-page="access-users"] .share-overview-card,
+  body[data-page="access-users"] .share-target-card {
+    padding: 12px;
   }
 }
