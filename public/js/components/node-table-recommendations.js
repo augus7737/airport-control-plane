@@ -80,8 +80,10 @@ export function createNodeRecommendationsModule(dependencies = {}) {
     if (["ssh_timeout", "ssh_no_route", "ssh_connection_closed"].includes(reasonCode) && accessMode === "relay") {
       pushRecommendation(
         items,
-        "检查管理跳板",
-        "当前节点需要经 SSH 跳板接入，建议先检查入口机与目标节点之间的管理链路是否稳定。",
+        "检查管理中转",
+        node?.management?.proxy_host
+          ? "当前节点需要经 SSH 代理接入，建议先检查代理主机到目标节点之间的管理链路是否稳定。"
+          : "当前节点需要经 SSH 跳板接入，建议先检查入口机与目标节点之间的管理链路是否稳定。",
       );
     }
 
@@ -96,11 +98,17 @@ export function createNodeRecommendationsModule(dependencies = {}) {
       );
     }
 
-    if (accessMode === "relay" && !node.management?.relay_node_id && !node.management?.relay_label) {
+    if (
+      accessMode === "relay" &&
+      !node.management?.relay_node_id &&
+      !node.management?.relay_label &&
+      !node.management?.proxy_host &&
+      !node.management?.proxy_label
+    ) {
       pushRecommendation(
         items,
-        "补全管理跳板",
-        "当前节点已标记为 SSH 经跳板，但还没有绑定实际跳板机标识，后续排障会很费劲。",
+        "补全管理中转",
+        "当前节点已标记为经 SSH 中转，但还没有绑定实际跳板节点或代理主机，后续排障会很费劲。",
       );
     }
 

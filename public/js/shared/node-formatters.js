@@ -6,12 +6,23 @@ export function getManagementAccessMode(node) {
   return node?.management?.access_mode || "direct";
 }
 
+export function hasManagementProxy(node) {
+  return Boolean(node?.management?.proxy_host);
+}
+
 export function formatAccessMode(value) {
   return value === "relay" ? "经中转" : "直连";
 }
 
-export function formatManagementAccessMode(value) {
-  return value === "relay" ? "SSH 经跳板" : "SSH 直连";
+export function formatManagementAccessMode(valueOrNode, maybeNode = null) {
+  const node = maybeNode ?? (valueOrNode && typeof valueOrNode === "object" ? valueOrNode : null);
+  const value = node ? getManagementAccessMode(node) : valueOrNode;
+
+  if (value === "relay") {
+    return hasManagementProxy(node) ? "SSH 经代理" : "SSH 经跳板";
+  }
+
+  return "SSH 直连";
 }
 
 export function getNodeDisplayName(node) {

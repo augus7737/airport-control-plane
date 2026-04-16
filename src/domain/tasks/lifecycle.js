@@ -361,7 +361,7 @@ export function createTaskLifecycleDomain(dependencies) {
       ssh_reachable: Boolean(probe.control_ready),
       business_entry_reachable: toCapabilityFlag(probe.business_ready),
       relay_upstream_reachable: toCapabilityFlag(probe.relay_upstream_ready),
-      relay_used: probe.transport_kind === "ssh-relay",
+      relay_used: ["ssh-relay", "ssh-proxy"].includes(probe.transport_kind),
     };
   }
 

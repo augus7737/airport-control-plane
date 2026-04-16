@@ -192,6 +192,7 @@ export function buildNodeDetailViewModel({
   daysUntil,
   formatAccessMode,
   formatDate,
+  formatManagementAccessMode,
   formatNodeConfiguration,
   formatNodeIpOwnershipSummary,
   formatNodeSshPort,
@@ -238,8 +239,12 @@ export function buildNodeDetailViewModel({
     managementAccessMode === "relay"
       ? managementRelayNode
         ? getNodeDisplayName(managementRelayNode)
-        : node.management?.relay_label || node.management?.relay_node_id || "未指定跳板"
-      : "无需跳板";
+        : node.management?.proxy_label ||
+          node.management?.proxy_host ||
+          node.management?.relay_label ||
+          node.management?.relay_node_id ||
+          "未指定中转"
+      : "无需中转";
   const nodeTasks = getTasksForNode(node, getTasks(), sortTasks);
   const recentNodeTasks = nodeTasks.slice(0, 4);
   const nodeProbes = getProbesForNode(node, getProbes(), sortProbes).slice(0, 4);
@@ -443,8 +448,8 @@ export function buildNodeDetailViewModel({
     ["业务中转区域", accessMode === "relay" ? node.networking?.relay_region || relayNode?.labels?.region || "-" : "-"],
     ["业务链路摘要", routeSummaryText],
     ["业务备注", node.networking?.route_note || "-"],
-    ["管理链路", managementAccessMode === "relay" ? "SSH 经跳板" : "SSH 直连"],
-    ["管理跳板", managementRelayLabel],
+    ["管理链路", formatManagementAccessMode(node)],
+    ["管理中转", managementRelayLabel],
     ["管理备注", node.management?.route_note || "-"],
   ];
   const healthOverviewRows = [

@@ -797,7 +797,7 @@ exit 127
 
     if (!result.tcp?.success) {
       if (result.target.mode === "relay") {
-        return `管理链路 TCP 未连通 ${targetLabel}，当前节点需要经 SSH 跳板接入。`;
+        return `管理链路 TCP 未连通 ${targetLabel}，当前节点需要经 SSH 中转接入。`;
       }
       return `管理链路 TCP 未连通 ${targetLabel}。`;
     }
@@ -1252,7 +1252,7 @@ exit 127
         ssh_reachable: Boolean(probe.control_ready),
         business_entry_reachable: toCapabilityFlag(probe.business_ready),
         relay_upstream_reachable: toCapabilityFlag(probe.relay_upstream_ready),
-        relay_used: probe.transport_kind === "ssh-relay",
+        relay_used: ["ssh-relay", "ssh-proxy"].includes(probe.transport_kind),
       },
     };
   }

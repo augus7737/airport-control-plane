@@ -310,11 +310,16 @@ export function resolveTransportLabel(target, operation = null) {
   const readLabel = (source) => {
     if (!source) return null;
     if (typeof source === "string") {
-      return source.trim() || null;
+      const normalized = source.trim();
+      if (!normalized) return null;
+      if (normalized === "ssh-relay") return "SSH 经跳板";
+      if (normalized === "ssh-proxy") return "SSH 经代理";
+      if (normalized === "ssh-direct") return "SSH 直连";
+      return normalized;
     }
     if (typeof source === "object") {
       if (source.label) return String(source.label);
-      if (source.kind) return String(source.kind);
+      if (source.kind) return readLabel(source.kind);
     }
     return null;
   };
@@ -342,7 +347,9 @@ export function resolveTransportLabel(target, operation = null) {
     target?.requested_management_access_mode ||
     target?.access_mode;
 
-  if (managementAccessMode === "relay") return "SSH 经跳板";
+  if (managementAccessMode === "relay") {
+    return target?.transport_kind === "ssh-proxy" ? "SSH 经代理" : "SSH 经跳板";
+  }
   if (managementAccessMode === "direct") return "SSH 直连";
   return "未回传";
 }

@@ -89,6 +89,37 @@ function validateRouteSection(errors, payload, fieldName, options = {}) {
   }
 
   if (
+    options.allowProxyHost &&
+    payload.proxy_host !== undefined &&
+    payload.proxy_host !== null &&
+    typeof payload.proxy_host !== "string"
+  ) {
+    errors.push(`${fieldName}.proxy_host must be a string`);
+  }
+
+  if (
+    options.allowProxyUser &&
+    payload.proxy_user !== undefined &&
+    payload.proxy_user !== null &&
+    typeof payload.proxy_user !== "string"
+  ) {
+    errors.push(`${fieldName}.proxy_user must be a string`);
+  }
+
+  if (
+    options.allowProxyLabel &&
+    payload.proxy_label !== undefined &&
+    payload.proxy_label !== null &&
+    typeof payload.proxy_label !== "string"
+  ) {
+    errors.push(`${fieldName}.proxy_label must be a string`);
+  }
+
+  if (options.allowProxyPort) {
+    validateNullablePortField(errors, payload.proxy_port, `${fieldName}.proxy_port`);
+  }
+
+  if (
     options.allowIpv6Flag &&
     payload.allow_ipv6 !== undefined &&
     payload.allow_ipv6 !== null &&
@@ -174,6 +205,10 @@ export function validateManualNode(payload) {
     allowSshPort: true,
     allowSshUser: true,
     allowSshHost: true,
+    allowProxyHost: true,
+    allowProxyPort: true,
+    allowProxyUser: true,
+    allowProxyLabel: true,
     allowIpv6Flag: true,
   });
 
@@ -204,6 +239,10 @@ export function validateAssetUpdate(payload) {
     allowSshPort: true,
     allowSshUser: true,
     allowSshHost: true,
+    allowProxyHost: true,
+    allowProxyPort: true,
+    allowProxyUser: true,
+    allowProxyLabel: true,
     allowIpv6Flag: true,
   });
 

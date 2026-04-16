@@ -41,6 +41,22 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
         accessMode === "relay"
           ? normalizeLocationValue(formData.get("management_relay_region"), { scope: "region" })
           : null,
+      proxy_host:
+        accessMode === "relay"
+          ? String(formData.get("management_proxy_host") || "").trim() || null
+          : null,
+      proxy_port:
+        accessMode === "relay"
+          ? toNumberOrNull(formData.get("management_proxy_port"))
+          : null,
+      proxy_user:
+        accessMode === "relay"
+          ? String(formData.get("management_proxy_user") || "").trim() || null
+          : null,
+      proxy_label:
+        accessMode === "relay"
+          ? String(formData.get("management_proxy_label") || "").trim() || null
+          : null,
       ssh_user: String(formData.get("management_ssh_user") || "").trim() || null,
       route_note: String(formData.get("management_route_note") || "").trim() || null,
     };

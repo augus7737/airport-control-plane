@@ -196,11 +196,11 @@ export function createOperationsExecutorDomain(dependencies) {
         : operationLogLine(startedAt, `执行命令 ${String(effectivePayload.command || "").trim()}`),
     );
 
-    if (transport.kind === "ssh-relay") {
+    if (["ssh-relay", "ssh-proxy"].includes(transport.kind)) {
       banner.push(
         operationLogLine(
           startedAt,
-          `管理链路 ${transport.note || `${node.facts?.hostname || node.id} 通过 SSH 跳板接入`}`,
+          `管理链路 ${transport.note || `${node.facts?.hostname || node.id} 通过 SSH 中转接入`}`,
         ),
       );
     }
@@ -227,8 +227,8 @@ export function createOperationsExecutorDomain(dependencies) {
       hostname: node.facts?.hostname || node.id,
       provider: node.labels?.provider || null,
       region: node.labels?.region || null,
-      access_mode: transport.kind === "ssh-relay" ? "relay" : "direct",
-      management_access_mode: transport.kind === "ssh-relay" ? "relay" : "direct",
+      access_mode: ["ssh-relay", "ssh-proxy"].includes(transport.kind) ? "relay" : "direct",
+      management_access_mode: ["ssh-relay", "ssh-proxy"].includes(transport.kind) ? "relay" : "direct",
       summary: inferOperationSummary(node, effectivePayload),
       status,
       output,

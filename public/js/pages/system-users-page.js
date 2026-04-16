@@ -551,7 +551,7 @@ export function createSystemUsersPageModule(dependencies) {
                                   />
                                   <span>
                                     <strong>${escapeHtml(getNodeName(node.id))}</strong>
-                                    <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml((node.management?.access_mode || "direct") === "relay" ? "SSH 经跳板" : "SSH 直连")}</span>
+                                    <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml((node.management?.access_mode || "direct") === "relay" ? (node.management?.proxy_host ? "SSH 经代理" : "SSH 经跳板") : "SSH 直连")}</span>
                                   </span>
                                 </label>
                               `,

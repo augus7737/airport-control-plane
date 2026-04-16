@@ -3,6 +3,7 @@ export function createNodeShellPageModule(dependencies = {}) {
     appState,
     escapeHtml,
     formatAccessMode,
+    formatManagementAccessMode,
     formatNodeConfiguration,
     formatNodeSshPort,
     formatRelativeTime,
@@ -51,7 +52,7 @@ export function createNodeShellPageModule(dependencies = {}) {
       return '<div class="empty">当前还没有可打开终端的节点。先完成节点纳管，再进入独立终端页。</div>';
     }
     const sessionLabel = appState.nodeTerminal.sessionTransportLabel;
-    const relayMode = (node.management?.access_mode || "direct") === "relay" ? "SSH 经跳板" : "SSH 直连";
+    const relayMode = formatManagementAccessMode(node);
     const sshPort = formatNodeSshPort(node);
 
     return `

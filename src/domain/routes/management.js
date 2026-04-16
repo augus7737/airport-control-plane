@@ -49,6 +49,31 @@ function getNodeDisplayName(node) {
   );
 }
 
+function inferHostFamily(host) {
+  const value = normalizeString(host);
+  if (!value) {
+    return null;
+  }
+
+  return value.includes(":") ? "ipv6" : "ipv4";
+}
+
+function buildProxyEndpoint(host, port, sshUser, label = null) {
+  const proxyHost = normalizeString(host);
+  if (!proxyHost) {
+    return null;
+  }
+
+  return {
+    host: proxyHost,
+    port: normalizePort(port) ?? 22,
+    family: inferHostFamily(proxyHost),
+    source: "proxy_host",
+    ssh_user: normalizeString(sshUser) ?? null,
+    label: normalizeString(label) ?? proxyHost,
+  };
+}
+
 function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
   const { allowLegacyNetworkingFallback = false } = options;
   const management = isPlainObject(node?.management) ? node.management : {};
@@ -59,6 +84,10 @@ function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
     normalizeString(node?.ssh_access_mode) ??
     normalizeString(legacyNetworking.access_mode) ??
     "direct";
+  const requestedProxyHost =
+    requestedAccessMode === "relay"
+      ? normalizeString(management.proxy_host) ?? normalizeString(node?.ssh_proxy_host)
+      : null;
 
   return {
     requested_access_mode: requestedAccessMode === "relay" ? "relay" : "direct",
@@ -79,6 +108,25 @@ function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
         ? normalizeString(management.relay_region) ??
           normalizeString(node?.ssh_relay_region) ??
           normalizeString(legacyNetworking.relay_region)
+        : null,
+    proxy_host:
+      requestedProxyHost,
+    proxy_port:
+      requestedProxyHost
+        ? normalizePort(management.proxy_port) ??
+          normalizePort(node?.ssh_proxy_port) ??
+          22
+        : null,
+    proxy_user:
+      requestedProxyHost
+        ? normalizeString(management.proxy_user) ??
+          normalizeString(node?.ssh_proxy_user) ??
+          defaultNodeSshUser
+        : null,
+    proxy_label:
+      requestedProxyHost
+        ? normalizeString(management.proxy_label) ??
+          normalizeString(node?.ssh_proxy_label)
         : null,
     route_note:
       normalizeString(management.route_note) ??
@@ -182,6 +230,15 @@ export function createManagementRouteDomain(dependencies = {}) {
       management.requested_access_mode === "relay" && management.relay_node_id
         ? getNodeById(management.relay_node_id)
         : null;
+    const proxyTarget =
+      management.requested_access_mode === "relay"
+        ? buildProxyEndpoint(
+            management.proxy_host,
+            management.proxy_port,
+            management.proxy_user,
+            management.proxy_label,
+          )
+        : null;
     const relayConfig = relayNode
       ? resolveManagementConfig(relayNode, defaultNodeSshUser, {
           allowLegacyNetworkingFallback,
@@ -206,14 +263,17 @@ export function createManagementRouteDomain(dependencies = {}) {
           sshPort: relayConfig?.ssh_port ?? 19822,
           allowIpv6: relayConfig?.allow_ipv6 ?? false,
         })
-      : null;
+      : proxyTarget;
+    const relayKind = relayNode ? "managed-node" : proxyTarget ? "ssh-proxy" : null;
     const problems = [];
+    const hasRelayNodeConfig = Boolean(management.relay_node_id);
+    const hasProxyConfig = Boolean(proxyTarget?.host);
 
-    if (management.requested_access_mode === "relay" && !management.relay_node_id) {
-      problems.push("management_relay_node_id_missing");
+    if (management.requested_access_mode === "relay" && !hasRelayNodeConfig && !hasProxyConfig) {
+      problems.push("management_relay_target_missing");
     }
 
-    if (management.requested_access_mode === "relay" && !relayNode) {
+    if (management.requested_access_mode === "relay" && hasRelayNodeConfig && !relayNode && !hasProxyConfig) {
       problems.push("management_relay_node_missing");
     }
 
@@ -238,25 +298,31 @@ export function createManagementRouteDomain(dependencies = {}) {
     }
 
     if (management.requested_access_mode === "relay" && !relayTarget?.host) {
-      problems.push("management_relay_target_missing");
+      problems.push(hasProxyConfig ? "management_proxy_target_missing" : "management_relay_target_missing");
     }
 
     const effectiveAccessMode =
       management.requested_access_mode === "relay" && relayTarget?.host ? "relay" : "direct";
     const routeLabel =
       effectiveAccessMode === "relay"
-        ? `控制面 -> ${getNodeDisplayName(relayNode)} -> ${getNodeDisplayName(node)}`
+        ? relayKind === "ssh-proxy"
+          ? `控制面 -> SSH 代理 ${proxyTarget?.label || proxyTarget?.host || "未命名代理"} -> ${getNodeDisplayName(node)}`
+          : `控制面 -> ${getNodeDisplayName(relayNode)} -> ${getNodeDisplayName(node)}`
         : `控制面 -> ${getNodeDisplayName(node)}`;
     const note =
       effectiveAccessMode === "relay"
-        ? `控制面将通过 SSH 跳板 ${getNodeDisplayName(relayNode)} 连接 ${getNodeDisplayName(node)}。`
+        ? relayKind === "ssh-proxy"
+          ? `控制面将通过 SSH 代理 ${proxyTarget?.label || proxyTarget?.host || "未命名代理"} 连接 ${getNodeDisplayName(node)}。`
+          : `控制面将通过 SSH 跳板 ${getNodeDisplayName(relayNode)} 连接 ${getNodeDisplayName(node)}。`
         : `控制面将直接连接 ${getNodeDisplayName(node)}。`;
 
     return {
       access_mode: effectiveAccessMode,
       requested_access_mode: management.requested_access_mode,
+      relay_kind: relayKind,
       relay_node: relayNode,
       relay_target: relayTarget,
+      proxy_target: relayKind === "ssh-proxy" ? proxyTarget : null,
       target,
       ssh_user: management.ssh_user,
       allow_ipv6: management.allow_ipv6,

@@ -113,13 +113,13 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field full">
                 <label>管理链路</label>
-                <div class="field-note">这里描述控制面怎么 SSH 接管这台节点，例如直连，或“控制面 -> 香港跳板 -> 节点”。</div>
+                <div class="field-note">这里描述控制面怎么 SSH 接管这台节点，例如直连、经纳管跳板节点，或经独立 SSH 代理主机。</div>
               </div>
               <div class="field">
                 <label for="manual-management-access-mode">管理接入方式</label>
                 <select id="manual-management-access-mode" name="management_access_mode">
                   <option value="direct">SSH 直连</option>
-                  <option value="relay">SSH 经跳板</option>
+                  <option value="relay">SSH 经中转</option>
                 </select>
               </div>
               <div class="field">
@@ -138,9 +138,25 @@ export function createNodeAssetModalTemplatesModule() {
                 <label for="manual-management-relay-region">管理跳板区域</label>
                 <input id="manual-management-relay-region" name="management_relay_region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
               </div>
+              <div class="field">
+                <label for="manual-management-proxy-host">SSH 代理主机</label>
+                <input id="manual-management-proxy-host" name="management_proxy_host" placeholder="未纳管代理可填域名或 IP，例如 hk-proxy.example.com" />
+              </div>
+              <div class="field">
+                <label for="manual-management-proxy-port">SSH 代理端口</label>
+                <input id="manual-management-proxy-port" name="management_proxy_port" type="number" min="1" max="65535" placeholder="默认 22，按代理机实际端口填写" />
+              </div>
+              <div class="field">
+                <label for="manual-management-proxy-user">SSH 代理用户</label>
+                <input id="manual-management-proxy-user" name="management_proxy_user" placeholder="例如 jump / root" />
+              </div>
+              <div class="field">
+                <label for="manual-management-proxy-label">SSH 代理备注名</label>
+                <input id="manual-management-proxy-label" name="management_proxy_label" placeholder="例如 香港代理 / 东京堡垒机" />
+              </div>
               <div class="field full">
                 <label for="manual-management-route-note">管理链路说明</label>
-                <textarea id="manual-management-route-note" name="management_route_note" placeholder="例如：控制面 -> 香港跳板 -> 目标节点。"></textarea>
+                <textarea id="manual-management-route-note" name="management_route_note" placeholder="例如：控制面 -> 香港 SSH 代理 -> 目标节点。"></textarea>
               </div>
               <div class="field full">
                 <label>续费方式</label>
@@ -282,13 +298,13 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field full">
                 <label>管理链路</label>
-                <div class="field-note">专门描述控制面怎么 SSH 接管这台节点。</div>
+                <div class="field-note">专门描述控制面怎么 SSH 接管这台节点，可填纳管跳板，或未纳管的独立 SSH 代理主机。</div>
               </div>
               <div class="field">
                 <label for="asset-management-access-mode">管理接入方式</label>
                 <select id="asset-management-access-mode" name="management_access_mode">
                   <option value="direct">SSH 直连</option>
-                  <option value="relay">SSH 经跳板</option>
+                  <option value="relay">SSH 经中转</option>
                 </select>
               </div>
               <div class="field">
@@ -307,9 +323,25 @@ export function createNodeAssetModalTemplatesModule() {
                 <label for="asset-management-relay-region">管理跳板区域</label>
                 <input id="asset-management-relay-region" name="management_relay_region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
               </div>
+              <div class="field">
+                <label for="asset-management-proxy-host">SSH 代理主机</label>
+                <input id="asset-management-proxy-host" name="management_proxy_host" placeholder="未纳管代理可填域名或 IP，例如 hk-proxy.example.com" />
+              </div>
+              <div class="field">
+                <label for="asset-management-proxy-port">SSH 代理端口</label>
+                <input id="asset-management-proxy-port" name="management_proxy_port" type="number" min="1" max="65535" placeholder="默认 22，按代理机实际端口填写" />
+              </div>
+              <div class="field">
+                <label for="asset-management-proxy-user">SSH 代理用户</label>
+                <input id="asset-management-proxy-user" name="management_proxy_user" placeholder="例如 jump / root" />
+              </div>
+              <div class="field">
+                <label for="asset-management-proxy-label">SSH 代理备注名</label>
+                <input id="asset-management-proxy-label" name="management_proxy_label" placeholder="例如 香港代理 / 东京堡垒机" />
+              </div>
               <div class="field full">
                 <label for="asset-management-route-note">管理链路说明</label>
-                <textarea id="asset-management-route-note" name="management_route_note" placeholder="例如：控制面 -> 香港跳板 -> 节点。"></textarea>
+                <textarea id="asset-management-route-note" name="management_route_note" placeholder="例如：控制面 -> 香港 SSH 代理 -> 节点。"></textarea>
               </div>
               <div class="field full">
                 <label for="asset-note">备注</label>

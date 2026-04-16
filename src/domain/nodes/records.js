@@ -169,6 +169,10 @@ function normalizeManagementRecord(record = {}) {
   const accessMode = sourceValue(record, "access_mode", "direct");
   return {
     ...record,
+    proxy_host: accessMode === "relay" ? sourceValue(record, "proxy_host", null) : null,
+    proxy_port: accessMode === "relay" ? sourceValue(record, "proxy_port", null) : null,
+    proxy_user: accessMode === "relay" ? sourceValue(record, "proxy_user", null) : null,
+    proxy_label: accessMode === "relay" ? sourceValue(record, "proxy_label", null) : null,
     relay_region:
       accessMode === "relay"
         ? normalizeLocationValue(record.relay_region, "region")
@@ -309,6 +313,22 @@ function buildManagementRecord(
             "region",
           )
         : null,
+    proxy_host:
+      accessMode === "relay"
+        ? sourceValue(input, "proxy_host", currentManagement.proxy_host ?? null)
+        : null,
+    proxy_port:
+      accessMode === "relay"
+        ? sourceValue(input, "proxy_port", currentManagement.proxy_port ?? null)
+        : null,
+    proxy_user:
+      accessMode === "relay"
+        ? sourceValue(input, "proxy_user", currentManagement.proxy_user ?? null)
+        : null,
+    proxy_label:
+      accessMode === "relay"
+        ? sourceValue(input, "proxy_label", currentManagement.proxy_label ?? null)
+        : null,
     ssh_host: sourceValue(input, "ssh_host", currentManagement.ssh_host ?? null),
     ssh_port: sourceValue(input, "ssh_port", currentManagement.ssh_port ?? null),
     allow_ipv6: normalizeBooleanValue(
@@ -368,6 +388,22 @@ function buildMigratedManagementRecord(node = {}) {
             ),
             "region",
           )
+        : null,
+    proxy_host:
+      accessMode === "relay"
+        ? sourceValue(currentManagement, "proxy_host", sourceValue(node, "ssh_proxy_host", null))
+        : null,
+    proxy_port:
+      accessMode === "relay"
+        ? sourceValue(currentManagement, "proxy_port", sourceValue(node, "ssh_proxy_port", null))
+        : null,
+    proxy_user:
+      accessMode === "relay"
+        ? sourceValue(currentManagement, "proxy_user", sourceValue(node, "ssh_proxy_user", null))
+        : null,
+    proxy_label:
+      accessMode === "relay"
+        ? sourceValue(currentManagement, "proxy_label", sourceValue(node, "ssh_proxy_label", null))
         : null,
     ssh_host: sourceValue(currentManagement, "ssh_host", sourceValue(node, "ssh_host", null)),
     ssh_port: sourceValue(

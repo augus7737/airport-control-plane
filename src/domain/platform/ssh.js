@@ -211,9 +211,7 @@ export function createPlatformSshDomain(dependencies) {
       return null;
     }
 
-    return host.includes(":")
-      ? `${sshUser}@[${host}]`
-      : `${sshUser}@${host}`;
+    return `${sshUser}@${host}`;
   }
 
   function shellQuote(value) {
@@ -316,7 +314,7 @@ export function createPlatformSshDomain(dependencies) {
       ? `已尝试使用平台 SSH 密钥按“${route.route_label}”连接 ${shellSessionLabel(node)}。`
       : `已尝试使用平台 SSH 密钥连接 ${shellSessionLabel(node)}。`;
     let kind = "ssh-direct";
-    let relayTarget = route?.relay_target ?? null;
+    let relayTarget = route?.relay_target ?? route?.proxy_target ?? null;
 
     if (target?.host && target.host === node.facts?.private_ipv4) {
       label = "SSH 局域网";
@@ -325,6 +323,10 @@ export function createPlatformSshDomain(dependencies) {
     }
 
     if (accessMode === "relay") {
+      const proxyHost = route?.proxy_target?.host ?? null;
+      const proxyPort = route?.proxy_target?.port ?? 22;
+      const proxyUser = route?.proxy_target?.ssh_user ?? defaultNodeSshUser;
+      const proxyLoginTarget = formatSshLoginTarget(proxyHost, proxyUser);
       const relayHost = route?.relay_target?.host ?? null;
       const relayPort =
         route?.relay_target?.port ??
@@ -336,7 +338,46 @@ export function createPlatformSshDomain(dependencies) {
         route?.relay_node?.management?.ssh_user ?? defaultNodeSshUser,
       );
 
-      if (relayHost && relayLoginTarget) {
+      if (proxyHost && proxyLoginTarget) {
+        relayTarget = {
+          ...route?.proxy_target,
+          login_target: formatSshJumpTarget(proxyHost, proxyPort, proxyUser),
+        };
+        const proxyCommand = [
+          "ssh",
+          "-F",
+          "/dev/null",
+          "-o",
+          "StrictHostKeyChecking=no",
+          "-o",
+          "UserKnownHostsFile=/dev/null",
+          "-o",
+          "BatchMode=yes",
+          "-o",
+          "PreferredAuthentications=publickey",
+          "-o",
+          "PasswordAuthentication=no",
+          "-o",
+          "NumberOfPasswordPrompts=0",
+          "-o",
+          `ConnectTimeout=${String(sshConnectTimeoutSeconds)}`,
+          "-o",
+          "ServerAliveInterval=20",
+          "-i",
+          keyState.private_key_path,
+          "-p",
+          String(proxyPort),
+          proxyLoginTarget,
+          "-W",
+          "%h:%p",
+        ]
+          .map((part) => shellQuote(part))
+          .join(" ");
+        sshArgs.push("-o", `ProxyCommand=${proxyCommand}`);
+        label = "SSH 经代理";
+        note = `已尝试通过 SSH 代理 ${route?.proxy_target?.label || proxyHost} 建立 SSH 会话。`;
+        kind = "ssh-proxy";
+      } else if (relayHost && relayLoginTarget) {
         relayTarget = {
           ...route?.relay_target,
           login_target: formatSshJumpTarget(
@@ -380,7 +421,10 @@ export function createPlatformSshDomain(dependencies) {
         note = `已尝试通过管理跳板 ${shellSessionLabel(relayNode)} 建立 SSH 会话。`;
         kind = "ssh-relay";
       } else {
-        note = "节点标记为经管理跳板，但跳板缺少可用地址，当前已退回直接尝试目标 SSH 连接。";
+        note =
+          route?.relay_kind === "ssh-proxy"
+            ? "节点标记为经 SSH 代理，但代理缺少可用地址，当前已退回直接尝试目标 SSH 连接。"
+            : "节点标记为经管理跳板，但跳板缺少可用地址，当前已退回直接尝试目标 SSH 连接。";
       }
     }
 

@@ -162,7 +162,9 @@ export function createTerminalPageModule(dependencies) {
                     <h3>${escapeHtml(target.hostname)}</h3>
                     <p>${escapeHtml(target.provider || "未标记")} / ${escapeHtml(target.region || "-")} / ${
                       (target.management_access_mode || target.access_mode) === "relay"
-                        ? "经 SSH 跳板"
+                        ? target.transport_kind === "ssh-proxy"
+                          ? "经 SSH 代理"
+                          : "经 SSH 跳板"
                         : "SSH 直连"
                     }</p>
                   </div>

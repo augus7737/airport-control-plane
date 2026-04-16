@@ -27,6 +27,7 @@ import {
 } from "./js/shared/core-formatters.js";
 import {
   formatAccessMode,
+  formatManagementAccessMode,
   formatDiskConfig,
   formatExpiryCountdown,
   formatIpSourceLabel,
@@ -663,6 +664,7 @@ const { renderNodeShellEntry, renderNodeShellPage } = createNodeShellPageModule(
   appState,
   escapeHtml,
   formatAccessMode,
+  formatManagementAccessMode,
   formatNodeConfiguration,
   formatNodeSshPort,
   formatRelativeTime,
@@ -683,6 +685,7 @@ const { renderNodeDetail } = createNodeDetailPageRenderer({
   escapeHtml,
   formatAccessMode,
   formatDate,
+  formatManagementAccessMode,
   formatNodeConfiguration,
   formatNodeIpOwnershipSummary,
   formatNodeSshPort,

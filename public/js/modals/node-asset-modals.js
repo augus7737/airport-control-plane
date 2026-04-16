@@ -165,6 +165,14 @@ export function createNodeAssetModalsModule(dependencies) {
         node.management?.relay_label || "";
       documentRef.getElementById("asset-management-relay-region").value =
         normalizeLocationValue(node.management?.relay_region, { scope: "region" }) || "";
+      documentRef.getElementById("asset-management-proxy-host").value =
+        node.management?.proxy_host || "";
+      documentRef.getElementById("asset-management-proxy-port").value =
+        node.management?.proxy_port ?? "";
+      documentRef.getElementById("asset-management-proxy-user").value =
+        node.management?.proxy_user || "";
+      documentRef.getElementById("asset-management-proxy-label").value =
+        node.management?.proxy_label || "";
       documentRef.getElementById("asset-auto-renew").checked = Boolean(node.commercial?.auto_renew);
       documentRef.getElementById("asset-bandwidth").value = node.commercial?.bandwidth_mbps ?? "";
       documentRef.getElementById("asset-traffic-quota").value = node.commercial?.traffic_quota_gb ?? "";
