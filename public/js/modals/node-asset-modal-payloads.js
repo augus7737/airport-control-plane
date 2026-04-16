@@ -1,3 +1,5 @@
+import { normalizeLocationValue } from "../shared/location-suggestions.js";
+
 export function createNodeAssetModalPayloadsModule(dependencies = {}) {
   const { toNumberOrNull } = dependencies;
 
@@ -5,7 +7,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
     const accessMode = String(formData.get("access_mode") || "").trim() || "direct";
     return {
       access_mode: accessMode,
-      entry_region: String(formData.get("entry_region") || "").trim() || null,
+      entry_region: normalizeLocationValue(formData.get("entry_region"), { scope: "entry" }),
       entry_port: toNumberOrNull(formData.get("entry_port")),
       relay_node_id:
         accessMode === "relay"
@@ -17,7 +19,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
           : null,
       relay_region:
         accessMode === "relay"
-          ? String(formData.get("relay_region") || "").trim() || null
+          ? normalizeLocationValue(formData.get("relay_region"), { scope: "region" })
           : null,
       route_note: String(formData.get("route_note") || "").trim() || null,
     };
@@ -26,7 +28,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
   function collectManagementPayload(formData) {
     const accessMode = String(formData.get("management_access_mode") || "").trim() || "direct";
     return {
-      access_mode,
+      access_mode: accessMode,
       relay_node_id:
         accessMode === "relay"
           ? String(formData.get("management_relay_node_id") || "").trim() || null
@@ -37,7 +39,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
           : null,
       relay_region:
         accessMode === "relay"
-          ? String(formData.get("management_relay_region") || "").trim() || null
+          ? normalizeLocationValue(formData.get("management_relay_region"), { scope: "region" })
           : null,
       ssh_user: String(formData.get("management_ssh_user") || "").trim() || null,
       route_note: String(formData.get("management_route_note") || "").trim() || null,
@@ -48,12 +50,12 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
     return {
       hostname: String(formData.get("hostname") || "").trim(),
       provider: String(formData.get("provider") || "").trim() || null,
-      region: String(formData.get("region") || "").trim() || null,
+      region: normalizeLocationValue(formData.get("region"), { scope: "region" }),
       role: String(formData.get("role") || "").trim() || null,
       public_ipv4: String(formData.get("public_ipv4") || "").trim() || null,
       public_ipv6: String(formData.get("public_ipv6") || "").trim() || null,
       private_ipv4: String(formData.get("private_ipv4") || "").trim() || null,
-      ssh_port: toNumberOrNull(formData.get("ssh_port")),
+      ssh_port: toNumberOrNull(formData.get("ssh_port")) ?? 19822,
       memory_mb: toNumberOrNull(formData.get("memory_mb")),
       bandwidth_mbps: toNumberOrNull(formData.get("bandwidth_mbps")),
       traffic_quota_gb: toNumberOrNull(formData.get("traffic_quota_gb")),
@@ -72,7 +74,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
   function buildAssetPayload(formData) {
     return {
       provider: String(formData.get("provider") || "").trim() || null,
-      region: String(formData.get("region") || "").trim() || null,
+      region: normalizeLocationValue(formData.get("region"), { scope: "region" }),
       role: String(formData.get("role") || "").trim() || null,
       public_ipv4: String(formData.get("public_ipv4") || "").trim() || null,
       public_ipv6: String(formData.get("public_ipv6") || "").trim() || null,

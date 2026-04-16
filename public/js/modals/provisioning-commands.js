@@ -25,7 +25,7 @@ export function createProvisioningCommandModule(dependencies = {}) {
     const serverUrl = shellQuote(getPlatformBaseUrl());
     const token = shellQuote(resolvedToken);
 
-    return `if command -v curl >/dev/null 2>&1; then curl -fsSL ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token}; elif command -v wget >/dev/null 2>&1; then wget -qO- ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token}; else echo "请先执行步骤 2，安装 curl 后再执行接管" >&2; fi`;
+    return `if command -v curl >/dev/null 2>&1; then curl -fsSL ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} --ssh-port 19822; elif command -v wget >/dev/null 2>&1; then wget -qO- ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} --ssh-port 19822; else echo "请先执行步骤 2，安装 curl 后再执行接管" >&2; fi`;
   }
 
   function getBootstrapCommand(tokenValue = null) {

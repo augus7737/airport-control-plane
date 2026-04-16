@@ -16,6 +16,29 @@ function normalizePort(value) {
   return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
 }
 
+function normalizeBoolean(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off", ""].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return Boolean(fallback);
+}
+
 function getNodeDisplayName(node) {
   return (
     normalizeString(node?.name) ??
@@ -69,6 +92,7 @@ function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
       normalizePort(node?.ssh_port) ??
       normalizePort(node?.facts?.ssh_port) ??
       19822,
+    allow_ipv6: normalizeBoolean(management.allow_ipv6, false),
     ssh_user:
       normalizeString(management.ssh_user) ??
       normalizeString(node?.ssh_user) ??
@@ -84,6 +108,7 @@ function buildEndpoint(node, options = {}) {
     samePrivateIpv4Subnet,
     sshHost = null,
     sshPort = 19822,
+    allowIpv6 = false,
   } = options;
 
   const explicitHost = normalizeString(sshHost);
@@ -115,9 +140,10 @@ function buildEndpoint(node, options = {}) {
     typeof samePrivateIpv4Subnet === "function" &&
     samePrivateIpv4Subnet(privateIpv4, preferredLanIpv4);
 
-  const host = controllerCanReachPrivateIpv4 || relayCanReachPrivateIpv4
+  const useReachablePrivateIpv4 = controllerCanReachPrivateIpv4 || relayCanReachPrivateIpv4;
+  const host = useReachablePrivateIpv4
     ? privateIpv4
-    : publicIpv4 || publicIpv6 || privateIpv4 || null;
+    : publicIpv4 || (allowIpv6 ? publicIpv6 : null) || null;
 
   if (!host) {
     return null;
@@ -128,13 +154,13 @@ function buildEndpoint(node, options = {}) {
     port: sshPort,
     family: host.includes(":") ? "ipv6" : "ipv4",
     source:
-      controllerCanReachPrivateIpv4 || relayCanReachPrivateIpv4
+      useReachablePrivateIpv4
         ? "private_ipv4"
         : host === publicIpv4
           ? "public_ipv4"
           : host === publicIpv6
             ? "public_ipv6"
-            : "private_ipv4_fallback",
+            : "management_target_unresolved",
   };
 }
 
@@ -168,6 +194,7 @@ export function createManagementRouteDomain(dependencies = {}) {
       samePrivateIpv4Subnet,
       sshHost: management.ssh_host,
       sshPort: management.ssh_port,
+      allowIpv6: management.allow_ipv6,
     });
     const relayTarget = relayNode
       ? buildEndpoint(relayNode, {
@@ -177,6 +204,7 @@ export function createManagementRouteDomain(dependencies = {}) {
           samePrivateIpv4Subnet,
           sshHost: relayConfig?.ssh_host,
           sshPort: relayConfig?.ssh_port ?? 19822,
+          allowIpv6: relayConfig?.allow_ipv6 ?? false,
         })
       : null;
     const problems = [];
@@ -187,6 +215,22 @@ export function createManagementRouteDomain(dependencies = {}) {
 
     if (management.requested_access_mode === "relay" && !relayNode) {
       problems.push("management_relay_node_missing");
+    }
+
+    const hasExplicitSshHost = Boolean(management.ssh_host);
+    const hasPublicIpv4 = Boolean(normalizeString(node?.facts?.public_ipv4));
+    const hasPublicIpv6 = Boolean(normalizeString(node?.facts?.public_ipv6));
+    const hasReachablePrivateIpv4 =
+      Boolean(target?.source === "private_ipv4");
+
+    if (
+      !hasExplicitSshHost &&
+      !hasPublicIpv4 &&
+      !hasReachablePrivateIpv4 &&
+      hasPublicIpv6 &&
+      !management.allow_ipv6
+    ) {
+      problems.push("management_public_ipv4_missing");
     }
 
     if (!target?.host) {
@@ -215,6 +259,7 @@ export function createManagementRouteDomain(dependencies = {}) {
       relay_target: relayTarget,
       target,
       ssh_user: management.ssh_user,
+      allow_ipv6: management.allow_ipv6,
       route_label: routeLabel,
       route_note: management.route_note,
       problems,

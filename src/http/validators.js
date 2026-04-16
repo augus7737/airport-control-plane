@@ -87,6 +87,15 @@ function validateRouteSection(errors, payload, fieldName, options = {}) {
   ) {
     errors.push(`${fieldName}.ssh_host must be a string`);
   }
+
+  if (
+    options.allowIpv6Flag &&
+    payload.allow_ipv6 !== undefined &&
+    payload.allow_ipv6 !== null &&
+    typeof payload.allow_ipv6 !== "boolean"
+  ) {
+    errors.push(`${fieldName}.allow_ipv6 must be a boolean`);
+  }
 }
 
 export function validateRegistration(payload) {
@@ -165,6 +174,7 @@ export function validateManualNode(payload) {
     allowSshPort: true,
     allowSshUser: true,
     allowSshHost: true,
+    allowIpv6Flag: true,
   });
 
   return errors;
@@ -194,6 +204,7 @@ export function validateAssetUpdate(payload) {
     allowSshPort: true,
     allowSshUser: true,
     allowSshHost: true,
+    allowIpv6Flag: true,
   });
 
   return errors;

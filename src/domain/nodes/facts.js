@@ -68,18 +68,26 @@ export function createNodeFactsDomain(dependencies = {}) {
     }
 
     const remoteAddress = normalizeIpLiteral(options.remoteAddress);
-    if (!publicIpv4 && !publicIpv6 && remoteAddress) {
-      if (isPublicIpv4(remoteAddress)) {
+    if (remoteAddress) {
+      const remoteIsPublicIpv4 = isPublicIpv4(remoteAddress);
+      const remoteIsPublicIpv6 = isPublicIpv6(remoteAddress);
+      const remoteFamily = isIP(remoteAddress);
+
+      if (!publicIpv4 && remoteIsPublicIpv4) {
         publicIpv4 = remoteAddress;
         if (!facts.public_ipv4_source) {
           facts.public_ipv4_source = "request-peer";
         }
-      } else if (isPublicIpv6(remoteAddress)) {
+      }
+
+      if (!publicIpv6 && remoteIsPublicIpv6) {
         publicIpv6 = remoteAddress;
         if (!facts.public_ipv6_source) {
           facts.public_ipv6_source = "request-peer";
         }
-      } else if (!privateIpv4 && isIP(remoteAddress) === 4) {
+      }
+
+      if (!privateIpv4 && !remoteIsPublicIpv4 && !remoteIsPublicIpv6 && remoteFamily === 4) {
         privateIpv4 = remoteAddress;
       }
     }

@@ -7,7 +7,8 @@ SERVER_URL=""
 BOOTSTRAP_TOKEN=""
 HOSTNAME_OVERRIDE=""
 SSH_PORT_OVERRIDE=""
-SSH_PORT="22"
+DEFAULT_SSH_PORT="19822"
+SSH_PORT="$DEFAULT_SSH_PORT"
 SSH_USER_OVERRIDE=""
 PUBLIC_IPV4_OVERRIDE=""
 PUBLIC_IPV6_OVERRIDE=""
@@ -324,16 +325,10 @@ read_ssh_port_from_file() {
 write_sshd_dropin_config() {
   DROPIN_DIR="/etc/ssh/sshd_config.d"
   DROPIN_FILE="$DROPIN_DIR/99-airport-bootstrap.conf"
-  DROPIN_PORT=""
+  DROPIN_PORT="$SSH_PORT"
 
   if [ ! -d "$DROPIN_DIR" ]; then
     return 0
-  fi
-
-  if [ -n "$SSH_PORT_OVERRIDE" ]; then
-    DROPIN_PORT="$SSH_PORT"
-  else
-    DROPIN_PORT="$(read_ssh_port_from_file "$DROPIN_FILE")"
   fi
 
   {
@@ -365,7 +360,7 @@ detect_configured_ssh_port() {
     return
   fi
 
-  printf '22'
+  printf '%s' ""
 }
 
 is_local_port_listening() {
@@ -439,9 +434,7 @@ ensure_ssh_server_ready() {
   fi
 
   if [ -f /etc/ssh/sshd_config ]; then
-    if [ -n "$SSH_PORT_OVERRIDE" ]; then
-      ensure_sshd_config_line /etc/ssh/sshd_config Port "$SSH_PORT"
-    fi
+    ensure_sshd_config_line /etc/ssh/sshd_config Port "$SSH_PORT"
     ensure_sshd_config_line /etc/ssh/sshd_config PermitRootLogin prohibit-password
     ensure_sshd_config_line /etc/ssh/sshd_config PubkeyAuthentication yes
     ensure_sshd_config_line /etc/ssh/sshd_config PasswordAuthentication no
@@ -476,7 +469,12 @@ need_cmd hostname
 if [ -n "$SSH_PORT_OVERRIDE" ]; then
   SSH_PORT="$SSH_PORT_OVERRIDE"
 else
-  SSH_PORT="$(detect_configured_ssh_port)"
+  DETECTED_SSH_PORT="$(detect_configured_ssh_port)"
+  if [ -n "$DETECTED_SSH_PORT" ] && [ "$DETECTED_SSH_PORT" != "22" ]; then
+    SSH_PORT="$DETECTED_SSH_PORT"
+  else
+    SSH_PORT="$DEFAULT_SSH_PORT"
+  fi
 fi
 
 TARGET_SSH_USER="$(resolve_target_ssh_user)"

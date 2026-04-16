@@ -6,8 +6,208 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function normalizeBooleanValue(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off", ""].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return Boolean(fallback);
+}
+
+function normalizePort(value) {
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
+}
+
 function readRecordSource(source, key) {
   return isPlainObject(source?.[key]) ? source[key] : source;
+}
+
+const REGION_LOCATION_PRESETS = [
+  { value: "中国大陆", aliases: ["中国", "Mainland China", "CN"] },
+  { value: "香港", aliases: ["HKG", "HK", "中国香港", "Hong Kong"] },
+  { value: "东京", aliases: ["TYO", "NRT", "TOK", "Tokyo", "Narita"] },
+  { value: "大阪", aliases: ["OSA", "Osaka"] },
+  { value: "新加坡", aliases: ["SIN", "Singapore"] },
+  { value: "首尔", aliases: ["SEL", "ICN", "Seoul", "Incheon", "首尔仁川"] },
+  { value: "台北", aliases: ["TPE", "Taipei", "Taiwan", "中国台湾"] },
+  { value: "洛杉矶", aliases: ["LAX", "Los Angeles"] },
+  { value: "圣何塞", aliases: ["SJC", "San Jose"] },
+  { value: "西雅图", aliases: ["SEA", "Seattle"] },
+  { value: "法兰克福", aliases: ["FRA", "Frankfurt"] },
+  { value: "纽伦堡", aliases: ["NBG", "Nuremberg"] },
+  { value: "赫尔辛基", aliases: ["HEL", "Helsinki"] },
+  { value: "伦敦", aliases: ["LON", "London"] },
+  { value: "阿姆斯特丹", aliases: ["AMS", "Amsterdam"] },
+  { value: "巴黎", aliases: ["PAR", "Paris"] },
+  { value: "悉尼", aliases: ["SYD", "Sydney"] },
+  { value: "美国", aliases: ["United States", "US"] },
+  { value: "德国", aliases: ["Germany", "DE"] },
+  { value: "日本", aliases: ["Japan", "JP"] },
+  { value: "韩国", aliases: ["South Korea", "KR"] },
+];
+
+const ENTRY_LOCATION_PRESETS = [
+  { value: "中国大陆", aliases: ["中国", "Mainland China", "CN"] },
+  { value: "香港", aliases: ["HKG", "HK", "中国香港", "Hong Kong"] },
+  { value: "台湾", aliases: ["中国台湾", "Taiwan", "TPE"] },
+  { value: "日本", aliases: ["Japan", "JP"] },
+  { value: "韩国", aliases: ["South Korea", "KR"] },
+  { value: "新加坡", aliases: ["Singapore", "SG"] },
+  { value: "美国西海岸", aliases: ["US West Coast", "西海岸"] },
+  { value: "欧洲", aliases: ["Europe", "EU"] },
+];
+
+function normalizeLocationSearch(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function findLocationPreset(value, scope = "region") {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const normalized = normalizeLocationSearch(raw);
+  const presets = scope === "entry" ? ENTRY_LOCATION_PRESETS : REGION_LOCATION_PRESETS;
+
+  for (const preset of presets) {
+    const tokens = [preset.value, ...preset.aliases].map((item) => normalizeLocationSearch(item));
+    if (tokens.includes(normalized)) {
+      return preset;
+    }
+  }
+
+  if (normalized.includes("香港") || normalized.includes("hong kong")) {
+    return presets.find((preset) => preset.value === "香港") || null;
+  }
+  if (normalized.includes("中国大陆") || normalized === "中国" || normalized.includes("mainland")) {
+    return presets.find((preset) => preset.value === "中国大陆") || null;
+  }
+  if (normalized.includes("台湾")) {
+    return presets.find((preset) => preset.value === (scope === "entry" ? "台湾" : "台北")) || null;
+  }
+  if (normalized.includes("日本")) {
+    return presets.find((preset) => preset.value === "日本") || null;
+  }
+  if (normalized.includes("新加坡")) {
+    return presets.find((preset) => preset.value === "新加坡") || null;
+  }
+  if (normalized.includes("韩国")) {
+    return presets.find((preset) => preset.value === "韩国") || null;
+  }
+
+  return null;
+}
+
+export function normalizeLocationValue(value, scope = "region") {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const preset = findLocationPreset(raw, scope);
+  return preset?.value || raw;
+}
+
+export function normalizeLocationList(values = [], scope = "region") {
+  const collection = Array.isArray(values) ? values : [values];
+  return [...new Set(
+    collection
+      .map((item) => normalizeLocationValue(item, scope) || String(item || "").trim())
+      .filter(Boolean),
+  )];
+}
+
+function normalizeLabelsRecord(labels = {}) {
+  if (!isPlainObject(labels)) {
+    return labels ?? {};
+  }
+
+  return {
+    ...labels,
+    region: normalizeLocationValue(labels.region, "region"),
+  };
+}
+
+function normalizeNetworkingRecord(record = {}) {
+  if (!isPlainObject(record)) {
+    return record ?? {};
+  }
+
+  const accessMode = sourceValue(record, "access_mode", "direct");
+  return {
+    ...record,
+    entry_region: normalizeLocationValue(record.entry_region, "entry"),
+    relay_region:
+      accessMode === "relay"
+        ? normalizeLocationValue(record.relay_region, "region")
+        : null,
+  };
+}
+
+function normalizeManagementRecord(record = {}) {
+  if (!isPlainObject(record)) {
+    return record ?? {};
+  }
+
+  const accessMode = sourceValue(record, "access_mode", "direct");
+  return {
+    ...record,
+    relay_region:
+      accessMode === "relay"
+        ? normalizeLocationValue(record.relay_region, "region")
+        : null,
+  };
+}
+
+function hasExplicitManagementSshPort(source = {}) {
+  if (isPlainObject(source?.management)) {
+    return Object.prototype.hasOwnProperty.call(source.management, "ssh_port");
+  }
+
+  return Object.prototype.hasOwnProperty.call(source ?? {}, "ssh_port");
+}
+
+function resolveManagedSshPort(source = {}, existingNode = {}, management = {}, facts = {}) {
+  const explicitManagementPort = hasExplicitManagementSshPort(source)
+    ? normalizePort(readRecordSource(source, "management")?.ssh_port)
+    : null;
+  if (explicitManagementPort) {
+    return explicitManagementPort;
+  }
+
+  const inheritedPort =
+    normalizePort(sourceValue(source, "ssh_port", null)) ??
+    normalizePort(source?.facts?.ssh_port) ??
+    normalizePort(facts?.ssh_port);
+  const existingManagementPort = normalizePort(existingNode?.management?.ssh_port);
+  const existingFactsPort = normalizePort(existingNode?.facts?.ssh_port);
+  const existingManagementIsInherited =
+    existingManagementPort === null ||
+    existingFactsPort === null ||
+    existingManagementPort === existingFactsPort;
+
+  if (inheritedPort && existingManagementIsInherited) {
+    return inheritedPort;
+  }
+
+  return existingManagementPort ?? inheritedPort ?? existingFactsPort ?? 19822;
 }
 
 function buildCommercialRecord(source = {}, existingCommercial = {}) {
@@ -54,9 +254,15 @@ function buildNetworkingRecord(source = {}, existingNetworking = {}) {
         : null,
     relay_region:
       accessMode === "relay"
-        ? sourceValue(input, "relay_region", existingNetworking.relay_region ?? null)
+        ? normalizeLocationValue(
+            sourceValue(input, "relay_region", existingNetworking.relay_region ?? null),
+            "region",
+          )
         : null,
-    entry_region: sourceValue(input, "entry_region", existingNetworking.entry_region ?? null),
+    entry_region: normalizeLocationValue(
+      sourceValue(input, "entry_region", existingNetworking.entry_region ?? null),
+      "entry",
+    ),
     entry_port: sourceValue(input, "entry_port", existingNetworking.entry_port ?? null),
     route_note: sourceValue(input, "route_note", existingNetworking.route_note ?? null),
   };
@@ -94,14 +300,21 @@ function buildManagementRecord(
         : null,
     relay_region:
       accessMode === "relay"
-        ? sourceValue(
-            input,
-            "relay_region",
-            currentManagement.relay_region ?? null,
+        ? normalizeLocationValue(
+            sourceValue(
+              input,
+              "relay_region",
+              currentManagement.relay_region ?? null,
+            ),
+            "region",
           )
         : null,
     ssh_host: sourceValue(input, "ssh_host", currentManagement.ssh_host ?? null),
     ssh_port: sourceValue(input, "ssh_port", currentManagement.ssh_port ?? null),
+    allow_ipv6: normalizeBooleanValue(
+      sourceValue(input, "allow_ipv6", currentManagement.allow_ipv6 ?? false),
+      currentManagement.allow_ipv6 ?? false,
+    ),
     ssh_user: sourceValue(input, "ssh_user", currentManagement.ssh_user ?? null),
     route_note: sourceValue(
       input,
@@ -143,10 +356,17 @@ function buildMigratedManagementRecord(node = {}) {
         : null,
     relay_region:
       accessMode === "relay"
-        ? sourceValue(
-            currentManagement,
-            "relay_region",
-            sourceValue(node, "ssh_relay_region", sourceValue(legacyNetworking, "relay_region", null)),
+        ? normalizeLocationValue(
+            sourceValue(
+              currentManagement,
+              "relay_region",
+              sourceValue(
+                node,
+                "ssh_relay_region",
+                sourceValue(legacyNetworking, "relay_region", null),
+              ),
+            ),
+            "region",
           )
         : null,
     ssh_host: sourceValue(currentManagement, "ssh_host", sourceValue(node, "ssh_host", null)),
@@ -154,6 +374,10 @@ function buildMigratedManagementRecord(node = {}) {
       currentManagement,
       "ssh_port",
       sourceValue(node, "ssh_port", sourceValue(node?.facts ?? {}, "ssh_port", 19822)),
+    ),
+    allow_ipv6: normalizeBooleanValue(
+      sourceValue(currentManagement, "allow_ipv6", false),
+      false,
     ),
     ssh_user: sourceValue(currentManagement, "ssh_user", sourceValue(node, "ssh_user", null)),
     route_note: sourceValue(
@@ -167,7 +391,14 @@ function buildMigratedManagementRecord(node = {}) {
 function migrateLegacyNodeManagementRecord(node = {}) {
   const nextManagement = buildMigratedManagementRecord(node);
   const currentManagement = isPlainObject(node?.management) ? node.management : null;
-  const changed = JSON.stringify(currentManagement ?? null) !== JSON.stringify(nextManagement);
+  const nextLabels = normalizeLabelsRecord(node?.labels ?? {});
+  const currentLabels = isPlainObject(node?.labels) ? node.labels : {};
+  const nextNetworking = normalizeNetworkingRecord(node?.networking ?? {});
+  const currentNetworking = isPlainObject(node?.networking) ? node.networking : {};
+  const changed =
+    JSON.stringify(currentManagement ?? null) !== JSON.stringify(nextManagement) ||
+    JSON.stringify(currentLabels) !== JSON.stringify(nextLabels) ||
+    JSON.stringify(currentNetworking) !== JSON.stringify(nextNetworking);
 
   if (!changed) {
     return {
@@ -180,6 +411,8 @@ function migrateLegacyNodeManagementRecord(node = {}) {
     changed: true,
     node: {
       ...node,
+      labels: nextLabels,
+      networking: nextNetworking,
       management: nextManagement,
     },
   };
@@ -200,10 +433,10 @@ export function createNodeRecordBuilders({
 
   function buildNodeRecord(payload, existingNode) {
     const now = nowIso();
-    const labels = {
+    const labels = normalizeLabelsRecord({
       ...(existingNode?.labels ?? {}),
       ...(payload.labels && typeof payload.labels === "object" ? payload.labels : {}),
-    };
+    });
     const facts = normalizeNodeFacts(payload.facts, {
       existingFacts: existingNode?.facts,
     });
@@ -226,7 +459,7 @@ export function createNodeRecordBuilders({
       networking,
       management: {
         ...management,
-        ssh_port: management.ssh_port ?? facts.ssh_port ?? existingNode?.facts?.ssh_port ?? 19822,
+        ssh_port: resolveManagedSshPort(payload, existingNode, management, facts),
       },
     };
   }
@@ -243,7 +476,10 @@ export function createNodeRecordBuilders({
       labels: {
         ...existingNode.labels,
         provider: sourceValue(payload, "provider", existingNode.labels?.provider ?? null),
-        region: sourceValue(payload, "region", existingNode.labels?.region ?? null),
+        region: normalizeLocationValue(
+          sourceValue(payload, "region", existingNode.labels?.region ?? null),
+          "region",
+        ),
         role: sourceValue(payload, "role", existingNode.labels?.role ?? null),
       },
       facts: normalizeNodeFacts(
@@ -270,10 +506,10 @@ export function createNodeRecordBuilders({
       networking: nextNetworking,
       management: {
         ...nextManagement,
-        ssh_port:
-          nextManagement.ssh_port ??
-          sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? 19822) ??
-          19822,
+        ssh_port: resolveManagedSshPort(payload, existingNode, nextManagement, {
+          ...currentFacts,
+          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? 19822),
+        }),
       },
     };
   }
@@ -317,7 +553,7 @@ export function createNodeRecordBuilders({
       health_score: payload.health_score ?? null,
       labels: {
         provider: payload.provider ?? null,
-        region: payload.region ?? null,
+        region: normalizeLocationValue(payload.region, "region"),
         role: payload.role ?? null,
       },
       source: "manual",
@@ -326,7 +562,7 @@ export function createNodeRecordBuilders({
       networking,
       management: {
         ...management,
-        ssh_port: management.ssh_port ?? facts.ssh_port ?? 19822,
+        ssh_port: resolveManagedSshPort(payload, null, management, facts),
       },
     };
   }

@@ -1,11 +1,4 @@
-import { createLocationSuggestionsModule } from "../shared/location-suggestions.js";
-
 export function createNodeAssetModalTemplatesModule() {
-  const {
-    renderEntryRegionDatalist,
-    renderRegionDatalist,
-  } = createLocationSuggestionsModule();
-
   function manualModalTemplate() {
     return `
       <div class="modal-backdrop" id="manual-modal">
@@ -30,8 +23,8 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="manual-region">区域</label>
-                <input id="manual-region" name="region" list="manual-region-suggestions" autocomplete="off" placeholder="例如 HKG / 香港 / Hong Kong" />
-                <div class="field-note">支持中英文和常见机房代码联想，例如 hkg、香港、hong kong。</div>
+                <input id="manual-region" name="region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
+                <div class="field-note">支持中英文和常见机房代码联想，选择后会自动写成统一区域值。</div>
               </div>
               <div class="field">
                 <label for="manual-role">用途标签</label>
@@ -51,7 +44,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="manual-ssh-port">SSH 端口</label>
-                <input id="manual-ssh-port" name="ssh_port" type="number" min="1" max="65535" placeholder="默认 19822，可按节点实际端口填写" />
+                <input id="manual-ssh-port" name="ssh_port" type="number" min="1" max="65535" value="19822" placeholder="默认 19822，可按节点实际端口填写" />
               </div>
               <div class="field">
                 <label for="manual-memory">内存 MB</label>
@@ -96,7 +89,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="manual-entry-region">业务入口区域</label>
-                <input id="manual-entry-region" name="entry_region" list="manual-entry-region-suggestions" autocomplete="off" placeholder="例如 中国大陆 / Mainland China / 香港" />
+                <input id="manual-entry-region" name="entry_region" data-location-scope="entry" autocomplete="off" placeholder="例如 中国大陆 / Mainland China / 香港" />
               </div>
               <div class="field">
                 <label for="manual-entry-port">业务入口端口</label>
@@ -112,7 +105,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="manual-relay-region">业务入口区域补充</label>
-                <input id="manual-relay-region" name="relay_region" list="manual-relay-region-suggestions" autocomplete="off" placeholder="例如 HKG / 香港 / Hong Kong" />
+                <input id="manual-relay-region" name="relay_region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
               </div>
               <div class="field full">
                 <label for="manual-route-note">业务链路说明</label>
@@ -143,7 +136,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="manual-management-relay-region">管理跳板区域</label>
-                <input id="manual-management-relay-region" name="management_relay_region" list="manual-relay-region-suggestions" autocomplete="off" placeholder="例如 HKG / 香港 / Hong Kong" />
+                <input id="manual-management-relay-region" name="management_relay_region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
               </div>
               <div class="field full">
                 <label for="manual-management-route-note">管理链路说明</label>
@@ -169,9 +162,6 @@ export function createNodeAssetModalTemplatesModule() {
                 <div id="manual-message"></div>
               </div>
             </form>
-            ${renderRegionDatalist("manual-region-suggestions")}
-            ${renderEntryRegionDatalist("manual-entry-region-suggestions")}
-            ${renderRegionDatalist("manual-relay-region-suggestions")}
           </div>
         </div>
       </div>
@@ -199,8 +189,8 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="asset-region">区域</label>
-                <input id="asset-region" name="region" list="asset-region-suggestions" autocomplete="off" placeholder="例如 HKG / 香港 / Hong Kong" />
-                <div class="field-note">可直接输入中文、英文或代码，下面会自动联想。</div>
+                <input id="asset-region" name="region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
+                <div class="field-note">可直接输入中文、英文或代码，系统会统一成规范区域值。</div>
               </div>
               <div class="field">
                 <label for="asset-role">用途标签</label>
@@ -245,7 +235,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="asset-entry-region">业务入口区域</label>
-                <input id="asset-entry-region" name="entry_region" list="asset-entry-region-suggestions" autocomplete="off" placeholder="例如 中国大陆 / Mainland China / 香港" />
+                <input id="asset-entry-region" name="entry_region" data-location-scope="entry" autocomplete="off" placeholder="例如 中国大陆 / Mainland China / 香港" />
               </div>
               <div class="field">
                 <label for="asset-entry-port">业务入口端口</label>
@@ -265,7 +255,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="asset-relay-region">业务入口区域补充</label>
-                <input id="asset-relay-region" name="relay_region" list="asset-relay-region-suggestions" autocomplete="off" placeholder="例如 HKG / 香港 / Hong Kong" />
+                <input id="asset-relay-region" name="relay_region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
               </div>
               <div class="field full">
                 <label>续费方式</label>
@@ -315,7 +305,7 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="asset-management-relay-region">管理跳板区域</label>
-                <input id="asset-management-relay-region" name="management_relay_region" list="asset-relay-region-suggestions" autocomplete="off" placeholder="例如 HKG / 香港 / Hong Kong" />
+                <input id="asset-management-relay-region" name="management_relay_region" data-location-scope="region" autocomplete="off" placeholder="例如 香港 / Hong Kong / HKG" />
               </div>
               <div class="field full">
                 <label for="asset-management-route-note">管理链路说明</label>
@@ -334,9 +324,6 @@ export function createNodeAssetModalTemplatesModule() {
                 <div id="asset-message"></div>
               </div>
             </form>
-            ${renderRegionDatalist("asset-region-suggestions")}
-            ${renderEntryRegionDatalist("asset-entry-region-suggestions")}
-            ${renderRegionDatalist("asset-relay-region-suggestions")}
           </div>
         </div>
       </div>

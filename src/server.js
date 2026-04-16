@@ -55,7 +55,7 @@ import {
   serveStaticFile,
 } from "./utils/static-assets.js";
 import { createOperatorSessionAuth } from "./domain/auth/session.js";
-import { createNodeRecordBuilders } from "./domain/nodes/records.js";
+import { createNodeRecordBuilders, normalizeLocationList } from "./domain/nodes/records.js";
 import { createNodeFactsDomain } from "./domain/nodes/facts.js";
 import { createNodeLifecycleDomain } from "./domain/nodes/lifecycle.js";
 import { createBootstrapTokenDomain } from "./domain/bootstrap/tokens.js";
@@ -1579,8 +1579,8 @@ function buildProviderRecord(payload, existing = null) {
       ? normalizeNullableString(payload.api_endpoint)
       : existing?.api_endpoint ?? null,
     regions: hasOwn(payload, "regions")
-      ? uniqueStringList(payload.regions)
-      : uniqueStringList(existing?.regions),
+      ? normalizeLocationList(payload.regions, "region")
+      : normalizeLocationList(existing?.regions, "region"),
     auto_provision_enabled: hasOwn(payload, "auto_provision_enabled")
       ? Boolean(payload.auto_provision_enabled)
       : existing?.auto_provision_enabled ?? false,
@@ -1791,7 +1791,39 @@ async function ensureNodeManagementMigration() {
   }
 
   await persistNodeStore();
-  console.log(`[startup] migrated explicit management routes for ${migratedCount} nodes`);
+  console.log(
+    `[startup] migrated management routes and normalized node location labels for ${migratedCount} nodes`,
+  );
+  return true;
+}
+
+async function ensureProviderRegionNormalization() {
+  let changed = false;
+  let migratedCount = 0;
+
+  for (let index = 0; index < providerStore.length; index += 1) {
+    const provider = providerStore[index];
+    const normalizedRegions = normalizeLocationList(provider?.regions, "region");
+    const currentRegions = Array.isArray(provider?.regions) ? provider.regions : [];
+    if (JSON.stringify(normalizedRegions) === JSON.stringify(currentRegions)) {
+      continue;
+    }
+
+    providerStore[index] = {
+      ...provider,
+      regions: normalizedRegions,
+      updated_at: nowIso(),
+    };
+    changed = true;
+    migratedCount += 1;
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  await persistProviderStore();
+  console.log(`[startup] normalized provider regions for ${migratedCount} providers`);
   return true;
 }
 
@@ -4735,13 +4767,17 @@ const server = createServer(async (request, reply) => {
   if (request.method === "POST" && url.pathname === "/api/v1/nodes/register") {
     try {
       const payload = await readJsonBody(request);
+      const requestPeerAddress = extractRemoteAddress(request);
       if (!payload.facts || typeof payload.facts !== "object") {
         payload.facts = {};
       }
       payload.facts = normalizeNodeFacts(payload.facts, {
-        remoteAddress: extractRemoteAddress(request),
+        remoteAddress: requestPeerAddress,
         existingFacts: null,
       });
+      console.log(
+        `[register] hostname=${payload.facts.hostname ?? "-"} public_ipv4=${payload.facts.public_ipv4 ?? "null"} public_ipv6=${payload.facts.public_ipv6 ?? "null"} request_peer=${requestPeerAddress ?? "null"}`,
+      );
 
       const errors = validateRegistration(payload);
 
@@ -4839,6 +4875,7 @@ const server = createServer(async (request, reply) => {
 
 const { start } = createServerStartupRuntime({
   ensureNodeManagementMigration,
+  ensureProviderRegionNormalization,
   ensureBootstrapInitTasks,
   listen: () => {
     server.listen(port, () => {

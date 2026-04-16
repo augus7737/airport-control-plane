@@ -1,6 +1,7 @@
 import { createNodeAssetModalEventsModule } from "./node-asset-modal-events.js";
 import { createNodeAssetModalPayloadsModule } from "./node-asset-modal-payloads.js";
 import { createNodeAssetModalTemplatesModule } from "./node-asset-modal-templates.js";
+import { createLocationSuggestionsModule, normalizeLocationValue } from "../shared/location-suggestions.js";
 
 export function createNodeAssetModalsModule(dependencies) {
   const {
@@ -17,6 +18,7 @@ export function createNodeAssetModalsModule(dependencies) {
     upsertNode,
   } = dependencies;
   const { assetModalTemplate, manualModalTemplate } = createNodeAssetModalTemplatesModule();
+  const { bindLocationAutocomplete } = createLocationSuggestionsModule({ documentRef });
   const { buildAssetPayload, buildManualNodePayload } = createNodeAssetModalPayloadsModule({
     toNumberOrNull,
   });
@@ -70,6 +72,7 @@ export function createNodeAssetModalsModule(dependencies) {
       open,
       close,
     });
+    bindLocationAutocomplete(modal);
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -135,7 +138,8 @@ export function createNodeAssetModalsModule(dependencies) {
       }
 
       documentRef.getElementById("asset-provider").value = node.labels?.provider || "";
-      documentRef.getElementById("asset-region").value = node.labels?.region || "";
+      documentRef.getElementById("asset-region").value =
+        normalizeLocationValue(node.labels?.region, { scope: "region" }) || "";
       documentRef.getElementById("asset-role").value = node.labels?.role || "";
       documentRef.getElementById("asset-public-ip").value = node.facts?.public_ipv4 || "";
       documentRef.getElementById("asset-public-ipv6").value = node.facts?.public_ipv6 || "";
@@ -143,12 +147,15 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-billing").value = node.commercial?.billing_cycle || "";
       documentRef.getElementById("asset-expire").value = formatDateInput(node.commercial?.expires_at);
       documentRef.getElementById("asset-access-mode").value = node.networking?.access_mode || "direct";
-      documentRef.getElementById("asset-entry-region").value = node.networking?.entry_region || "";
+      documentRef.getElementById("asset-entry-region").value =
+        normalizeLocationValue(node.networking?.entry_region, { scope: "entry" }) || "";
       documentRef.getElementById("asset-entry-port").value = node.networking?.entry_port ?? "";
-      documentRef.getElementById("asset-ssh-port").value = node.facts?.ssh_port ?? "";
+      documentRef.getElementById("asset-ssh-port").value =
+        node.management?.ssh_port ?? node.facts?.ssh_port ?? 19822;
       documentRef.getElementById("asset-relay-node-id").value = node.networking?.relay_node_id || "";
       documentRef.getElementById("asset-relay-label").value = node.networking?.relay_label || "";
-      documentRef.getElementById("asset-relay-region").value = node.networking?.relay_region || "";
+      documentRef.getElementById("asset-relay-region").value =
+        normalizeLocationValue(node.networking?.relay_region, { scope: "region" }) || "";
       documentRef.getElementById("asset-management-access-mode").value =
         node.management?.access_mode || "direct";
       documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";
@@ -157,7 +164,7 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-management-relay-label").value =
         node.management?.relay_label || "";
       documentRef.getElementById("asset-management-relay-region").value =
-        node.management?.relay_region || "";
+        normalizeLocationValue(node.management?.relay_region, { scope: "region" }) || "";
       documentRef.getElementById("asset-auto-renew").checked = Boolean(node.commercial?.auto_renew);
       documentRef.getElementById("asset-bandwidth").value = node.commercial?.bandwidth_mbps ?? "";
       documentRef.getElementById("asset-traffic-quota").value = node.commercial?.traffic_quota_gb ?? "";
@@ -182,6 +189,7 @@ export function createNodeAssetModalsModule(dependencies) {
 
     if (modal.dataset.coreBound !== "1") {
       modal.dataset.coreBound = "1";
+      bindLocationAutocomplete(modal);
       bindAssetModalCoreEvents({
         modal,
         closeButton,
