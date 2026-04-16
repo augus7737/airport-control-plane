@@ -1,4 +1,5 @@
 import net from "node:net";
+import { isRelayTransportKind } from "../routes/management-strategies.js";
 
 function normalizeString(value) {
   if (typeof value !== "string") {
@@ -49,6 +50,9 @@ function buildSkippedStage(reasonCode, note, extra = {}) {
     target_port: extra.target_port ?? null,
     target_family: extra.target_family ?? null,
     source: extra.source ?? null,
+    strategy_requested: extra.strategy_requested ?? null,
+    strategy_used: extra.strategy_used ?? null,
+    relay_capabilities: extra.relay_capabilities ?? null,
   };
 }
 
@@ -70,6 +74,9 @@ function buildTcpStage(result, target, extra = {}) {
     target_port: target?.port ?? null,
     target_family: target?.family ?? null,
     source: target?.source ?? null,
+    strategy_requested: extra.strategy_requested ?? null,
+    strategy_used: extra.strategy_used ?? null,
+    relay_capabilities: extra.relay_capabilities ?? null,
   };
 }
 
@@ -131,6 +138,8 @@ export function createProbeExecutorDomain(dependencies) {
       ssh_user: route.ssh_user ?? defaultNodeSshUser,
       problems: route.problems ?? [],
       source: route.target.source ?? null,
+      relay_strategy: route.relay_strategy ?? null,
+      strategy_candidates: route.strategy_candidates ?? [],
     };
   }
 
@@ -284,10 +293,50 @@ export function createProbeExecutorDomain(dependencies) {
     return singleLine.length > 240 ? `${singleLine.slice(0, 237)}...` : singleLine;
   }
 
-  function classifySshProbeError(output) {
+  function classifySshProbeError(output, transportContext = null) {
     const text = String(output ?? "").toLowerCase();
+    const transportKind = String(transportContext?.transport?.kind || "").toLowerCase();
+    const relayTransport = isRelayTransportKind(transportKind);
+    const execRelayTransport = transportKind === "ssh-relay-exec-nc";
     if (!text) {
       return "ssh_probe_failed";
+    }
+    if (text.includes("__airport_relay_bridge_missing__")) {
+      return "relay_exec_bridge_missing";
+    }
+    if (
+      text.includes("administratively prohibited") ||
+      (text.includes("stdio forwarding failed") &&
+        text.includes("open failed") &&
+        text.includes("administratively prohibited"))
+    ) {
+      return "relay_tcp_forwarding_disabled";
+    }
+    if (
+      relayTransport &&
+      text.includes("open failed") &&
+      (text.includes("connection refused") ||
+        text.includes("no route to host") ||
+        text.includes("network is unreachable") ||
+        text.includes("connection timed out"))
+    ) {
+      return "relay_target_unreachable_from_jump";
+    }
+    if (
+      execRelayTransport &&
+      (text.includes("nc:") || text.includes("busybox")) &&
+      (text.includes("connection refused") ||
+        text.includes("no route to host") ||
+        text.includes("network is unreachable") ||
+        text.includes("connection timed out"))
+    ) {
+      return "relay_target_unreachable_from_jump";
+    }
+    if (
+      execRelayTransport &&
+      (text.includes("command not found") || text.includes("not found"))
+    ) {
+      return "relay_exec_bridge_missing";
     }
     if (text.includes("permission denied")) return "ssh_permission_denied";
     if (text.includes("connection timed out") || text.includes("operation timed out")) {
@@ -370,13 +419,16 @@ export function createProbeExecutorDomain(dependencies) {
           latency_ms: Date.now() - startedAt,
           exit_code: null,
           signal: null,
-          error_message: classifySshProbeError(error?.message),
+          error_message: classifySshProbeError(error?.message, transportContext),
           skipped_reason: null,
           skipped_note: null,
           output_excerpt: compactProbeOutput(error?.message),
           transport_kind: transportContext.transport.kind,
           transport_label: transportContext.transport.label,
           transport_note: transportContext.transport.note,
+          strategy_requested: transportContext.transport.strategy_requested ?? null,
+          strategy_used: transportContext.transport.strategy_used ?? null,
+          relay_capabilities: transportContext.transport.relay_capabilities ?? null,
         });
       });
 
@@ -393,13 +445,16 @@ export function createProbeExecutorDomain(dependencies) {
             ? null
             : timedOut
               ? "ssh_timeout"
-              : classifySshProbeError(output),
+              : classifySshProbeError(output, transportContext),
           skipped_reason: null,
           skipped_note: null,
           output_excerpt: compactProbeOutput(output.replace(marker, " ")),
           transport_kind: transportContext.transport.kind,
           transport_label: transportContext.transport.label,
           transport_note: transportContext.transport.note,
+          strategy_requested: transportContext.transport.strategy_requested ?? null,
+          strategy_used: transportContext.transport.strategy_used ?? null,
+          relay_capabilities: transportContext.transport.relay_capabilities ?? null,
         });
       });
 
@@ -499,6 +554,9 @@ export function createProbeExecutorDomain(dependencies) {
         target_host: upstreamTarget?.host ?? null,
         target_port: upstreamTarget?.port ?? null,
         target_family: upstreamTarget?.family ?? null,
+        strategy_requested: sshContext.requested_relay_strategy ?? null,
+        strategy_used: sshContext.transport?.strategy_used ?? null,
+        relay_capabilities: sshContext.relay_capabilities ?? null,
       };
     }
 
@@ -553,6 +611,9 @@ exit 127
       target_host: upstreamTarget.host,
       target_port: upstreamTarget.port,
       target_family: upstreamTarget.family,
+      strategy_requested: sshContext.transport.strategy_requested ?? null,
+      strategy_used: sshContext.transport.strategy_used ?? null,
+      relay_capabilities: sshContext.transport.relay_capabilities ?? null,
     };
   }
 
@@ -593,6 +654,8 @@ exit 127
         reason_code: "probe_target_missing",
         relay_node_id: null,
         relay_target: null,
+        requested_relay_strategy: managementRoute?.relay_strategy ?? null,
+        relay_capabilities: null,
       };
     }
 
@@ -612,6 +675,9 @@ exit 127
           transport_kind: sshContext.transport?.kind ?? null,
           transport_label: sshContext.transport?.label ?? null,
           transport_note: sshContext.transport?.note ?? null,
+          strategy_requested: sshContext.requested_relay_strategy ?? null,
+          strategy_used: sshContext.transport?.strategy_used ?? null,
+          relay_capabilities: sshContext.relay_capabilities ?? null,
         });
       }
     }
@@ -630,6 +696,8 @@ exit 127
         sshProbe?.attempted || sshProbe?.transport_kind
           ? sshContext?.relay_target ?? target.relay_target ?? null
           : target.relay_target ?? null,
+      requested_relay_strategy: target.relay_strategy ?? null,
+      relay_capabilities: sshContext?.relay_capabilities ?? null,
     };
   }
 
@@ -791,13 +859,18 @@ exit 127
 
   function buildManagementSummary(result) {
     const targetLabel = formatEndpoint(result.target);
+    const strategyText = result.ssh?.strategy_used
+      ? `，当前生效策略 ${result.ssh.strategy_used}`
+      : result.requested_relay_strategy
+        ? `，配置策略 ${result.requested_relay_strategy}`
+        : "";
     if (!result.target) {
       return result.tcp?.skipped_note || "节点缺少管理地址。";
     }
 
     if (!result.tcp?.success) {
       if (result.target.mode === "relay") {
-        return `管理链路 TCP 未连通 ${targetLabel}，当前节点需要经 SSH 中转接入。`;
+        return `管理链路 TCP 未连通 ${targetLabel}，当前节点需要经 SSH 中转接入${strategyText}。`;
       }
       return `管理链路 TCP 未连通 ${targetLabel}。`;
     }
@@ -961,6 +1034,13 @@ exit 127
         upstream_family: relay.target?.family ?? null,
         release_id: business.context?.release_id ?? relay.context?.release_id ?? null,
         ssh_user: management.target?.ssh_user ?? defaultNodeSshUser,
+        management_strategy_requested:
+          management.requested_relay_strategy ?? management.target?.relay_strategy ?? null,
+        management_strategy_used: management.ssh?.strategy_used ?? null,
+        relay_capabilities:
+          management.ssh?.relay_capabilities ??
+          management.relay_capabilities ??
+          null,
         auth_method: "publickey",
         latency_ms:
           business.tcp?.latency_ms ??
@@ -1099,6 +1179,16 @@ exit 127
         upstream_family: probeType === "relay_upstream_tcp" ? outcome.target?.family ?? null : null,
         release_id: outcome.context?.release_id ?? null,
         ssh_user: outcome.target?.ssh_user ?? defaultNodeSshUser,
+        management_strategy_requested:
+          probeType === "ssh_auth"
+            ? outcome.requested_relay_strategy ?? outcome.target?.relay_strategy ?? null
+            : null,
+        management_strategy_used:
+          probeType === "ssh_auth" ? outcome.ssh?.strategy_used ?? null : null,
+        relay_capabilities:
+          probeType === "ssh_auth"
+            ? outcome.ssh?.relay_capabilities ?? outcome.relay_capabilities ?? null
+            : null,
         auth_method: probeType === "ssh_auth" ? "publickey" : null,
         latency_ms: latencyMs,
         packet_loss_ratio: null,
@@ -1252,7 +1342,7 @@ exit 127
         ssh_reachable: Boolean(probe.control_ready),
         business_entry_reachable: toCapabilityFlag(probe.business_ready),
         relay_upstream_reachable: toCapabilityFlag(probe.relay_upstream_ready),
-        relay_used: ["ssh-relay", "ssh-proxy"].includes(probe.transport_kind),
+        relay_used: isRelayTransportKind(probe.transport_kind),
       },
     };
   }

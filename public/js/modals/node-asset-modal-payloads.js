@@ -29,6 +29,10 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
     const accessMode = String(formData.get("management_access_mode") || "").trim() || "direct";
     return {
       access_mode: accessMode,
+      relay_strategy:
+        accessMode === "relay"
+          ? String(formData.get("management_relay_strategy") || "").trim() || "auto"
+          : null,
       relay_node_id:
         accessMode === "relay"
           ? String(formData.get("management_relay_node_id") || "").trim() || null

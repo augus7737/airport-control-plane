@@ -1,3 +1,5 @@
+import { isRelayTransportKind } from "../routes/management-strategies.js";
+
 export function createOperationsExecutorDomain(dependencies) {
   const {
     cwdProvider = () => process.cwd(),
@@ -196,7 +198,7 @@ export function createOperationsExecutorDomain(dependencies) {
         : operationLogLine(startedAt, `执行命令 ${String(effectivePayload.command || "").trim()}`),
     );
 
-    if (["ssh-relay", "ssh-proxy"].includes(transport.kind)) {
+    if (isRelayTransportKind(transport.kind)) {
       banner.push(
         operationLogLine(
           startedAt,
@@ -227,8 +229,8 @@ export function createOperationsExecutorDomain(dependencies) {
       hostname: node.facts?.hostname || node.id,
       provider: node.labels?.provider || null,
       region: node.labels?.region || null,
-      access_mode: ["ssh-relay", "ssh-proxy"].includes(transport.kind) ? "relay" : "direct",
-      management_access_mode: ["ssh-relay", "ssh-proxy"].includes(transport.kind) ? "relay" : "direct",
+      access_mode: isRelayTransportKind(transport.kind) ? "relay" : "direct",
+      management_access_mode: isRelayTransportKind(transport.kind) ? "relay" : "direct",
       summary: inferOperationSummary(node, effectivePayload),
       status,
       output,

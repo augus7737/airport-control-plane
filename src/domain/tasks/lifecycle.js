@@ -1,3 +1,5 @@
+import { isRelayTransportKind } from "../routes/management-strategies.js";
+
 export function createTaskLifecycleDomain(dependencies) {
   const {
     bootstrapProbeTaskForInitTask,
@@ -331,6 +333,8 @@ export function createTaskLifecycleDomain(dependencies) {
         management_access_mode: managementTarget?.mode ?? "direct",
         requested_management_access_mode:
           managementTarget?.requested_mode ?? managementTarget?.mode ?? "direct",
+        relay_strategy: managementTarget?.relay_strategy ?? null,
+        strategy_candidates: managementTarget?.strategy_candidates ?? [],
         relay_node_id: managementTarget?.relay_node_id ?? null,
         relay_label: node?.management?.relay_label ?? node?.networking?.relay_label ?? null,
         route_label: businessContext?.route_label ?? null,
@@ -356,13 +360,13 @@ export function createTaskLifecycleDomain(dependencies) {
       return null;
     }
 
-    return {
-      tcp_reachable: Boolean(probe?.stages?.management_tcp?.success || probe?.stages?.business_entry_tcp?.success),
-      ssh_reachable: Boolean(probe.control_ready),
-      business_entry_reachable: toCapabilityFlag(probe.business_ready),
-      relay_upstream_reachable: toCapabilityFlag(probe.relay_upstream_ready),
-      relay_used: ["ssh-relay", "ssh-proxy"].includes(probe.transport_kind),
-    };
+      return {
+        tcp_reachable: Boolean(probe?.stages?.management_tcp?.success || probe?.stages?.business_entry_tcp?.success),
+        ssh_reachable: Boolean(probe.control_ready),
+        business_entry_reachable: toCapabilityFlag(probe.business_ready),
+        relay_upstream_reachable: toCapabilityFlag(probe.relay_upstream_ready),
+        relay_used: isRelayTransportKind(probe.transport_kind),
+      };
   }
 
   function probeTransportFromRecord(probe, fallbackNote = null) {

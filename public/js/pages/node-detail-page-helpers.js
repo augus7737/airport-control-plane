@@ -209,6 +209,43 @@ function summarizeDiagnosticBlockers(diagnostic) {
   return blockers.length > 0 ? blockers.join(" / ") : null;
 }
 
+function formatManagementRelayStrategyLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "auto") return "自动";
+  if (normalized === "tcp_forward") return "TCP 转发";
+  if (normalized === "exec_nc") return "NC 桥接";
+  return normalized ? value : "未配置";
+}
+
+function resolveEffectiveManagementRelayStrategy(node, latestProbe) {
+  if ((node.management?.access_mode || "direct") !== "relay") {
+    return "无需中转";
+  }
+
+  const requestedStrategy = formatManagementRelayStrategyLabel(
+    node.management?.relay_strategy || "auto",
+  );
+  const usedStrategy =
+    latestProbe?.management_strategy_used ||
+    (latestProbe?.transport_kind === "ssh-relay-exec-nc"
+      ? "exec_nc"
+      : latestProbe?.transport_kind === "ssh-relay-tcp-forward" ||
+          latestProbe?.transport_kind === "ssh-relay"
+        ? "tcp_forward"
+        : null);
+
+  if (!usedStrategy) {
+    return requestedStrategy === "自动" ? "等待自动选择" : `等待按 ${requestedStrategy} 验证`;
+  }
+
+  const usedLabel = formatManagementRelayStrategyLabel(usedStrategy);
+  if ((node.management?.relay_strategy || "auto") === "auto") {
+    return `自动 -> ${usedLabel}`;
+  }
+
+  return usedLabel;
+}
+
 function buildDiagnosticReportCard(title, section, diagnostic, statusClassName, statusText) {
   if (!diagnostic || !section) {
     return {
@@ -301,6 +338,9 @@ export function buildNodeDetailViewModel({
   const latestDeepDiagnostic = latestDiagnosticByProfile(nodeDiagnostics, "deep");
   const runningDiagnostic = nodeDiagnostics.find((item) => isRunningStatus(item?.status)) || null;
   const latestProbe = nodeProbes[0] || null;
+  const latestManagementProbe =
+    nodeProbes.find((probe) => ["full_stack", "ssh_auth"].includes(String(probe?.probe_type || ""))) ||
+    latestProbe;
   const recommendedActions = buildNodeRecommendations(node, latestProbe, nodeTasks);
   const accessMode = getAccessMode(node);
   const accessModeText = formatAccessMode(accessMode);
@@ -328,6 +368,20 @@ export function buildNodeDetailViewModel({
   const probeCapabilityText = formatProbeCapability(latestProbe);
   const probeSummaryText = latestProbe ? formatProbeSummary(latestProbe) : "尚未探测";
   const probeLongSummary = formatProbeLongSummary(latestProbe);
+  const managementRelayStrategyText =
+    managementAccessMode === "relay"
+      ? formatManagementRelayStrategyLabel(node.management?.relay_strategy || "auto")
+      : "无需中转";
+  const effectiveManagementRelayStrategyText = resolveEffectiveManagementRelayStrategy(
+    node,
+    latestManagementProbe,
+  );
+  const managementRelayDiagnosticText =
+    managementAccessMode === "relay"
+      ? latestManagementProbe
+        ? formatProbeLongSummary(latestManagementProbe)
+        : "尚未执行管理中转诊断"
+      : "无需中转";
   const publicIpSummary =
     publicIpRecords.length > 0
       ? publicIpRecords
@@ -573,6 +627,9 @@ export function buildNodeDetailViewModel({
     ["业务备注", node.networking?.route_note || "-"],
     ["管理链路", formatManagementAccessMode(node)],
     ["管理中转", managementRelayLabel],
+    ["管理配置策略", managementRelayStrategyText],
+    ["管理生效策略", effectiveManagementRelayStrategyText],
+    ["最近中转诊断", managementRelayDiagnosticText],
     ["管理备注", node.management?.route_note || "-"],
   ];
   const healthOverviewRows = [

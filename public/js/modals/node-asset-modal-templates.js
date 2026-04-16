@@ -161,6 +161,15 @@ export function createNodeAssetModalTemplatesModule() {
                 <input id="manual-management-ssh-user" name="management_ssh_user" placeholder="例如 root / admin" />
               </div>
               <div class="field">
+                <label for="manual-management-relay-strategy">管理中转策略</label>
+                <select id="manual-management-relay-strategy" name="management_relay_strategy">
+                  <option value="auto">自动</option>
+                  <option value="tcp_forward">TCP 转发</option>
+                  <option value="exec_nc">NC 桥接</option>
+                </select>
+                <div class="field-note">自动模式会优先使用标准 SSH TCP 转发；如果跳板禁用 tcp forwarding，会自动退回到 NC 桥接。</div>
+              </div>
+              <div class="field">
                 <label for="manual-management-relay-node-id">管理跳板节点 ID</label>
                 <input id="manual-management-relay-node-id" name="management_relay_node_id" placeholder="如果已纳管，可填写 node_xxx" />
               </div>
@@ -382,6 +391,15 @@ export function createNodeAssetModalTemplatesModule() {
               <div class="field">
                 <label for="asset-management-ssh-user">SSH 用户</label>
                 <input id="asset-management-ssh-user" name="management_ssh_user" placeholder="例如 root / admin" />
+              </div>
+              <div class="field">
+                <label for="asset-management-relay-strategy">管理中转策略</label>
+                <select id="asset-management-relay-strategy" name="management_relay_strategy">
+                  <option value="auto">自动</option>
+                  <option value="tcp_forward">TCP 转发</option>
+                  <option value="exec_nc">NC 桥接</option>
+                </select>
+                <div class="field-note">自动模式会优先使用标准 SSH TCP 转发；如果跳板禁用 tcp forwarding，会自动退回到 NC 桥接。</div>
               </div>
               <div class="field">
                 <label for="asset-management-relay-node-id">管理跳板节点 ID</label>

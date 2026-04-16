@@ -43,6 +43,12 @@ export function probeReasonLabel(code) {
   if (value === "relay_probe_tool_missing") return "入口机缺少 TCP 探测工具";
   if (value === "relay_upstream_timeout") return "入口到上游链路超时";
   if (value === "relay_upstream_probe_failed") return "入口到上游探测失败";
+  if (value === "relay_tcp_forwarding_disabled") return "跳板禁用了 TCP 转发";
+  if (value === "relay_exec_bridge_missing") return "跳板缺少 NC 桥接能力";
+  if (value === "relay_target_unreachable_from_jump") return "跳板到目标 SSH 端口不通";
+  if (value === "relay_jump_auth_failed") return "平台无法登录跳板";
+  if (value === "relay_jump_probe_failed") return "跳板能力预检失败";
+  if (value === "relay_tcp_forward_probe_failed") return "跳板 TCP 转发预检失败";
   if (value === "tcp_only_requested") return "仅执行 TCP 探测";
   if (value === "tcp_only_success") return "TCP 已连通";
   if (value === "tcp_unreachable") return "TCP 未连通";

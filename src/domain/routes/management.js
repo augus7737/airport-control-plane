@@ -1,3 +1,8 @@
+import {
+  normalizeManagementRelayStrategy,
+  relayStrategyCandidates,
+} from "./management-strategies.js";
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -91,6 +96,10 @@ function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
 
   return {
     requested_access_mode: requestedAccessMode === "relay" ? "relay" : "direct",
+    relay_strategy:
+      requestedAccessMode === "relay"
+        ? normalizeManagementRelayStrategy(management.relay_strategy, "auto")
+        : null,
     relay_node_id:
       requestedAccessMode === "relay"
         ? normalizeString(management.relay_node_id) ??
@@ -329,6 +338,11 @@ export function createManagementRouteDomain(dependencies = {}) {
       route_label: routeLabel,
       route_note: management.route_note,
       problems,
+      relay_strategy: management.relay_strategy,
+      strategy_candidates:
+        management.requested_access_mode === "relay"
+          ? relayStrategyCandidates(management.relay_strategy)
+          : [],
       config: management,
       reachable: Boolean(target?.host),
     };

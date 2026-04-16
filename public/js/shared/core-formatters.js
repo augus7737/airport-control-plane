@@ -315,6 +315,8 @@ export function resolveTransportLabel(target, operation = null) {
       if (!normalized) return null;
       if (normalized === "ssh-relay") return "SSH 经跳板";
       if (normalized === "ssh-proxy") return "SSH 经代理";
+      if (normalized === "ssh-relay-tcp-forward") return "SSH 经跳板 / TCP 转发";
+      if (normalized === "ssh-relay-exec-nc") return "SSH 经跳板 / NC 桥接";
       if (normalized === "ssh-direct") return "SSH 直连";
       return normalized;
     }
@@ -349,6 +351,9 @@ export function resolveTransportLabel(target, operation = null) {
     target?.access_mode;
 
   if (managementAccessMode === "relay") {
+    if (target?.transport_label) {
+      return String(target.transport_label);
+    }
     return target?.transport_kind === "ssh-proxy" ? "SSH 经代理" : "SSH 经跳板";
   }
   if (managementAccessMode === "direct") return "SSH 直连";

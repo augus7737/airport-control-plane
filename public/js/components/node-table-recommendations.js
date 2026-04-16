@@ -87,6 +87,38 @@ export function createNodeRecommendationsModule(dependencies = {}) {
       );
     }
 
+    if (reasonCode === "relay_tcp_forwarding_disabled") {
+      pushRecommendation(
+        items,
+        "跳板禁用了 TCP 转发",
+        "当前管理中转仍在尝试标准 SSH TCP 转发，建议把策略切到自动或 NC 桥接，或在跳板机放开 AllowTcpForwarding。",
+      );
+    }
+
+    if (reasonCode === "relay_exec_bridge_missing") {
+      pushRecommendation(
+        items,
+        "跳板缺少 NC 桥接能力",
+        "当前跳板无法做命令桥接，建议安装 nc / busybox nc，或改回支持 TCP forwarding 的跳板策略。",
+      );
+    }
+
+    if (reasonCode === "relay_target_unreachable_from_jump") {
+      pushRecommendation(
+        items,
+        "跳板到目标端口不通",
+        "控制面已能进跳板，但跳板到目标节点 SSH 端口不通，优先检查跳板出口、目标防火墙和目标 SSH 监听。",
+      );
+    }
+
+    if (reasonCode === "relay_jump_auth_failed") {
+      pushRecommendation(
+        items,
+        "平台还不能登录跳板",
+        "先把平台公钥写入跳板节点，或确认跳板管理用户和端口设置正确，再继续验证中转策略。",
+      );
+    }
+
     if (
       node.status === "new" ||
       (latestInitTask && ["new", "failed"].includes(String(latestInitTask.status || "").toLowerCase()))

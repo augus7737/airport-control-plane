@@ -1,4 +1,5 @@
 import { SUPPORTED_BILLING_CYCLES } from "../domain/costs/normalize.js";
+import { SUPPORTED_MANAGEMENT_RELAY_STRATEGIES } from "../domain/routes/management-strategies.js";
 
 function validateNullableIpField(errors, value, fieldName, options = {}) {
   if (value === undefined || value === null || value === "") {
@@ -170,6 +171,17 @@ function validateRouteSection(errors, payload, fieldName, options = {}) {
   }
 
   if (
+    options.allowRelayStrategy &&
+    payload.relay_strategy !== undefined &&
+    payload.relay_strategy !== null &&
+    !SUPPORTED_MANAGEMENT_RELAY_STRATEGIES.includes(String(payload.relay_strategy).trim().toLowerCase())
+  ) {
+    errors.push(
+      `${fieldName}.relay_strategy must be one of ${SUPPORTED_MANAGEMENT_RELAY_STRATEGIES.join(", ")}`,
+    );
+  }
+
+  if (
     options.allowSshUser &&
     payload.ssh_user !== undefined &&
     payload.ssh_user !== null &&
@@ -306,6 +318,7 @@ export function validateManualNode(payload) {
     allowEntryPort: true,
   });
   validateRouteSection(errors, payload.management, "management", {
+    allowRelayStrategy: true,
     allowSshPort: true,
     allowSshUser: true,
     allowSshHost: true,
@@ -345,6 +358,7 @@ export function validateAssetUpdate(payload) {
     allowEntryPort: true,
   });
   validateRouteSection(errors, payload.management, "management", {
+    allowRelayStrategy: true,
     allowSshPort: true,
     allowSshUser: true,
     allowSshHost: true,

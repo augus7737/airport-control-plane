@@ -214,6 +214,8 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-management-access-mode").value =
         node.management?.access_mode || "direct";
       documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";
+      documentRef.getElementById("asset-management-relay-strategy").value =
+        node.management?.relay_strategy || "auto";
       documentRef.getElementById("asset-management-relay-node-id").value =
         node.management?.relay_node_id || "";
       documentRef.getElementById("asset-management-relay-label").value =

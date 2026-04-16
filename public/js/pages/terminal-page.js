@@ -160,13 +160,7 @@ export function createTerminalPageModule(dependencies) {
                 <div class="panel-title">
                   <div>
                     <h3>${escapeHtml(target.hostname)}</h3>
-                    <p>${escapeHtml(target.provider || "未标记")} / ${escapeHtml(target.region || "-")} / ${
-                      (target.management_access_mode || target.access_mode) === "relay"
-                        ? target.transport_kind === "ssh-proxy"
-                          ? "经 SSH 代理"
-                          : "经 SSH 跳板"
-                        : "SSH 直连"
-                    }</p>
+                    <p>${escapeHtml(target.provider || "未标记")} / ${escapeHtml(target.region || "-")} / ${escapeHtml(transportText)}</p>
                   </div>
                   <span class="${statusClassName(target.status)}">${statusText(target.status)}</span>
                 </div>

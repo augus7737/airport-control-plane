@@ -4,6 +4,7 @@ import {
   normalizeNullableInteger,
   normalizeNullableNumber,
 } from "../costs/normalize.js";
+import { normalizeManagementRelayStrategy } from "../routes/management-strategies.js";
 
 function sourceValue(source, key, fallback = null) {
   return Object.prototype.hasOwnProperty.call(source, key) ? source[key] : fallback;
@@ -185,6 +186,10 @@ function normalizeManagementRecord(record = {}) {
   const accessMode = sourceValue(record, "access_mode", "direct");
   return {
     ...record,
+    relay_strategy:
+      accessMode === "relay"
+        ? normalizeManagementRelayStrategy(sourceValue(record, "relay_strategy", "auto"))
+        : null,
     proxy_host: accessMode === "relay" ? sourceValue(record, "proxy_host", null) : null,
     proxy_port: accessMode === "relay" ? sourceValue(record, "proxy_port", null) : null,
     proxy_user: accessMode === "relay" ? sourceValue(record, "proxy_user", null) : null,
@@ -345,6 +350,12 @@ function buildManagementRecord(
 
   return {
     access_mode: accessMode,
+    relay_strategy:
+      accessMode === "relay"
+        ? normalizeManagementRelayStrategy(
+            sourceValue(input, "relay_strategy", currentManagement.relay_strategy ?? "auto"),
+          )
+        : null,
     relay_node_id:
       accessMode === "relay"
         ? sourceValue(
@@ -417,6 +428,12 @@ function buildMigratedManagementRecord(node = {}) {
   return {
     ...currentManagement,
     access_mode: accessMode,
+    relay_strategy:
+      accessMode === "relay"
+        ? normalizeManagementRelayStrategy(
+            sourceValue(currentManagement, "relay_strategy", "auto"),
+          )
+        : null,
     relay_node_id:
       accessMode === "relay"
         ? sourceValue(
