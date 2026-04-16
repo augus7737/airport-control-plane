@@ -146,8 +146,15 @@
 }
 
 .table-shell {
+  position: relative;
+  isolation: isolate;
   overflow-x: auto;
   overflow-y: visible;
+}
+
+.table-shell table {
+  position: relative;
+  z-index: 0;
 }
 
 table {
@@ -157,11 +164,22 @@ table {
 
 th,
 td {
+  position: relative;
   padding: 10px 12px;
   vertical-align: top;
   text-align: left;
   font-size: 14px;
   border-bottom: 1px solid var(--line);
+}
+
+.table-shell tr.cell-hover-row-active > th,
+.table-shell tr.cell-hover-row-active > td {
+  z-index: 72;
+}
+
+.table-shell th.cell-hover-host-active,
+.table-shell td.cell-hover-host-active {
+  z-index: 80;
 }
 
 thead th {
@@ -595,7 +613,7 @@ a.compact-action-item:focus-visible {
     opacity 140ms ease,
     transform 140ms ease;
   overflow: auto;
-  z-index: 64;
+  z-index: 96;
 }
 
 .cell-hover-card:hover .cell-hover-panel,

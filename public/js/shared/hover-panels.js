@@ -4,6 +4,28 @@ export function createHoverPanelsModule(dependencies = {}) {
     windowRef = window,
   } = dependencies;
 
+  function setActiveHoverHost(card, active) {
+    if (!card) {
+      return;
+    }
+
+    const hostCell = card.closest("td, th");
+    const hostRow = card.closest("tr");
+    const tableShell = card.closest(".table-shell");
+
+    if (hostCell) {
+      hostCell.classList.toggle("cell-hover-host-active", active);
+    }
+
+    if (hostRow) {
+      hostRow.classList.toggle("cell-hover-row-active", active);
+    }
+
+    if (tableShell) {
+      tableShell.classList.toggle("cell-hover-shell-active", active);
+    }
+  }
+
   function getBoundaryRect(card) {
     const shell = card.closest(".table-shell");
     if (!shell) {
@@ -63,6 +85,7 @@ export function createHoverPanelsModule(dependencies = {}) {
       `${Math.max(Math.min(Math.floor(availableHeight), 360), 140)}px`,
     );
     card.style.setProperty("--cell-hover-max-width", `${maxWidth}px`);
+    panel.scrollTop = 0;
   }
 
   function bindHoverPanel(card) {
@@ -70,10 +93,22 @@ export function createHoverPanelsModule(dependencies = {}) {
       return;
     }
 
-    const refreshPlacement = () => applyHoverPanelPlacement(card);
+    const refreshPlacement = () => {
+      setActiveHoverHost(card, true);
+      applyHoverPanelPlacement(card);
+    };
+    const clearPlacement = (event) => {
+      const relatedTarget = event?.relatedTarget;
+      if (relatedTarget && card.contains(relatedTarget)) {
+        return;
+      }
+      setActiveHoverHost(card, false);
+    };
     card.dataset.hoverPanelBound = "1";
     card.addEventListener("mouseenter", refreshPlacement);
     card.addEventListener("focusin", refreshPlacement);
+    card.addEventListener("mouseleave", clearPlacement);
+    card.addEventListener("focusout", clearPlacement);
   }
 
   function setupHoverPanels(root = documentRef) {
