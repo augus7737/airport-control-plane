@@ -736,17 +736,20 @@ if command -v busybox >/dev/null 2>&1 && busybox nc -h >/dev/null 2>&1; then
 fi
 echo "__airport_relay_bridge_missing__" >&2
 exit 127`;
+    const remoteCommand = [
+      "sh",
+      "-lc",
+      shellQuote(remoteScript),
+      "airport-relay",
+      shellQuote("%h"),
+      shellQuote("%p"),
+    ].join(" ");
 
     return [
       "ssh",
       ...buildCommonSshArgs(keyState.private_key_path),
       ...buildDirectSshTargetArgs(relayEndpoint),
-      "sh",
-      "-lc",
-      remoteScript,
-      "airport-relay",
-      "%h",
-      "%p",
+      remoteCommand,
     ]
       .map((part) => shellQuote(part))
       .join(" ");

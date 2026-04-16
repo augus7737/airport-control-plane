@@ -7,8 +7,10 @@ SERVER_URL=""
 BOOTSTRAP_TOKEN=""
 HOSTNAME_OVERRIDE=""
 SSH_PORT_OVERRIDE=""
-DEFAULT_SSH_PORT="19822"
-SSH_PORT="$DEFAULT_SSH_PORT"
+DEFAULT_LOCAL_SSH_PORT="22"
+DEFAULT_MANAGEMENT_SSH_PORT="19822"
+LOCAL_SSH_PORT="$DEFAULT_LOCAL_SSH_PORT"
+MANAGEMENT_SSH_PORT="$DEFAULT_MANAGEMENT_SSH_PORT"
 SSH_USER_OVERRIDE=""
 PUBLIC_IPV4_OVERRIDE=""
 PUBLIC_IPV6_OVERRIDE=""
@@ -24,7 +26,7 @@ RELAY_REGION=""
 ROUTE_NOTE=""
 
 usage() {
-  echo "Usage: sh scripts/bootstrap.sh --server <url> --token <bootstrap-token> [--hostname <name>] [--ssh-port <port>] [--ssh-user <name>] [--public-ipv4 <ip>] [--public-ipv6 <ip>] [--private-ipv4 <ip>] [--provider <name>] [--region <code>] [--role <name>] [--access-mode <direct|relay>] [--entry-region <name>] [--relay-node-id <node_id>] [--relay-label <name>] [--relay-region <code>] [--route-note <text>]"
+  echo "Usage: sh scripts/bootstrap.sh --server <url> --token <bootstrap-token> [--hostname <name>] [--ssh-port <management-port>] [--ssh-user <name>] [--public-ipv4 <ip>] [--public-ipv6 <ip>] [--private-ipv4 <ip>] [--provider <name>] [--region <code>] [--role <name>] [--access-mode <direct|relay>] [--entry-region <name>] [--relay-node-id <node_id>] [--relay-label <name>] [--relay-region <code>] [--route-note <text>]"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -216,7 +218,7 @@ install_platform_public_key() {
 }
 
 if [ -n "$SSH_PORT_OVERRIDE" ] && ! is_valid_port "$SSH_PORT_OVERRIDE"; then
-  echo "Invalid ssh port: $SSH_PORT_OVERRIDE" >&2
+  echo "Invalid management ssh port: $SSH_PORT_OVERRIDE" >&2
   exit 1
 fi
 
@@ -325,7 +327,6 @@ read_ssh_port_from_file() {
 write_sshd_dropin_config() {
   DROPIN_DIR="/etc/ssh/sshd_config.d"
   DROPIN_FILE="$DROPIN_DIR/99-airport-bootstrap.conf"
-  DROPIN_PORT="$SSH_PORT"
 
   if [ ! -d "$DROPIN_DIR" ]; then
     return 0
@@ -333,9 +334,6 @@ write_sshd_dropin_config() {
 
   {
     printf '%s\n' "# Managed by airport bootstrap"
-    if [ -n "$DROPIN_PORT" ] && is_valid_port "$DROPIN_PORT"; then
-      printf 'Port %s\n' "$DROPIN_PORT"
-    fi
     printf '%s\n' "PermitRootLogin prohibit-password"
     printf '%s\n' "PubkeyAuthentication yes"
     printf '%s\n' "PasswordAuthentication no"
@@ -434,13 +432,16 @@ ensure_ssh_server_ready() {
   fi
 
   if [ -f /etc/ssh/sshd_config ]; then
-    ensure_sshd_config_line /etc/ssh/sshd_config Port "$SSH_PORT"
     ensure_sshd_config_line /etc/ssh/sshd_config PermitRootLogin prohibit-password
     ensure_sshd_config_line /etc/ssh/sshd_config PubkeyAuthentication yes
     ensure_sshd_config_line /etc/ssh/sshd_config PasswordAuthentication no
   fi
 
   write_sshd_dropin_config
+  DETECTED_LOCAL_SSH_PORT="$(detect_configured_ssh_port)"
+  if [ -n "$DETECTED_LOCAL_SSH_PORT" ] && is_valid_port "$DETECTED_LOCAL_SSH_PORT"; then
+    LOCAL_SSH_PORT="$DETECTED_LOCAL_SSH_PORT"
+  fi
 
   if command -v rc-update >/dev/null 2>&1; then
     rc-update add sshd default >/dev/null 2>&1 || true
@@ -454,11 +455,11 @@ ensure_ssh_server_ready() {
     sshd >/dev/null 2>&1 || /usr/sbin/sshd >/dev/null 2>&1 || true
   fi
 
-  if wait_for_local_port "$SSH_PORT" 12 1; then
+  if wait_for_local_port "$LOCAL_SSH_PORT" 12 1; then
     return 0
   fi
 
-  echo "[bootstrap] sshd 已尝试拉起，但 ${SSH_PORT} 端口仍未监听。" >&2
+  echo "[bootstrap] sshd 已尝试拉起，但本机 ${LOCAL_SSH_PORT} 端口仍未监听。" >&2
   return 1
 }
 
@@ -467,14 +468,12 @@ need_cmd uname
 need_cmd hostname
 
 if [ -n "$SSH_PORT_OVERRIDE" ]; then
-  SSH_PORT="$SSH_PORT_OVERRIDE"
-else
-  DETECTED_SSH_PORT="$(detect_configured_ssh_port)"
-  if [ -n "$DETECTED_SSH_PORT" ] && [ "$DETECTED_SSH_PORT" != "22" ]; then
-    SSH_PORT="$DETECTED_SSH_PORT"
-  else
-    SSH_PORT="$DEFAULT_SSH_PORT"
-  fi
+  MANAGEMENT_SSH_PORT="$SSH_PORT_OVERRIDE"
+fi
+
+DETECTED_LOCAL_SSH_PORT="$(detect_configured_ssh_port)"
+if [ -n "$DETECTED_LOCAL_SSH_PORT" ] && is_valid_port "$DETECTED_LOCAL_SSH_PORT"; then
+  LOCAL_SSH_PORT="$DETECTED_LOCAL_SSH_PORT"
 fi
 
 TARGET_SSH_USER="$(resolve_target_ssh_user)"
@@ -881,7 +880,7 @@ PAYLOAD="$(cat <<EOF
     "cpu_cores": $CPU_CORES,
     "memory_mb": $MEMORY_MB,
     "disk_gb": $DISK_GB,
-    "ssh_port": $SSH_PORT
+    "ssh_port": $MANAGEMENT_SSH_PORT
   }$LABELS_JSON$NETWORKING_JSON
 }
 EOF
@@ -907,7 +906,7 @@ SSH_SERVICE_READY=false
 if ensure_ssh_server_ready; then
   SSH_SERVICE_READY=true
 else
-  echo "[bootstrap] SSH 服务尚未准备完成，暂不触发控制面初始化，请先确认节点能监听 ${SSH_PORT} 端口后重新执行 bootstrap。" >&2
+  echo "[bootstrap] SSH 服务尚未准备完成，暂不触发控制面初始化。请先确认节点本机 sshd 能监听 ${LOCAL_SSH_PORT} 端口后重新执行 bootstrap；平台上报的管理入口端口仍是 ${MANAGEMENT_SSH_PORT}。" >&2
 fi
 
 if [ -n "$INIT_TASK_ID" ] && [ "$SSH_SERVICE_READY" = true ]; then

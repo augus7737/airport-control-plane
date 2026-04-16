@@ -3,6 +3,11 @@ function clampPositiveInteger(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+function clampNonNegativeInteger(value, fallback) {
+  const number = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
 function addMs(isoTime, ms) {
   const base = typeof isoTime === "string" ? Date.parse(isoTime) : Date.now();
   const timestamp = Number.isFinite(base) ? base : Date.now();
@@ -19,12 +24,12 @@ export function createProbeSchedulerRuntime(dependencies) {
     buildProbeTask,
     executeProbeTask,
     enabled = true,
-    intervalMs = 15 * 60 * 1000,
-    batchSize = 4,
+    intervalMs = 60 * 60 * 1000,
+    batchSize = 0,
     jitterMs = 10 * 1000,
     listNodes,
     nowIso,
-    minProbeGapMs = 10 * 60 * 1000,
+    minProbeGapMs = 60 * 60 * 1000,
     persistTaskStore,
     taskStore,
     upsertTaskRecord,
@@ -33,9 +38,9 @@ export function createProbeSchedulerRuntime(dependencies) {
   const schedulerState = {
     enabled: Boolean(enabled),
     running: false,
-    interval_ms: clampPositiveInteger(intervalMs, 15 * 60 * 1000),
-    batch_size: clampPositiveInteger(batchSize, 4),
-    min_probe_gap_ms: clampPositiveInteger(minProbeGapMs, 10 * 60 * 1000),
+    interval_ms: clampPositiveInteger(intervalMs, 60 * 60 * 1000),
+    batch_size: clampNonNegativeInteger(batchSize, 0),
+    min_probe_gap_ms: clampPositiveInteger(minProbeGapMs, 60 * 60 * 1000),
     jitter_ms: clampPositiveInteger(jitterMs, 10 * 1000),
     next_run_at: null,
     last_run_at: null,
@@ -86,15 +91,19 @@ export function createProbeSchedulerRuntime(dependencies) {
 
   function listCandidateNodes() {
     const nowTime = Date.now();
-
-    return listNodes()
+    const candidates = listNodes()
       .filter((node) => shouldScheduleNode(node, nowTime))
       .sort((left, right) => {
         const leftTime = toTimestamp(left?.last_probe_at || left?.registered_at);
         const rightTime = toTimestamp(right?.last_probe_at || right?.registered_at);
         return leftTime - rightTime;
-      })
-      .slice(0, schedulerState.batch_size);
+      });
+
+    if (schedulerState.batch_size > 0) {
+      return candidates.slice(0, schedulerState.batch_size);
+    }
+
+    return candidates;
   }
 
   function scheduleNextRun(delayMs = schedulerState.interval_ms) {
@@ -126,6 +135,7 @@ export function createProbeSchedulerRuntime(dependencies) {
     schedulerState.running = true;
     schedulerState.last_run_at = nowIso();
     schedulerState.last_error = null;
+    const cycleStartedAt = Date.now();
 
     const summary = {
       total: 0,
@@ -167,9 +177,15 @@ export function createProbeSchedulerRuntime(dependencies) {
       schedulerState.running = false;
       schedulerState.last_finished_at = nowIso();
       schedulerState.last_run_summary = summary;
-      const nextDelay =
-        schedulerState.interval_ms +
-        Math.max(0, Math.min(schedulerState.jitter_ms, schedulerState.interval_ms / 4));
+      const cycleElapsedMs = Math.max(0, Date.now() - cycleStartedAt);
+      const boundedJitterMs = Math.max(
+        0,
+        Math.min(schedulerState.jitter_ms, schedulerState.interval_ms / 4),
+      );
+      const nextDelay = Math.max(
+        1000,
+        schedulerState.interval_ms - cycleElapsedMs + boundedJitterMs,
+      );
       scheduleNextRun(nextDelay);
     }
   }

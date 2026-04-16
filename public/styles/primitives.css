@@ -889,8 +889,16 @@ a.compact-action-item:focus-visible {
   width: min(720px, 100%);
 }
 
+.modal.wide.asset-editor-modal {
+  width: min(980px, 100%);
+}
+
 .modal-body {
   padding: 26px;
+}
+
+.asset-editor-modal .modal-body {
+  padding: 30px 30px 24px;
 }
 
 .modal-head {
@@ -939,6 +947,125 @@ a.compact-action-item:focus-visible {
 
 .modal .field-note {
   color: var(--muted);
+}
+
+.asset-editor-modal .modal-head {
+  gap: 18px;
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+}
+
+.asset-editor-modal .modal-head > div {
+  min-width: 0;
+}
+
+.asset-editor-modal .modal-head p {
+  max-width: 60ch;
+}
+
+.asset-editor-modal .node-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 7px 12px;
+  border: 1px solid rgba(5, 150, 105, 0.16);
+  border-radius: 999px;
+  background: rgba(5, 150, 105, 0.08);
+  color: #0f5f4f;
+  font-size: 12px;
+}
+
+.node-asset-form {
+  gap: 16px;
+  align-items: start;
+}
+
+.asset-editor-modal .field {
+  padding: 14px;
+  border: 1px solid rgba(20, 32, 43, 0.08);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 244, 237, 0.94)),
+    rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.asset-editor-modal .field input,
+.asset-editor-modal .field select,
+.asset-editor-modal .field textarea {
+  min-height: 46px;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 247, 241, 0.96)),
+    rgba(255, 255, 255, 0.92);
+}
+
+.asset-editor-modal .field textarea {
+  min-height: 116px;
+}
+
+.asset-editor-modal .field.section-intro {
+  gap: 10px;
+  padding: 18px 20px;
+  border-color: rgba(5, 150, 105, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(239, 253, 245, 0.98), rgba(255, 255, 255, 0.98)),
+    rgba(255, 255, 255, 0.98);
+  box-shadow: none;
+}
+
+.asset-editor-modal .field.section-intro label {
+  color: #0f5f4f;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.asset-editor-modal .field.section-intro .field-note {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.asset-editor-modal .modal-advanced-section {
+  border-radius: 20px;
+}
+
+.asset-editor-modal .modal-advanced-section summary {
+  padding: 16px 18px;
+}
+
+.asset-editor-modal .modal-advanced-grid {
+  gap: 16px;
+  padding: 18px;
+}
+
+.asset-editor-modal .modal-footer-row {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  padding: 16px 0 0;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(250, 245, 238, 0), rgba(250, 245, 238, 0.96) 24%, rgba(250, 245, 238, 0.99));
+  box-shadow: none;
+}
+
+.asset-editor-modal .modal-footer-row #manual-message,
+.asset-editor-modal .modal-footer-row #asset-message {
+  margin-top: 12px;
+}
+
+.asset-editor-modal .modal-actions {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(20, 32, 43, 0.08);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 244, 237, 0.96)),
+    rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
 .modal-advanced-section {
@@ -1079,6 +1206,23 @@ a.compact-action-item:focus-visible {
 }
 
 @media (max-width: 720px) {
+  .modal.wide.asset-editor-modal {
+    width: 100%;
+  }
+
+  .asset-editor-modal .modal-body {
+    padding: 18px 16px 20px;
+  }
+
+  .asset-editor-modal .field {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .asset-editor-modal .field.section-intro {
+    padding: 16px;
+  }
+
   .topbar {
     flex-direction: column;
     align-items: stretch;

@@ -249,9 +249,9 @@ Example response:
   "probe_scheduler": {
     "enabled": true,
     "running": false,
-    "interval_ms": 900000,
-    "batch_size": 4,
-    "min_probe_gap_ms": 600000,
+    "interval_ms": 3600000,
+    "batch_size": 0,
+    "min_probe_gap_ms": 3600000,
     "jitter_ms": 10000,
     "next_run_at": "2026-04-15T05:31:14.317Z",
     "last_run_at": "2026-04-15T05:16:03.678Z",

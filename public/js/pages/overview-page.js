@@ -74,7 +74,7 @@ export function createOverviewPageRenderer({
     const failed = Number(summary?.failed || 0);
     const batchSize = Number(scheduler.batch_size || 0);
     const intervalLabel = formatProbeInterval(scheduler.interval_ms);
-    const batchLabel = batchSize > 0 ? `每轮最多 ${batchSize} 台` : "轻量批量执行";
+    const batchLabel = batchSize > 0 ? `每轮最多 ${batchSize} 台` : "每轮覆盖全部符合条件节点";
     const stateLabel = !enabled ? "已关闭" : running ? "运行中" : "空闲";
     const nextRunLabel = enabled
       ? running

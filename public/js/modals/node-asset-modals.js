@@ -4,7 +4,6 @@ import { createNodeAssetModalTemplatesModule } from "./node-asset-modal-template
 import {
   createLocationSuggestionsModule,
   formatLocationDisplay,
-  getLocationPresetOptions,
   normalizeLocationValue,
 } from "../shared/location-suggestions.js";
 
@@ -91,27 +90,13 @@ export function createNodeAssetModalsModule(dependencies) {
     delete inputElement.dataset.lockedByProvider;
   }
 
-  function getLocationOptionsHtml(scope, selectedValue = null, placeholder = "未填写") {
-    const normalizedSelectedValue =
-      normalizeLocationValue(selectedValue, { scope }) || String(selectedValue || "").trim();
-    const options = [
-      `<option value="">${escapeHtml(placeholder)}</option>`,
-      ...getLocationPresetOptions(scope).map((preset) => {
-        const optionValue = preset.value;
-        const selected = optionValue === normalizedSelectedValue ? " selected" : "";
-        const label = formatLocationDisplay(optionValue, { scope, style: "compact" });
-        return `<option value="${escapeHtml(optionValue)}"${selected}>${escapeHtml(label)}</option>`;
-      }),
-    ];
-    if (
-      normalizedSelectedValue &&
-      !getLocationPresetOptions(scope).some((preset) => preset.value === normalizedSelectedValue)
-    ) {
-      options.push(
-        `<option value="${escapeHtml(normalizedSelectedValue)}" selected>${escapeHtml(normalizedSelectedValue)}</option>`,
-      );
+  function setLocationFieldValue(inputElement, value, scope) {
+    if (!inputElement) {
+      return;
     }
-    return options.join("");
+
+    inputElement.value =
+      normalizeLocationValue(value, { scope }) || String(value || "").trim() || "";
   }
 
   function getRelayNodeOptionsHtml(selectedId = null, options = {}) {
@@ -199,8 +184,8 @@ export function createNodeAssetModalsModule(dependencies) {
     const message = documentRef.getElementById("manual-message");
     const providerSelect = documentRef.getElementById("manual-provider-id");
     const providerInput = documentRef.getElementById("manual-provider");
-    const regionSelect = documentRef.getElementById("manual-region");
-    const entryRegionSelect = documentRef.getElementById("manual-entry-region");
+    const regionInput = documentRef.getElementById("manual-region");
+    const entryRegionInput = documentRef.getElementById("manual-entry-region");
     const relayNodeSelect = documentRef.getElementById("manual-relay-node-id");
     const managementRelayNodeSelect = documentRef.getElementById("manual-management-relay-node-id");
     const businessModeSelect = documentRef.getElementById("manual-access-mode");
@@ -216,12 +201,8 @@ export function createNodeAssetModalsModule(dependencies) {
       if (providerSelect) {
         providerSelect.innerHTML = getProviderOptionsHtml(providerSelect.value || null);
       }
-      if (regionSelect) {
-        regionSelect.innerHTML = getLocationOptionsHtml("region", regionSelect.value, "未填写");
-      }
-      if (entryRegionSelect) {
-        entryRegionSelect.innerHTML = getLocationOptionsHtml("entry", entryRegionSelect.value, "未填写");
-      }
+      setLocationFieldValue(regionInput, regionInput?.value, "region");
+      setLocationFieldValue(entryRegionInput, entryRegionInput?.value, "entry");
       if (relayNodeSelect) {
         relayNodeSelect.innerHTML = getRelayNodeOptionsHtml(relayNodeSelect.value || null, {
           placeholder: "未选择已纳管入口节点",
@@ -367,8 +348,8 @@ export function createNodeAssetModalsModule(dependencies) {
     const summary = documentRef.getElementById("asset-node-summary");
     const providerSelect = documentRef.getElementById("asset-provider-id");
     const providerInput = documentRef.getElementById("asset-provider");
-    const regionSelect = documentRef.getElementById("asset-region");
-    const entryRegionSelect = documentRef.getElementById("asset-entry-region");
+    const regionInput = documentRef.getElementById("asset-region");
+    const entryRegionInput = documentRef.getElementById("asset-entry-region");
     const relayNodeSelect = documentRef.getElementById("asset-relay-node-id");
     const managementRelayNodeSelect = documentRef.getElementById("asset-management-relay-node-id");
     const businessModeSelect = documentRef.getElementById("asset-access-mode");
@@ -394,16 +375,8 @@ export function createNodeAssetModalsModule(dependencies) {
       if (providerSelect) {
         providerSelect.innerHTML = getProviderOptionsHtml(node.provider_id || null);
       }
-      if (regionSelect) {
-        regionSelect.innerHTML = getLocationOptionsHtml("region", node.labels?.region, "未填写");
-      }
-      if (entryRegionSelect) {
-        entryRegionSelect.innerHTML = getLocationOptionsHtml(
-          "entry",
-          node.networking?.entry_region,
-          "未填写",
-        );
-      }
+      setLocationFieldValue(regionInput, node.labels?.region, "region");
+      setLocationFieldValue(entryRegionInput, node.networking?.entry_region, "entry");
       if (relayNodeSelect) {
         relayNodeSelect.innerHTML = getRelayNodeOptionsHtml(node.networking?.relay_node_id || null, {
           excludeNodeId: node.id,
@@ -439,8 +412,10 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-expire").value = formatDateInput(node.commercial?.expires_at);
       documentRef.getElementById("asset-access-mode").value = node.networking?.access_mode || "direct";
       documentRef.getElementById("asset-entry-port").value = node.networking?.entry_port ?? "";
-      documentRef.getElementById("asset-ssh-port").value =
-        node.management?.ssh_port ?? node.facts?.ssh_port ?? 19822;
+      documentRef.getElementById("asset-management-ssh-host").value =
+        node.management?.ssh_host || node.ssh_host || "";
+      documentRef.getElementById("asset-management-ssh-port").value =
+        node.management?.ssh_port ?? node.ssh_port ?? node.facts?.ssh_port ?? 19822;
       documentRef.getElementById("asset-management-access-mode").value =
         node.management?.access_mode || "direct";
       documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";

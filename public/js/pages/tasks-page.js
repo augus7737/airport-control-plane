@@ -171,6 +171,11 @@ export function createTasksPageModule(dependencies) {
     return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`;
   }
 
+  function formatProbeBatchSize(batchSize) {
+    const numericBatchSize = Number(batchSize || 0);
+    return numericBatchSize > 0 ? `每轮 ${numericBatchSize} 台` : "每轮覆盖全部符合条件节点";
+  }
+
   function getProbeSchedulerPresentation(probeScheduler) {
     if (!probeScheduler?.enabled) {
       return {
@@ -362,7 +367,7 @@ export function createTasksPageModule(dependencies) {
             <div class="tasks-probe-item">
               <span>调度节奏</span>
               <strong>${escapeHtml(formatDurationCompact(probeScheduler?.interval_ms))}</strong>
-              <small>每轮 ${escapeHtml(String(probeScheduler?.batch_size || 0))} 台，最小间隔 ${escapeHtml(
+              <small>${escapeHtml(formatProbeBatchSize(probeScheduler?.batch_size))}，最小间隔 ${escapeHtml(
                 formatDurationCompact(probeScheduler?.min_probe_gap_ms),
               )}</small>
             </div>

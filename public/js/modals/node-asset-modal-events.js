@@ -45,10 +45,24 @@ export function createNodeAssetModalEventsModule(dependencies = {}) {
       openButton.onclick = onOpenCurrentNode;
     }
 
-    documentRef.querySelectorAll("[data-open-asset-modal]").forEach((button) => {
-      button.onclick = () => {
-        onOpenFromNodeId(button.getAttribute("data-open-asset-modal"));
-      };
+    if (documentRef.body?.dataset.assetModalTriggerBound === "1") {
+      return;
+    }
+
+    if (documentRef.body) {
+      documentRef.body.dataset.assetModalTriggerBound = "1";
+    }
+
+    documentRef.addEventListener("click", (event) => {
+      const trigger = event.target instanceof Element
+        ? event.target.closest("[data-open-asset-modal]")
+        : null;
+
+      if (!trigger) {
+        return;
+      }
+
+      onOpenFromNodeId(trigger.getAttribute("data-open-asset-modal"));
     });
   }
 

@@ -80,6 +80,36 @@ function buildTcpStage(result, target, extra = {}) {
   };
 }
 
+function skipDirectManagementTcpPrecheck(target) {
+  return target?.mode === "relay";
+}
+
+function buildRelayDirectTcpSkippedStage(target) {
+  return buildSkippedStage(
+    "relay_direct_tcp_skipped",
+    "当前节点使用 SSH 中转，已跳过控制面对目标机的直连 TCP 预检。",
+    {
+      target_host: target?.host ?? null,
+      target_port: target?.port ?? null,
+      target_family: target?.family ?? null,
+      source: target?.source ?? null,
+      strategy_requested: target?.relay_strategy ?? null,
+    },
+  );
+}
+
+function managementFailureStage(result) {
+  if (result?.control_ready) {
+    return null;
+  }
+
+  if (!skipDirectManagementTcpPrecheck(result?.target) && result?.tcp?.success !== true) {
+    return "management_tcp";
+  }
+
+  return "ssh_auth";
+}
+
 function toCapabilityFlag(value) {
   if (value === true) {
     return true;
@@ -617,20 +647,20 @@ exit 127
     };
   }
 
-  function managementReasonCode(tcpProbe, sshProbe) {
-    if (!tcpProbe?.success) {
+  function managementReasonCode(target, tcpProbe, sshProbe) {
+    if (!skipDirectManagementTcpPrecheck(target) && !tcpProbe?.success) {
       return normalizeTcpProbeError(tcpProbe?.error_message);
     }
 
     if (!sshProbe) {
-      return "tcp_only_success";
+      return skipDirectManagementTcpPrecheck(target) ? "management_probe_skipped" : "tcp_only_success";
     }
 
     if (sshProbe.attempted) {
       return sshProbe.success ? "ssh_control_ready" : sshProbe.error_message || "ssh_probe_failed";
     }
 
-    return sshProbe.skipped_reason || "tcp_only_success";
+    return sshProbe.skipped_reason || (skipDirectManagementTcpPrecheck(target) ? "management_probe_skipped" : "tcp_only_success");
   }
 
   async function performManagementProbe(node, options = {}) {
@@ -659,12 +689,20 @@ exit 127
       };
     }
 
-    const tcpProbe = runTcpProbe(target);
+    const relayMode = skipDirectManagementTcpPrecheck(target);
+    let tcpStage = relayMode
+      ? buildRelayDirectTcpSkippedStage(target)
+      : buildSkippedStage("tcp_unreachable", "管理 TCP 未连通，已跳过 SSH 探测。");
     let sshProbe = buildSkippedStage("tcp_unreachable", "管理 TCP 未连通，已跳过 SSH 探测。");
     let sshContext = null;
+    let tcpResult = null;
 
-    const tcpResult = await tcpProbe;
-    if (tcpResult.success) {
+    if (!relayMode) {
+      tcpResult = await runTcpProbe(target);
+      tcpStage = buildTcpStage(tcpResult, target);
+    }
+
+    if (relayMode || tcpResult?.success) {
       sshContext = await resolveNodeSshTransport(node, {
         allowDemoFallback: false,
       });
@@ -682,14 +720,15 @@ exit 127
       }
     }
 
-    const reasonCode = managementReasonCode(tcpResult, sshProbe);
+    const reasonCode = managementReasonCode(target, tcpStage, sshProbe);
+    const sshReady = Boolean(sshProbe.attempted && sshProbe.success);
     return {
       route: managementRoute,
       target,
-      tcp: buildTcpStage(tcpResult, target),
+      tcp: tcpStage,
       ssh: sshProbe,
-      success: Boolean(tcpResult.success && sshProbe.attempted && sshProbe.success),
-      control_ready: Boolean(sshProbe.attempted && sshProbe.success),
+      success: relayMode ? sshReady : Boolean(tcpResult?.success && sshReady),
+      control_ready: sshReady,
       reason_code: reasonCode,
       relay_node_id: target.relay_node_id ?? null,
       relay_target:
@@ -868,19 +907,22 @@ exit 127
       return result.tcp?.skipped_note || "节点缺少管理地址。";
     }
 
-    if (!result.tcp?.success) {
-      if (result.target.mode === "relay") {
-        return `管理链路 TCP 未连通 ${targetLabel}，当前节点需要经 SSH 中转接入${strategyText}。`;
-      }
-      return `管理链路 TCP 未连通 ${targetLabel}。`;
-    }
-
     if (result.ssh?.attempted && result.ssh.success) {
       return `${result.ssh.transport_label || "SSH"} 接管验证成功，${targetLabel} 端到端耗时 ${result.ssh.latency_ms}ms。`;
     }
 
     if (result.ssh?.attempted && !result.ssh.success) {
+      if (skipDirectManagementTcpPrecheck(result.target)) {
+        return `${result.ssh.transport_label || "SSH 中转"} 接管验证失败：${result.ssh.error_message || "unknown"}。`;
+      }
       return `管理链路 TCP 已通，但 SSH 接管验证失败：${result.ssh.error_message || "unknown"}。`;
+    }
+
+    if (!result.tcp?.success) {
+      if (result.target.mode === "relay") {
+        return result.ssh?.skipped_note || `当前节点需要经 SSH 中转接入，已跳过控制面对 ${targetLabel} 的直连 TCP 预检${strategyText}。`;
+      }
+      return `管理链路 TCP 未连通 ${targetLabel}。`;
     }
 
     return result.ssh?.skipped_note || `管理链路 TCP 已通，当前仅确认 ${targetLabel} 可达。`;
@@ -977,9 +1019,7 @@ exit 127
       : relayFailure
         ? "relay_upstream_tcp"
         : managementFailure
-          ? management.tcp?.success
-            ? "ssh_auth"
-            : "management_tcp"
+          ? managementFailureStage(management)
           : null;
     const errorMessage = businessFailure
       ? business.reason_code
@@ -1096,13 +1136,22 @@ exit 127
       controlReady = outcome.control_ready;
       summary = buildManagementSummary(outcome);
       healthScore = managementScore(outcome);
-      nodeStatus = outcome.control_ready ? "active" : outcome.tcp?.success ? "degraded" : "failed";
-      errorStage = !success ? (outcome.tcp?.success ? "ssh_auth" : "management_tcp") : null;
+      nodeStatus = outcome.control_ready
+        ? "active"
+        : skipDirectManagementTcpPrecheck(outcome.target)
+          ? "failed"
+          : outcome.tcp?.success
+            ? "degraded"
+            : "failed";
+      errorStage = !success ? managementFailureStage(outcome) : null;
       errorMessage = !success
         ? outcome.ssh?.error_message || outcome.reason_code || outcome.tcp?.error_message
         : null;
       stderrExcerpt = outcome.ssh?.output_excerpt ?? null;
-      latencyMs = outcome.ssh?.latency_ms ?? outcome.tcp?.latency_ms ?? null;
+      latencyMs =
+        outcome.ssh?.latency_ms ??
+        (skipDirectManagementTcpPrecheck(outcome.target) ? null : outcome.tcp?.latency_ms) ??
+        null;
       transportKind = outcome.ssh?.transport_kind ?? null;
       transportLabel = outcome.ssh?.transport_label ?? null;
       stages = {

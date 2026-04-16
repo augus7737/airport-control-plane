@@ -151,12 +151,12 @@ const probeSshTimeoutMs = Number.parseInt(
 );
 const autoProbeEnabled = String(process.env.AUTO_PROBE_ENABLED ?? "true").toLowerCase() !== "false";
 const autoProbeIntervalMs = Number.parseInt(
-  process.env.AUTO_PROBE_INTERVAL_MS ?? `${15 * 60 * 1000}`,
+  process.env.AUTO_PROBE_INTERVAL_MS ?? `${60 * 60 * 1000}`,
   10,
 );
-const autoProbeBatchSize = Number.parseInt(process.env.AUTO_PROBE_BATCH_SIZE ?? "4", 10);
+const autoProbeBatchSize = Number.parseInt(process.env.AUTO_PROBE_BATCH_SIZE ?? "0", 10);
 const autoProbeMinGapMs = Number.parseInt(
-  process.env.AUTO_PROBE_MIN_GAP_MS ?? `${10 * 60 * 1000}`,
+  process.env.AUTO_PROBE_MIN_GAP_MS ?? `${60 * 60 * 1000}`,
   10,
 );
 const autoProbeJitterMs = Number.parseInt(process.env.AUTO_PROBE_JITTER_MS ?? "10000", 10);

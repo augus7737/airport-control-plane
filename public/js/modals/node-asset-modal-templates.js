@@ -2,7 +2,7 @@ export function createNodeAssetModalTemplatesModule() {
   function manualModalTemplate() {
     return `
       <div class="modal-backdrop" id="manual-modal">
-        <div class="modal wide">
+        <div class="modal wide asset-editor-modal">
           <div class="modal-body">
             <div class="modal-head">
               <div>
@@ -12,8 +12,8 @@ export function createNodeAssetModalTemplatesModule() {
               <button class="close" id="close-manual-modal" aria-label="关闭">×</button>
             </div>
 
-            <form id="manual-node-form" class="form-grid">
-              <div class="field full">
+            <form id="manual-node-form" class="form-grid node-asset-form">
+              <div class="field full section-intro">
                 <label>资产归属</label>
                 <div class="field-note">先录稳定台账：名称、厂商、国家和基础公网信息；业务入口与 SSH 跳板收进高级区，避免首次录入被链路字段淹没。</div>
               </div>
@@ -34,10 +34,14 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="manual-region">国家</label>
-                <select id="manual-region" name="region">
-                  <option value="">未填写</option>
-                </select>
-                <div class="field-note">节点归属先按国家级维护；像 Frankfurt / FRA 会自动归一到 德国 · DE。</div>
+                <input
+                  id="manual-region"
+                  name="region"
+                  data-location-scope="region"
+                  placeholder="支持输入国家、英文或 ISO，例如 越南 / Vietnam / VN"
+                  spellcheck="false"
+                />
+                <div class="field-note">支持中文、英文、机场码和 ISO 代码联想，保存后统一归一成国家级标签。</div>
               </div>
               <div class="field">
                 <label for="manual-role">用途标签</label>
@@ -56,14 +60,10 @@ export function createNodeAssetModalTemplatesModule() {
                 <input id="manual-private-ip" name="private_ipv4" placeholder="例如 10.0.0.88" />
               </div>
               <div class="field">
-                <label for="manual-ssh-port">SSH 端口</label>
-                <input id="manual-ssh-port" name="ssh_port" type="number" min="1" max="65535" value="19822" placeholder="默认 19822，可按节点实际端口填写" />
-              </div>
-              <div class="field">
                 <label for="manual-memory">内存 MB</label>
                 <input id="manual-memory" name="memory_mb" type="number" min="0" placeholder="例如 1024" />
               </div>
-              <div class="field full">
+              <div class="field full section-intro">
                 <label>账单成本</label>
                 <div class="field-note">月成本、超额成本和厂商汇总都以这里的原始账单字段实时折算。</div>
               </div>
@@ -149,9 +149,13 @@ export function createNodeAssetModalTemplatesModule() {
                     </div>
                     <div class="field">
                       <label for="manual-entry-region">业务入口区域</label>
-                      <select id="manual-entry-region" name="entry_region">
-                        <option value="">未填写</option>
-                      </select>
+                      <input
+                        id="manual-entry-region"
+                        name="entry_region"
+                        data-location-scope="entry"
+                        placeholder="支持输入 香港 / HK / HKG / Japan"
+                        spellcheck="false"
+                      />
                     </div>
                     <div class="field" data-business-relay-field>
                       <label for="manual-entry-port">业务入口端口</label>
@@ -169,7 +173,7 @@ export function createNodeAssetModalTemplatesModule() {
                     </div>
                     <div class="field full">
                       <label>管理链路</label>
-                      <div class="field-note">这里只描述控制面如何 SSH 接管节点；已纳管跳板优先选节点，独立 SSH 代理再填主机。</div>
+                      <div class="field-note">这里只描述控制面如何 SSH 接管节点。管理入口填写平台真正连接的主机和端口；节点内部 sshd 监听端口通常仍是 22，不要和外部映射端口混填。</div>
                     </div>
                     <div class="field">
                       <label for="manual-management-access-mode">管理接入方式</label>
@@ -177,6 +181,15 @@ export function createNodeAssetModalTemplatesModule() {
                         <option value="direct">SSH 直连</option>
                         <option value="relay">SSH 经中转</option>
                       </select>
+                    </div>
+                    <div class="field">
+                      <label for="manual-management-ssh-host">管理入口主机</label>
+                      <input id="manual-management-ssh-host" name="management_ssh_host" placeholder="例如 151.242.85.89；留空时按节点公网/内网自动推导" />
+                    </div>
+                    <div class="field">
+                      <label for="manual-management-ssh-port">管理入口端口</label>
+                      <input id="manual-management-ssh-port" name="management_ssh_port" type="number" min="1" max="65535" value="19822" placeholder="平台对外连接入口，例如 19822" />
+                      <div class="field-note">这里填控制面真正要连的外部端口，不是容器内 sshd 监听端口。</div>
                     </div>
                     <div class="field">
                       <label for="manual-management-ssh-user">SSH 用户</label>
@@ -236,7 +249,7 @@ export function createNodeAssetModalTemplatesModule() {
                 <textarea id="manual-note" name="note" placeholder="例如：月底到期，先观察质量，再决定是否续费。"></textarea>
                 <div class="field-note">这一步先解决“账目和资产台账”问题，等接入厂商 API 后再做自动同步。</div>
               </div>
-              <div class="field full">
+              <div class="field full modal-footer-row">
                 <div class="modal-actions">
                   <button class="button primary" type="submit">保存到节点清单</button>
                   <button class="button ghost" type="button" id="manual-reset">清空表单</button>
@@ -253,19 +266,19 @@ export function createNodeAssetModalTemplatesModule() {
   function assetModalTemplate() {
     return `
       <div class="modal-backdrop" id="asset-modal">
-        <div class="modal wide">
+        <div class="modal wide asset-editor-modal">
           <div class="modal-body">
             <div class="modal-head">
               <div>
                 <h3>编辑资产信息</h3>
                 <p>主表单只保留资产台账、成本和基础识别字段；业务链路与 SSH 管理链路收进高级区，避免资产编辑被链路配置淹没。</p>
-                <div class="field-note" id="asset-node-summary">当前编辑节点：-</div>
+                <div class="field-note node-summary-pill" id="asset-node-summary">当前编辑节点：-</div>
               </div>
               <button class="close" id="close-asset-modal" aria-label="关闭">×</button>
             </div>
 
-            <form id="asset-form" class="form-grid">
-              <div class="field full">
+            <form id="asset-form" class="form-grid node-asset-form">
+              <div class="field full section-intro">
                 <label>资产归属</label>
                 <div class="field-note">固定项尽量用选择器，先把台账记清楚；国家级归属优先，不强迫你现在就录机房城市。</div>
               </div>
@@ -282,16 +295,20 @@ export function createNodeAssetModalTemplatesModule() {
               </div>
               <div class="field">
                 <label for="asset-region">国家</label>
-                <select id="asset-region" name="region">
-                  <option value="">未填写</option>
-                </select>
-                <div class="field-note">按国家级归一维护；像 Frankfurt / FRA 会自动统一成 德国 · DE，不再强迫你先录城市或机房。</div>
+                <input
+                  id="asset-region"
+                  name="region"
+                  data-location-scope="region"
+                  placeholder="支持输入国家、英文或 ISO，例如 马来西亚 / Malaysia / MY"
+                  spellcheck="false"
+                />
+                <div class="field-note">支持中文、英文、机场码和 ISO 代码联想；保存后统一成国家级标签。</div>
               </div>
               <div class="field">
                 <label for="asset-role">用途标签</label>
                 <input id="asset-role" name="role" placeholder="例如 edge / backup / test" />
               </div>
-              <div class="field full">
+              <div class="field full section-intro">
                 <label>账单成本</label>
                 <div class="field-note">月成本、超额成本和 Provider 汇总都以这里的原始账单字段实时折算。</div>
               </div>
@@ -345,9 +362,9 @@ export function createNodeAssetModalTemplatesModule() {
                 <label for="asset-billing-started-at">账单开始时间</label>
                 <input id="asset-billing-started-at" name="billing_started_at" type="date" />
               </div>
-              <div class="field full">
+              <div class="field full section-intro">
                 <label>基础网络与额度</label>
-                <div class="field-note">这里只保留 IP、SSH 端口和资源额度这类基础识别信息，不再把链路策略挤在主表单里。</div>
+                <div class="field-note">这里只保留 IP 和资源额度这类基础识别信息；管理入口主机和端口放到“管理链路”里，避免继续和节点内部 sshd 监听端口混淆。</div>
               </div>
               <div class="field">
                 <label for="asset-public-ip">公网 IPv4</label>
@@ -360,10 +377,6 @@ export function createNodeAssetModalTemplatesModule() {
               <div class="field">
                 <label for="asset-private-ip">内网 IPv4</label>
                 <input id="asset-private-ip" name="private_ipv4" placeholder="例如 10.0.0.88" />
-              </div>
-              <div class="field">
-                <label for="asset-ssh-port">SSH 端口</label>
-                <input id="asset-ssh-port" name="ssh_port" type="number" min="1" max="65535" placeholder="默认 19822，可按节点实际端口填写" />
               </div>
               <div class="field full">
                 <label>续费方式</label>
@@ -404,9 +417,13 @@ export function createNodeAssetModalTemplatesModule() {
                     </div>
                     <div class="field">
                       <label for="asset-entry-region">业务入口区域</label>
-                      <select id="asset-entry-region" name="entry_region">
-                        <option value="">未填写</option>
-                      </select>
+                      <input
+                        id="asset-entry-region"
+                        name="entry_region"
+                        data-location-scope="entry"
+                        placeholder="支持输入 香港 / HK / HKG / Japan"
+                        spellcheck="false"
+                      />
                     </div>
                     <div class="field" data-business-relay-field>
                       <label for="asset-entry-port">业务入口端口</label>
@@ -424,7 +441,7 @@ export function createNodeAssetModalTemplatesModule() {
                     </div>
                     <div class="field full">
                       <label>管理链路</label>
-                      <div class="field-note">专门描述控制面怎么 SSH 接管这台节点；已纳管跳板优先选节点，独立 SSH 代理再填主机。</div>
+                      <div class="field-note">专门描述控制面怎么 SSH 接管这台节点。管理入口填写平台真正连接的主机和端口；节点内部 sshd 监听端口通常仍是 22，不要和外部映射端口混填。</div>
                     </div>
                     <div class="field">
                       <label for="asset-management-access-mode">管理接入方式</label>
@@ -432,6 +449,15 @@ export function createNodeAssetModalTemplatesModule() {
                         <option value="direct">SSH 直连</option>
                         <option value="relay">SSH 经中转</option>
                       </select>
+                    </div>
+                    <div class="field">
+                      <label for="asset-management-ssh-host">管理入口主机</label>
+                      <input id="asset-management-ssh-host" name="management_ssh_host" placeholder="例如 151.242.85.89；留空时按节点公网/内网自动推导" />
+                    </div>
+                    <div class="field">
+                      <label for="asset-management-ssh-port">管理入口端口</label>
+                      <input id="asset-management-ssh-port" name="management_ssh_port" type="number" min="1" max="65535" placeholder="平台对外连接入口，例如 19822" />
+                      <div class="field-note">这里填控制面真正要连的外部端口，不是容器内 sshd 监听端口。</div>
                     </div>
                     <div class="field">
                       <label for="asset-management-ssh-user">SSH 用户</label>
@@ -484,7 +510,7 @@ export function createNodeAssetModalTemplatesModule() {
                 <textarea id="asset-note" name="note" placeholder="例如：已自动注册，账目信息后补。"></textarea>
                 <div class="field-note">自动注册节点的系统信息继续来自 bootstrap，上面这些资产字段则允许你后补和维护。</div>
               </div>
-              <div class="field full">
+              <div class="field full modal-footer-row">
                 <div class="modal-actions">
                   <button class="button primary" type="submit">保存资产信息</button>
                   <button class="button ghost" type="button" id="asset-reset">恢复当前值</button>

@@ -63,6 +63,41 @@ const REGION_LOCATION_PRESETS = [
     aliases: ["SIN", "Singapore"],
   }),
   buildLocationRecord({
+    value: "马来西亚",
+    code: "MY",
+    english: "Malaysia",
+    country: "马来西亚",
+    aliases: ["Malaysia", "MY", "Kuala Lumpur", "KUL", "吉隆坡"],
+  }),
+  buildLocationRecord({
+    value: "越南",
+    code: "VN",
+    english: "Vietnam",
+    country: "越南",
+    aliases: ["Vietnam", "VN", "Ho Chi Minh", "SGN", "HCMC", "Hanoi", "HAN", "胡志明", "河内"],
+  }),
+  buildLocationRecord({
+    value: "泰国",
+    code: "TH",
+    english: "Thailand",
+    country: "泰国",
+    aliases: ["Thailand", "TH", "Bangkok", "BKK", "曼谷"],
+  }),
+  buildLocationRecord({
+    value: "印度尼西亚",
+    code: "ID",
+    english: "Indonesia",
+    country: "印度尼西亚",
+    aliases: ["Indonesia", "ID", "Jakarta", "CGK", "雅加达"],
+  }),
+  buildLocationRecord({
+    value: "菲律宾",
+    code: "PH",
+    english: "Philippines",
+    country: "菲律宾",
+    aliases: ["Philippines", "PH", "Manila", "MNL", "马尼拉"],
+  }),
+  buildLocationRecord({
     value: "韩国",
     code: "KR",
     english: "South Korea",
@@ -137,6 +172,55 @@ const REGION_LOCATION_PRESETS = [
     country: "澳大利亚",
     aliases: ["Australia", "AU", "Sydney", "SYD", "悉尼"],
   }),
+  buildLocationRecord({
+    value: "加拿大",
+    code: "CA",
+    english: "Canada",
+    country: "加拿大",
+    aliases: ["Canada", "CA", "Toronto", "YYZ", "Vancouver", "YVR", "多伦多", "温哥华"],
+  }),
+  buildLocationRecord({
+    value: "西班牙",
+    code: "ES",
+    english: "Spain",
+    country: "西班牙",
+    aliases: ["Spain", "ES", "Madrid", "MAD", "马德里"],
+  }),
+  buildLocationRecord({
+    value: "意大利",
+    code: "IT",
+    english: "Italy",
+    country: "意大利",
+    aliases: ["Italy", "IT", "Milan", "MXP", "Rome", "ROM", "米兰", "罗马"],
+  }),
+  buildLocationRecord({
+    value: "波兰",
+    code: "PL",
+    english: "Poland",
+    country: "波兰",
+    aliases: ["Poland", "PL", "Warsaw", "WAW", "华沙"],
+  }),
+  buildLocationRecord({
+    value: "瑞典",
+    code: "SE",
+    english: "Sweden",
+    country: "瑞典",
+    aliases: ["Sweden", "SE", "Stockholm", "ARN", "斯德哥尔摩"],
+  }),
+  buildLocationRecord({
+    value: "印度",
+    code: "IN",
+    english: "India",
+    country: "印度",
+    aliases: ["India", "IN", "Mumbai", "BOM", "Delhi", "DEL", "孟买", "德里"],
+  }),
+  buildLocationRecord({
+    value: "阿联酋",
+    code: "AE",
+    english: "United Arab Emirates",
+    country: "阿联酋",
+    aliases: ["UAE", "United Arab Emirates", "AE", "Dubai", "DXB", "迪拜"],
+  }),
 ];
 
 const ENTRY_LOCATION_PRESETS = [
@@ -181,6 +265,27 @@ const ENTRY_LOCATION_PRESETS = [
     english: "Singapore",
     country: "新加坡",
     aliases: ["Singapore"],
+  }),
+  buildLocationRecord({
+    value: "马来西亚",
+    code: "MY",
+    english: "Malaysia",
+    country: "马来西亚",
+    aliases: ["Malaysia", "MY", "KUL", "吉隆坡"],
+  }),
+  buildLocationRecord({
+    value: "越南",
+    code: "VN",
+    english: "Vietnam",
+    country: "越南",
+    aliases: ["Vietnam", "VN", "SGN", "HAN", "胡志明", "河内"],
+  }),
+  buildLocationRecord({
+    value: "泰国",
+    code: "TH",
+    english: "Thailand",
+    country: "泰国",
+    aliases: ["Thailand", "TH", "BKK", "曼谷"],
   }),
   buildLocationRecord({
     value: "美国西海岸",
@@ -283,6 +388,18 @@ export function findLocationPreset(value, options = {}) {
 
   if (normalizedValue.includes("韩国")) {
     return presetsForScope(scope).find((preset) => preset.value === "韩国") || null;
+  }
+
+  if (normalizedValue.includes("马来") || normalizedValue.includes("malaysia")) {
+    return presetsForScope(scope).find((preset) => preset.value === "马来西亚") || null;
+  }
+
+  if (normalizedValue.includes("越南") || normalizedValue.includes("vietnam")) {
+    return presetsForScope(scope).find((preset) => preset.value === "越南") || null;
+  }
+
+  if (normalizedValue.includes("泰国") || normalizedValue.includes("thailand")) {
+    return presetsForScope(scope).find((preset) => preset.value === "泰国") || null;
   }
 
   return null;

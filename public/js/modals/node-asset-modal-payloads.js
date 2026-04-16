@@ -63,6 +63,8 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
         : null;
     return {
       access_mode: accessMode,
+      ssh_host: String(formData.get("management_ssh_host") || "").trim() || null,
+      ssh_port: toNumberOrNull(formData.get("management_ssh_port")),
       relay_strategy:
         accessMode === "relay"
           ? String(formData.get("management_relay_strategy") || "").trim() || "auto"
@@ -103,7 +105,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       public_ipv4: String(formData.get("public_ipv4") || "").trim() || null,
       public_ipv6: String(formData.get("public_ipv6") || "").trim() || null,
       private_ipv4: String(formData.get("private_ipv4") || "").trim() || null,
-      ssh_port: toNumberOrNull(formData.get("ssh_port")) ?? 19822,
+      ssh_port: toNumberOrNull(formData.get("management_ssh_port")) ?? 19822,
       memory_mb: toNumberOrNull(formData.get("memory_mb")),
       bandwidth_mbps: toNumberOrNull(formData.get("bandwidth_mbps")),
       traffic_quota_gb: toNumberOrNull(formData.get("traffic_quota_gb")),
@@ -128,7 +130,9 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
 
   function buildAssetPayload(formData) {
     const providerId = String(formData.get("provider_id") || "").trim() || null;
+    const managementSshPort = toNumberOrNull(formData.get("management_ssh_port"));
     return {
+      ...(managementSshPort !== null ? { ssh_port: managementSshPort } : {}),
       provider_id: providerId,
       provider: String(formData.get("provider") || "").trim() || null,
       region: normalizeLocationValue(formData.get("region"), { scope: "region" }),
@@ -145,7 +149,6 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       billing_started_at: String(formData.get("billing_started_at") || "").trim() || null,
       expires_at: String(formData.get("expires_at") || "").trim() || null,
       auto_renew: formData.get("auto_renew") === "on",
-      ssh_port: toNumberOrNull(formData.get("ssh_port")),
       bandwidth_mbps: toNumberOrNull(formData.get("bandwidth_mbps")),
       traffic_quota_gb: toNumberOrNull(formData.get("traffic_quota_gb")),
       traffic_used_gb: toNumberOrNull(formData.get("traffic_used_gb")),
