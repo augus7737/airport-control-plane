@@ -59,6 +59,7 @@ CONTROL_PLANE_SESSION_TTL_MS=${CONTROL_PLANE_SESSION_TTL_MS:-43200000}
 CONTROL_PLANE_SESSION_SECURE=${CONTROL_PLANE_SESSION_SECURE:-false}
 
 PLATFORM_PUBLIC_BASE_URL=${PLATFORM_PUBLIC_BASE_URL:-}
+CLIENT_PUBLIC_BASE_URL=${CLIENT_PUBLIC_BASE_URL:-}
 NODE_SSH_USER=${NODE_SSH_USER:-root}
 DEMO_SHELL_BINARY=${DEMO_SHELL_BINARY:-/bin/sh}
 OPERATION_EXECUTION_TIMEOUT_MS=${OPERATION_EXECUTION_TIMEOUT_MS:-300000}
@@ -76,7 +77,7 @@ EOF
   echo "[deploy] 已生成部署环境文件: $ENV_FILE"
   echo "[deploy] 登录账号: $auth_user"
   echo "[deploy] 登录密码: $auth_password"
-  echo "[deploy] 如需绑定域名，请编辑 PLATFORM_PUBLIC_BASE_URL 后重新执行本脚本。"
+  echo "[deploy] 如需绑定域名，请编辑 PLATFORM_PUBLIC_BASE_URL / CLIENT_PUBLIC_BASE_URL 后重新执行本脚本。"
 }
 
 load_env_file() {
@@ -84,6 +85,31 @@ load_env_file() {
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +a
+}
+
+validate_env_file() {
+  local auth_password="${CONTROL_PLANE_AUTH_PASSWORD:-}"
+  local session_secure="${CONTROL_PLANE_SESSION_SECURE:-false}"
+
+  if [[ -z "$auth_password" ]]; then
+    echo "[deploy] CONTROL_PLANE_AUTH_PASSWORD 不能为空。" >&2
+    exit 1
+  fi
+
+  if [[ "$auth_password" = "CHANGE_ME" ]]; then
+    echo "[deploy] CONTROL_PLANE_AUTH_PASSWORD 仍是示例值 CHANGE_ME，请先改成强密码再部署。" >&2
+    exit 1
+  fi
+
+  if [[ -n "${PLATFORM_SSH_PRIVATE_KEY_PATH:-}" && "${PLATFORM_SSH_PRIVATE_KEY_PATH}" != /app/data/* ]]; then
+    echo "[deploy] 检测到自定义 PLATFORM_SSH_PRIVATE_KEY_PATH=${PLATFORM_SSH_PRIVATE_KEY_PATH}" >&2
+    echo "[deploy] 请确认该路径在容器内真实存在；标准 install.sh 默认只挂载 /app/data。" >&2
+  fi
+
+  if [[ -n "${PLATFORM_PUBLIC_BASE_URL:-}" && "$session_secure" != "true" ]]; then
+    echo "[deploy] 警告: 已设置 PLATFORM_PUBLIC_BASE_URL，但 CONTROL_PLANE_SESSION_SECURE 不是 true。" >&2
+    echo "[deploy] 如果你通过 HTTPS 正式域名访问控制面，建议把 CONTROL_PLANE_SESSION_SECURE=true。" >&2
+  fi
 }
 
 detect_compose_cmd() {
@@ -143,6 +169,42 @@ run_with_plain_docker() {
     "${AIRPORT_IMAGE_TAG:-$IMAGE_TAG_DEFAULT}" >/dev/null
 }
 
+container_name() {
+  printf '%s\n' "${AIRPORT_CONTAINER_NAME:-$CONTAINER_NAME_DEFAULT}"
+}
+
+wait_for_container_ready() {
+  local name
+  local status
+  local health
+  local attempt
+  name="$(container_name)"
+
+  echo "[deploy] 等待容器 ${name} 进入可用状态..."
+
+  for attempt in $(seq 1 40); do
+    status="$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null || true)"
+    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null || true)"
+
+    if [[ "$status" = "running" && ( "$health" = "healthy" || "$health" = "none" ) ]]; then
+      echo "[deploy] 容器 ${name} 已就绪"
+      return 0
+    fi
+
+    if [[ "$status" = "exited" || "$health" = "unhealthy" ]]; then
+      echo "[deploy] 容器 ${name} 启动失败，输出最近日志：" >&2
+      docker logs --tail 120 "$name" >&2 || true
+      return 1
+    fi
+
+    sleep 3
+  done
+
+  echo "[deploy] 容器 ${name} 在预期时间内未进入健康状态，输出最近日志：" >&2
+  docker logs --tail 120 "$name" >&2 || true
+  return 1
+}
+
 print_summary() {
   local bind_ip="${AIRPORT_BIND_IP:-0.0.0.0}"
   local host_port="${AIRPORT_HOST_PORT:-8080}"
@@ -154,7 +216,7 @@ print_summary() {
   echo "[deploy] 访问地址: http://${bind_ip}:${host_port}"
   echo "[deploy] 数据目录: ${data_dir_abs}"
   echo "[deploy] 登录账号: ${CONTROL_PLANE_AUTH_USERNAME:-admin}"
-  echo "[deploy] 如使用反向代理，请把 PLATFORM_PUBLIC_BASE_URL 改成正式域名并重新部署。"
+  echo "[deploy] 如使用反向代理，请把 PLATFORM_PUBLIC_BASE_URL / CLIENT_PUBLIC_BASE_URL 改成正式域名并重新部署。"
 }
 
 main() {
@@ -165,6 +227,7 @@ main() {
   fi
 
   load_env_file
+  validate_env_file
   mkdir -p "$(resolve_host_path "${AIRPORT_DATA_DIR:-./data-prod}")"
 
   if compose_cmd="$(detect_compose_cmd)"; then
@@ -172,6 +235,8 @@ main() {
   else
     run_with_plain_docker
   fi
+
+  wait_for_container_ready
 
   print_summary
 }

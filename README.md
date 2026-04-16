@@ -104,8 +104,12 @@ The deployment script will:
 - generate `.env.production`
 - generate a random admin password if needed
 - create `data-prod/`
+- build an image that already includes Node runtime and production npm dependencies
 - prefer Compose when available
 - automatically fall back to plain `docker build + docker run` when Compose is unavailable
+- wait for the container health check to pass before treating the deployment as successful
+
+The production host only needs Docker and OpenSSL. It does not need host-level Node.js or npm.
 
 See `docs/deployment.md` for the full production guide.
 

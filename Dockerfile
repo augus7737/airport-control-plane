@@ -15,6 +15,11 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY package.json ./package.json
+COPY package-lock.json ./package-lock.json
+
+RUN npm ci --omit=dev --no-audit --no-fund \
+  && npm cache clean --force
+
 COPY src ./src
 COPY public ./public
 COPY scripts ./scripts

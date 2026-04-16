@@ -33,7 +33,11 @@ bash install.sh
 2. 生成 `.env.production`
 3. 自动生成一组控制面登录账号密码
 4. 创建持久化目录 `data-prod/`
-5. 优先使用 Compose 部署；如果主机没有 Compose，就自动退回到 `docker build + docker run`
+5. 构建一个已经内置 Node 运行时与生产依赖的镜像
+6. 优先使用 Compose 部署；如果主机没有 Compose，就自动退回到 `docker build + docker run`
+7. 等待容器健康检查通过，避免“容器起了但服务没真的可用”
+
+这条部署链路不依赖宿主机安装 `node` 或 `npm`。
 
 首次执行成功后，你会看到：
 
@@ -57,8 +61,15 @@ bash install.sh
 CONTROL_PLANE_AUTH_USERNAME=admin
 CONTROL_PLANE_AUTH_PASSWORD=改成你的强密码
 PLATFORM_PUBLIC_BASE_URL=https://你的域名
+CLIENT_PUBLIC_BASE_URL=https://你的订阅域名
 CONTROL_PLANE_SESSION_SECURE=true
 ```
+
+补充说明：
+
+- `CONTROL_PLANE_AUTH_PASSWORD` 不能保留为示例值 `CHANGE_ME`，部署脚本会直接拒绝上线。
+- 默认一键部署只挂载 `data-prod/ -> /app/data`。
+- 如果你设置 `PLATFORM_SSH_PRIVATE_KEY_PATH` 指向 `/run/secrets/...` 这类自定义位置，请确认你已经额外挂载了对应文件；否则容器内看不到这把私钥。
 
 然后重新执行：
 
@@ -105,6 +116,7 @@ bash install.sh
 
 如果你走的是 Compose，脚本会自动重建镜像并重启服务。
 如果你走的是纯 `docker run`，脚本也会自动替换旧容器。
+无论哪条路径，脚本都会等待容器健康检查成功后才算部署完成。
 
 ## 目前不建议的部署方式
 
