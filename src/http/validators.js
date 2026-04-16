@@ -493,6 +493,59 @@ export function validateNodeGroupUpdate(payload) {
   return errors.filter((error) => error !== "name is required");
 }
 
+export function validateProviderCreate(payload) {
+  const errors = [];
+
+  if (!isPlainObject(payload)) {
+    errors.push("payload is required");
+    return errors;
+  }
+
+  if (typeof payload.name !== "string" || !payload.name.trim()) {
+    errors.push("name is required");
+  }
+
+  if (
+    payload.status !== undefined &&
+    payload.status !== null &&
+    !["active", "disabled"].includes(String(payload.status).trim().toLowerCase())
+  ) {
+    errors.push("status must be active or disabled");
+  }
+
+  validateStringArray(errors, payload.regions, "regions");
+
+  for (const field of ["account_name", "website", "api_endpoint", "note"]) {
+    if (
+      payload[field] !== undefined &&
+      payload[field] !== null &&
+      typeof payload[field] !== "string"
+    ) {
+      errors.push(`${field} must be a string`);
+    }
+  }
+
+  if (
+    payload.auto_provision_enabled !== undefined &&
+    payload.auto_provision_enabled !== null &&
+    typeof payload.auto_provision_enabled !== "boolean"
+  ) {
+    errors.push("auto_provision_enabled must be a boolean");
+  }
+
+  return errors;
+}
+
+export function validateProviderUpdate(payload) {
+  const errors = validateProviderCreate(payload);
+
+  if (payload?.created_at !== undefined) {
+    errors.push("created_at cannot be modified");
+  }
+
+  return errors.filter((error) => error !== "name is required");
+}
+
 function isValidSystemUsername(value) {
   return typeof value === "string" && /^[a-z_][a-z0-9_-]*[$]?$/.test(value.trim());
 }

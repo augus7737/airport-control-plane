@@ -15,6 +15,8 @@ export function createStorePersistenceInfrastructure(dependencies) {
     nowIso,
     operationStore,
     operationsFile,
+    providerStore,
+    providersFile,
     probeStore,
     proxyProfileStore,
     proxyProfilesFile,
@@ -103,6 +105,31 @@ export function createStorePersistenceInfrastructure(dependencies) {
       const items = Array.isArray(payload.items) ? payload.items : [];
       operationStore.length = 0;
       operationStore.push(...items);
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        await ensureDataDir();
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  async function persistProviderStore() {
+    await ensureDataDir();
+    const payload = {
+      items: providerStore,
+    };
+    await writeFile(providersFile, JSON.stringify(payload, null, 2), "utf8");
+  }
+
+  async function loadProviderStore() {
+    try {
+      const raw = await readFile(providersFile, "utf8");
+      const payload = JSON.parse(raw);
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      providerStore.length = 0;
+      providerStore.push(...items);
     } catch (error) {
       if (isMissingFileError(error)) {
         await ensureDataDir();
@@ -395,6 +422,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     loadNodeStore,
     loadNodeGroupStore,
     loadOperationStore,
+    loadProviderStore,
     loadProbeStore,
     loadProxyProfileStore,
     loadSystemTemplateReleaseStore,
@@ -407,6 +435,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     persistNodeStore,
     persistNodeGroupStore,
     persistOperationStore,
+    persistProviderStore,
     persistProbeStore,
     persistProxyProfileStore,
     persistSystemTemplateReleaseStore,

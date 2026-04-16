@@ -92,6 +92,7 @@ export const appState = {
   systemTemplates: [],
   proxyProfiles: [],
   nodeGroups: [],
+  providers: [],
   configReleases: [],
   systemTemplateReleases: [],
   systemUserReleases: [],
@@ -359,6 +360,18 @@ export function sortNodeGroups(nodeGroups) {
 
 export function setNodeGroups(nodeGroups) {
   appState.nodeGroups = sortNodeGroups(nodeGroups);
+}
+
+export function sortProviders(providers) {
+  return [...providers].sort((a, b) =>
+    String(b.updated_at || b.created_at || "").localeCompare(
+      String(a.updated_at || a.created_at || ""),
+    ),
+  );
+}
+
+export function setProviders(providers) {
+  appState.providers = sortProviders(providers);
 }
 
 export function sortConfigReleases(configReleases) {

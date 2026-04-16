@@ -28,6 +28,7 @@ export function createPageRenderRuntime({
   setupNodeTerminal,
   setupNodesFilters,
   setupPlatformKeyActions,
+  setupProvidersPage,
   setupProxyProfilesPage,
   setupReleasesPage,
   setupHoverPanels,
@@ -91,6 +92,7 @@ export function createPageRenderRuntime({
     setupProxyProfilesPage();
     setupReleasesPage();
     setupPlatformKeyActions();
+    setupProvidersPage();
     setupHoverPanels();
     refreshBootstrapCommandDom();
   }

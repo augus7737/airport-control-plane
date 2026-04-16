@@ -65,15 +65,13 @@ function buildNetworkingRecord(source = {}, existingNetworking = {}) {
 function buildManagementRecord(
   source = {},
   existingManagement = {},
-  options = {},
 ) {
   const currentManagement = isPlainObject(existingManagement) ? existingManagement : {};
   const input = readRecordSource(source, "management");
-  const legacyNetworking = isPlainObject(options.legacyNetworking) ? options.legacyNetworking : {};
   const accessMode = sourceValue(
     input,
     "access_mode",
-    currentManagement.access_mode ?? legacyNetworking.access_mode ?? "direct",
+    currentManagement.access_mode ?? "direct",
   );
 
   return {
@@ -83,7 +81,7 @@ function buildManagementRecord(
         ? sourceValue(
             input,
             "relay_node_id",
-            currentManagement.relay_node_id ?? legacyNetworking.relay_node_id ?? null,
+            currentManagement.relay_node_id ?? null,
           )
         : null,
     relay_label:
@@ -91,7 +89,7 @@ function buildManagementRecord(
         ? sourceValue(
             input,
             "relay_label",
-            currentManagement.relay_label ?? legacyNetworking.relay_label ?? null,
+            currentManagement.relay_label ?? null,
           )
         : null,
     relay_region:
@@ -99,7 +97,7 @@ function buildManagementRecord(
         ? sourceValue(
             input,
             "relay_region",
-            currentManagement.relay_region ?? legacyNetworking.relay_region ?? null,
+            currentManagement.relay_region ?? null,
           )
         : null,
     ssh_host: sourceValue(input, "ssh_host", currentManagement.ssh_host ?? null),
@@ -108,8 +106,82 @@ function buildManagementRecord(
     route_note: sourceValue(
       input,
       "route_note",
-      currentManagement.route_note ?? legacyNetworking.route_note ?? null,
+      currentManagement.route_note ?? null,
     ),
+  };
+}
+
+function buildMigratedManagementRecord(node = {}) {
+  const currentManagement = isPlainObject(node?.management) ? node.management : {};
+  const legacyNetworking = isPlainObject(node?.networking) ? node.networking : {};
+  const requestedAccessMode =
+    sourceValue(currentManagement, "access_mode", null) ??
+    sourceValue(node, "ssh_access_mode", null) ??
+    sourceValue(legacyNetworking, "access_mode", "direct");
+  const accessMode = requestedAccessMode === "relay" ? "relay" : "direct";
+  const legacyRouteNote =
+    accessMode === "relay" ? sourceValue(legacyNetworking, "route_note", null) : null;
+
+  return {
+    ...currentManagement,
+    access_mode: accessMode,
+    relay_node_id:
+      accessMode === "relay"
+        ? sourceValue(
+            currentManagement,
+            "relay_node_id",
+            sourceValue(node, "ssh_relay_node_id", sourceValue(legacyNetworking, "relay_node_id", null)),
+          )
+        : null,
+    relay_label:
+      accessMode === "relay"
+        ? sourceValue(
+            currentManagement,
+            "relay_label",
+            sourceValue(node, "ssh_relay_label", sourceValue(legacyNetworking, "relay_label", null)),
+          )
+        : null,
+    relay_region:
+      accessMode === "relay"
+        ? sourceValue(
+            currentManagement,
+            "relay_region",
+            sourceValue(node, "ssh_relay_region", sourceValue(legacyNetworking, "relay_region", null)),
+          )
+        : null,
+    ssh_host: sourceValue(currentManagement, "ssh_host", sourceValue(node, "ssh_host", null)),
+    ssh_port: sourceValue(
+      currentManagement,
+      "ssh_port",
+      sourceValue(node, "ssh_port", sourceValue(node?.facts ?? {}, "ssh_port", 19822)),
+    ),
+    ssh_user: sourceValue(currentManagement, "ssh_user", sourceValue(node, "ssh_user", null)),
+    route_note: sourceValue(
+      currentManagement,
+      "route_note",
+      sourceValue(node, "ssh_route_note", legacyRouteNote),
+    ),
+  };
+}
+
+function migrateLegacyNodeManagementRecord(node = {}) {
+  const nextManagement = buildMigratedManagementRecord(node);
+  const currentManagement = isPlainObject(node?.management) ? node.management : null;
+  const changed = JSON.stringify(currentManagement ?? null) !== JSON.stringify(nextManagement);
+
+  if (!changed) {
+    return {
+      changed: false,
+      node,
+    };
+  }
+
+  return {
+    changed: true,
+    node: {
+      ...node,
+      management: nextManagement,
+    },
   };
 }
 
@@ -136,9 +208,7 @@ export function createNodeRecordBuilders({
       existingFacts: existingNode?.facts,
     });
     const networking = buildNetworkingRecord(payload.networking ?? payload, existingNode?.networking);
-    const management = buildManagementRecord(payload.management ?? payload, existingNode?.management, {
-      legacyNetworking: existingNode?.networking ?? networking,
-    });
+    const management = buildManagementRecord(payload.management, existingNode?.management);
 
     return {
       id: existingNode?.id ?? createNodeId(),
@@ -166,9 +236,7 @@ export function createNodeRecordBuilders({
       existingNode.facts && typeof existingNode.facts === "object" ? existingNode.facts : {};
 
     const nextNetworking = buildNetworkingRecord(payload.networking ?? payload, existingNode.networking);
-    const nextManagement = buildManagementRecord(payload.management ?? payload, existingNode.management, {
-      legacyNetworking: existingNode.networking ?? nextNetworking,
-    });
+    const nextManagement = buildManagementRecord(payload.management, existingNode.management);
 
     return {
       ...existingNode,
@@ -237,9 +305,7 @@ export function createNodeRecordBuilders({
     );
 
     const networking = buildNetworkingRecord(payload.networking ?? payload);
-    const management = buildManagementRecord(payload.management ?? payload, null, {
-      legacyNetworking: networking,
-    });
+    const management = buildManagementRecord(payload.management, null);
 
     return {
       id: createNodeId(),
@@ -269,6 +335,7 @@ export function createNodeRecordBuilders({
     sourceValue,
     buildCommercialRecord,
     buildManagementRecord,
+    migrateLegacyNodeManagementRecord,
     buildNetworkingRecord,
     buildNodeRecord,
     updateNodeAssetRecord,

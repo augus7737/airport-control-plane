@@ -24,8 +24,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
   }
 
   function collectManagementPayload(formData) {
-    const legacyAccessMode = String(formData.get("access_mode") || "").trim() || "direct";
-    const accessMode = String(formData.get("management_access_mode") || "").trim() || legacyAccessMode;
+    const accessMode = String(formData.get("management_access_mode") || "").trim() || "direct";
     return {
       access_mode,
       relay_node_id:

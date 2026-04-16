@@ -6,6 +6,7 @@ import {
   setNodes,
   setOperations,
   setPlatformContext,
+  setProviders,
   setProbes,
   setProxyProfiles,
   setSystemTemplateReleases,
@@ -155,6 +156,10 @@ export function getLiveNodeGroups() {
   return fetchCollection("/api/v1/node-groups");
 }
 
+export function getLiveProviders() {
+  return fetchCollection("/api/v1/providers");
+}
+
 export function getLiveConfigReleases() {
   return fetchCollection("/api/v1/config-releases");
 }
@@ -193,6 +198,7 @@ export async function refreshRuntimeData() {
     systemTemplates,
     proxyProfiles,
     nodeGroups,
+    providers,
     configReleases,
     systemTemplateReleases,
     systemUserReleases,
@@ -208,6 +214,7 @@ export async function refreshRuntimeData() {
     getLiveSystemTemplates(),
     getLiveProxyProfiles(),
     getLiveNodeGroups(),
+    getLiveProviders(),
     getLiveConfigReleases(),
     getLiveSystemTemplateReleases(),
     getLiveSystemUserReleases(),
@@ -223,6 +230,7 @@ export async function refreshRuntimeData() {
   setSystemTemplates(systemTemplates);
   setProxyProfiles(proxyProfiles);
   setNodeGroups(nodeGroups);
+  setProviders(providers);
   setConfigReleases(configReleases);
   setSystemTemplateReleases(systemTemplateReleases);
   setSystemUserReleases(systemUserReleases);
@@ -241,6 +249,7 @@ export async function hydrateRuntimeStore() {
     systemTemplates,
     proxyProfiles,
     nodeGroups,
+    providers,
     configReleases,
     systemTemplateReleases,
     systemUserReleases,
@@ -256,6 +265,7 @@ export async function hydrateRuntimeStore() {
     getLiveSystemTemplates(),
     getLiveProxyProfiles(),
     getLiveNodeGroups(),
+    getLiveProviders(),
     getLiveConfigReleases(),
     getLiveSystemTemplateReleases(),
     getLiveSystemUserReleases(),
@@ -271,6 +281,7 @@ export async function hydrateRuntimeStore() {
   setSystemTemplates(systemTemplates);
   setProxyProfiles(proxyProfiles);
   setNodeGroups(nodeGroups);
+  setProviders(providers);
   setConfigReleases(configReleases);
   setSystemTemplateReleases(systemTemplateReleases);
   setSystemUserReleases(systemUserReleases);
@@ -362,6 +373,23 @@ export async function deleteSystemTemplate(id) {
 export async function createNodeGroup(payload) {
   const result = await requestJson("/api/v1/node-groups", jsonRequest(payload));
   return pickEntity(result, ["node_group", "group", "item"]) || result;
+}
+
+export async function createProvider(payload) {
+  const result = await requestJson("/api/v1/providers", jsonRequest(payload));
+  return pickEntity(result, ["provider", "item"]) || result;
+}
+
+export async function updateProvider(id, payload) {
+  const result = await requestJson(
+    `/api/v1/providers/${encodeURIComponent(id)}`,
+    jsonRequest(payload, "PATCH"),
+  );
+  return pickEntity(result, ["provider", "item"]) || result;
+}
+
+export async function deleteProvider(id) {
+  return requestJson(`/api/v1/providers/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export async function updateNodeGroup(id, payload) {

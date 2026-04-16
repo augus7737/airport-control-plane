@@ -150,14 +150,14 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-relay-label").value = node.networking?.relay_label || "";
       documentRef.getElementById("asset-relay-region").value = node.networking?.relay_region || "";
       documentRef.getElementById("asset-management-access-mode").value =
-        node.management?.access_mode || node.networking?.access_mode || "direct";
+        node.management?.access_mode || "direct";
       documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";
       documentRef.getElementById("asset-management-relay-node-id").value =
         node.management?.relay_node_id || "";
       documentRef.getElementById("asset-management-relay-label").value =
-        node.management?.relay_label || node.networking?.relay_label || "";
+        node.management?.relay_label || "";
       documentRef.getElementById("asset-management-relay-region").value =
-        node.management?.relay_region || node.networking?.relay_region || "";
+        node.management?.relay_region || "";
       documentRef.getElementById("asset-auto-renew").checked = Boolean(node.commercial?.auto_renew);
       documentRef.getElementById("asset-bandwidth").value = node.commercial?.bandwidth_mbps ?? "";
       documentRef.getElementById("asset-traffic-quota").value = node.commercial?.traffic_quota_gb ?? "";

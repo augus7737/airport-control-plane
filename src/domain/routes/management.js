@@ -26,9 +26,11 @@ function getNodeDisplayName(node) {
   );
 }
 
-function resolveManagementConfig(node, defaultNodeSshUser) {
+function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
+  const { allowLegacyNetworkingFallback = false } = options;
   const management = isPlainObject(node?.management) ? node.management : {};
-  const legacyNetworking = isPlainObject(node?.networking) ? node.networking : {};
+  const legacyNetworking =
+    allowLegacyNetworkingFallback && isPlainObject(node?.networking) ? node.networking : {};
   const requestedAccessMode =
     normalizeString(management.access_mode) ??
     normalizeString(node?.ssh_access_mode) ??
@@ -145,14 +147,19 @@ export function createManagementRouteDomain(dependencies = {}) {
   } = dependencies;
 
   function resolveManagementRoute(node, options = {}) {
-    const management = resolveManagementConfig(node, defaultNodeSshUser);
+    const allowLegacyNetworkingFallback = options.allowLegacyNetworkingFallback === true;
+    const management = resolveManagementConfig(node, defaultNodeSshUser, {
+      allowLegacyNetworkingFallback,
+    });
     const preferredLanIpv4 = options.preferredLanIpv4 ?? getPreferredLanIpv4();
     const relayNode =
       management.requested_access_mode === "relay" && management.relay_node_id
         ? getNodeById(management.relay_node_id)
         : null;
     const relayConfig = relayNode
-      ? resolveManagementConfig(relayNode, defaultNodeSshUser)
+      ? resolveManagementConfig(relayNode, defaultNodeSshUser, {
+          allowLegacyNetworkingFallback,
+        })
       : null;
     const target = buildEndpoint(node, {
       accessMode: management.requested_access_mode,

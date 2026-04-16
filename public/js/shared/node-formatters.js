@@ -3,7 +3,7 @@ export function getAccessMode(node) {
 }
 
 export function getManagementAccessMode(node) {
-  return node?.management?.access_mode || node?.networking?.access_mode || "direct";
+  return node?.management?.access_mode || "direct";
 }
 
 export function formatAccessMode(value) {

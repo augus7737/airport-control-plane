@@ -23,6 +23,8 @@ import {
   validateOperationRequest,
   validatePlatformSingBoxDistributionUpdate,
   validatePlatformSingBoxMirrorRequest,
+  validateProviderCreate,
+  validateProviderUpdate,
   validateProxyProfileCreate,
   validateProxyProfileUpdate,
   validateRegistration,
@@ -98,6 +100,7 @@ const systemTemplatesFile = path.join(dataDir, "system-templates.json");
 const systemUsersFile = path.join(dataDir, "system-users.json");
 const proxyProfilesFile = path.join(dataDir, "proxy-profiles.json");
 const nodeGroupsFile = path.join(dataDir, "node-groups.json");
+const providersFile = path.join(dataDir, "providers.json");
 const configReleasesFile = path.join(dataDir, "config-releases.json");
 const systemTemplateReleasesFile = path.join(dataDir, "system-template-releases.json");
 const systemUserReleasesFile = path.join(dataDir, "system-user-releases.json");
@@ -164,6 +167,7 @@ const systemTemplateStore = [];
 const systemUserStore = [];
 const proxyProfileStore = [];
 const nodeGroupStore = [];
+const providerStore = [];
 const configReleaseStore = [];
 const systemTemplateReleaseStore = [];
 const systemUserReleaseStore = [];
@@ -552,6 +556,7 @@ const {
   loadNodeStore,
   loadNodeGroupStore,
   loadOperationStore,
+  loadProviderStore,
   loadProbeStore,
   loadProxyProfileStore,
   loadSystemTemplateReleaseStore,
@@ -564,6 +569,7 @@ const {
   persistNodeStore,
   persistNodeGroupStore,
   persistOperationStore,
+  persistProviderStore,
   persistProbeStore,
   persistProxyProfileStore,
   persistSystemTemplateReleaseStore,
@@ -587,6 +593,8 @@ const {
   nowIso,
   operationStore,
   operationsFile,
+  providerStore,
+  providersFile,
   probeStore,
   proxyProfileStore,
   proxyProfilesFile,
@@ -649,6 +657,7 @@ const {
 
 const {
   buildNodeRecord,
+  migrateLegacyNodeManagementRecord,
   updateNodeAssetRecord,
   buildManualNodeRecord,
 } = createNodeRecordBuilders({
@@ -1027,6 +1036,27 @@ function operationTargetForNode(operation, nodeId) {
 
 function findAccessUserById(accessUserId) {
   return accessUserStore.find((item) => item.id === accessUserId) || null;
+}
+
+function findProviderById(providerId) {
+  return providerStore.find((item) => item.id === providerId) || null;
+}
+
+function findProviderByName(name, options = {}) {
+  const normalizedName = normalizeNullableString(name)?.toLowerCase();
+  if (!normalizedName) {
+    return null;
+  }
+
+  const excludeId = normalizeNullableString(options.excludeId);
+  return (
+    providerStore.find((item) => {
+      if (excludeId && item.id === excludeId) {
+        return false;
+      }
+      return normalizeNullableString(item.name)?.toLowerCase() === normalizedName;
+    }) || null
+  );
 }
 
 function safeDecodePathSegment(value) {
@@ -1533,6 +1563,37 @@ function buildNodeGroupRecord(payload, existing = null) {
   };
 }
 
+function buildProviderRecord(payload, existing = null) {
+  const timestamp = nowIso();
+
+  return {
+    id: existing?.id ?? `provider_${randomUUID()}`,
+    name: normalizeNullableString(payload.name) ?? existing?.name ?? "未命名厂商",
+    account_name: hasOwn(payload, "account_name")
+      ? normalizeNullableString(payload.account_name)
+      : existing?.account_name ?? null,
+    website: hasOwn(payload, "website")
+      ? normalizeNullableString(payload.website)
+      : existing?.website ?? null,
+    api_endpoint: hasOwn(payload, "api_endpoint")
+      ? normalizeNullableString(payload.api_endpoint)
+      : existing?.api_endpoint ?? null,
+    regions: hasOwn(payload, "regions")
+      ? uniqueStringList(payload.regions)
+      : uniqueStringList(existing?.regions),
+    auto_provision_enabled: hasOwn(payload, "auto_provision_enabled")
+      ? Boolean(payload.auto_provision_enabled)
+      : existing?.auto_provision_enabled ?? false,
+    status:
+      normalizeNullableString(payload.status ?? existing?.status)?.toLowerCase() ?? "active",
+    note: hasOwn(payload, "note")
+      ? normalizeNullableString(payload.note)
+      : existing?.note ?? null,
+    created_at: existing?.created_at ?? timestamp,
+    updated_at: timestamp,
+  };
+}
+
 function buildSystemTemplateReleaseRecord(payload, template, resolved, options = {}) {
   const timestamp = nowIso();
   const releaseId = options.releaseId ?? `system_template_release_${randomUUID()}`;
@@ -1708,6 +1769,30 @@ function pruneNodeFromGroups(nodeId) {
   }
 
   return changed;
+}
+
+async function ensureNodeManagementMigration() {
+  let changed = false;
+  let migratedCount = 0;
+
+  for (const [nodeId, node] of nodeStore.entries()) {
+    const migration = migrateLegacyNodeManagementRecord(node);
+    if (!migration.changed) {
+      continue;
+    }
+
+    nodeStore.set(nodeId, migration.node);
+    changed = true;
+    migratedCount += 1;
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  await persistNodeStore();
+  console.log(`[startup] migrated explicit management routes for ${migratedCount} nodes`);
+  return true;
 }
 
 async function ensureDefaultSystemTemplates() {
@@ -3984,6 +4069,130 @@ const server = createServer(async (request, reply) => {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/v1/providers") {
+    jsonResponse(reply, 200, {
+      items: sortByUpdatedAt(providerStore),
+    });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/v1/providers") {
+    try {
+      const payload = await readJsonBody(request);
+      const errors = validateProviderCreate(payload);
+
+      if (errors.length > 0) {
+        jsonResponse(reply, 400, {
+          error: "validation_failed",
+          details: errors,
+        });
+        return;
+      }
+
+      const duplicateProvider = findProviderByName(payload.name);
+      if (duplicateProvider) {
+        jsonResponse(reply, 409, {
+          error: "conflict",
+          message: `provider name already exists: ${duplicateProvider.name}`,
+        });
+        return;
+      }
+
+      const provider = buildProviderRecord(payload);
+      providerStore.unshift(provider);
+      await persistProviderStore();
+
+      jsonResponse(reply, 201, {
+        provider,
+      });
+    } catch (error) {
+      jsonResponse(reply, 400, {
+        error: "bad_request",
+        message: error instanceof Error ? error.message : "unknown error",
+      });
+    }
+    return;
+  }
+
+  const providerMatch = url.pathname.match(/^\/api\/v1\/providers\/([^/]+)$/);
+  if (providerMatch && request.method === "PATCH") {
+    try {
+      const providerId = decodeURIComponent(providerMatch[1]);
+      const existingProvider = findProviderById(providerId);
+
+      if (!existingProvider) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "provider not found",
+        });
+        return;
+      }
+
+      const payload = await readJsonBody(request);
+      const errors = validateProviderUpdate(payload);
+
+      if (errors.length > 0) {
+        jsonResponse(reply, 400, {
+          error: "validation_failed",
+          details: errors,
+        });
+        return;
+      }
+
+      if (hasOwn(payload, "name")) {
+        const duplicateProvider = findProviderByName(payload.name, {
+          excludeId: providerId,
+        });
+        if (duplicateProvider) {
+          jsonResponse(reply, 409, {
+            error: "conflict",
+            message: `provider name already exists: ${duplicateProvider.name}`,
+          });
+          return;
+        }
+      }
+
+      const updatedProvider = buildProviderRecord(payload, existingProvider);
+      const index = providerStore.findIndex((item) => item.id === providerId);
+      providerStore[index] = updatedProvider;
+      await persistProviderStore();
+
+      jsonResponse(reply, 200, {
+        provider: updatedProvider,
+      });
+    } catch (error) {
+      jsonResponse(reply, 400, {
+        error: "bad_request",
+        message: error instanceof Error ? error.message : "unknown error",
+      });
+    }
+    return;
+  }
+
+  if (providerMatch && request.method === "DELETE") {
+    const providerId = decodeURIComponent(providerMatch[1]);
+    const existingProvider = findProviderById(providerId);
+
+    if (!existingProvider) {
+      jsonResponse(reply, 404, {
+        error: "not_found",
+        message: "provider not found",
+      });
+      return;
+    }
+
+    const nextProviders = providerStore.filter((item) => item.id !== providerId);
+    providerStore.length = 0;
+    providerStore.push(...nextProviders);
+    await persistProviderStore();
+
+    jsonResponse(reply, 200, {
+      ok: true,
+      deleted_provider_id: providerId,
+    });
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/v1/config-releases") {
     jsonResponse(reply, 200, {
       items: sortByUpdatedAt(configReleaseStore),
@@ -4629,6 +4838,7 @@ const server = createServer(async (request, reply) => {
 });
 
 const { start } = createServerStartupRuntime({
+  ensureNodeManagementMigration,
   ensureBootstrapInitTasks,
   listen: () => {
     server.listen(port, () => {
@@ -4646,6 +4856,7 @@ const { start } = createServerStartupRuntime({
   loadNodeGroupStore,
   loadOperationStore,
   loadPlatformSingBoxDistribution,
+  loadProviderStore,
   loadProbeStore,
   loadProxyProfileStore,
   loadSystemTemplateReleaseStore,

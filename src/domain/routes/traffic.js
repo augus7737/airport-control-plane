@@ -165,7 +165,8 @@ export function createTrafficRouteDomain(dependencies = {}) {
       relay_node_id: networking.relay_node_id,
       relay_label: networking.relay_label,
       upstream_family: relayUpstreamEndpoint?.family ?? null,
-      route_role: networking.access_mode === "relay" ? "landing" : "landing",
+      // A single traffic route record is always described from the landing node's perspective.
+      route_role: "landing",
     };
   }
 
@@ -177,19 +178,27 @@ export function createTrafficRouteDomain(dependencies = {}) {
 
     for (const route of publishableRoutes) {
       const entryNodeId = route.entry_node?.id ?? route.landing_node?.id ?? "unknown-entry-node";
-      const key = `${entryNodeId}:${route.entry_endpoint.host}:${route.entry_port}`;
+      const key = `${route.entry_endpoint.host}:${route.entry_port}`;
       const bucket = buckets.get(key) ?? {
         key,
-        entry_node_id: entryNodeId,
         entry_host: route.entry_endpoint.host,
         entry_port: route.entry_port,
+        entry_node_ids: [],
         routes: [],
       };
+      if (!bucket.entry_node_ids.includes(entryNodeId)) {
+        bucket.entry_node_ids.push(entryNodeId);
+      }
       bucket.routes.push(route);
       buckets.set(key, bucket);
     }
 
-    return [...buckets.values()].filter((bucket) => bucket.routes.length > 1);
+    return [...buckets.values()]
+      .filter((bucket) => bucket.routes.length > 1)
+      .map((bucket) => ({
+        ...bucket,
+        entry_node_id: bucket.entry_node_ids[0] ?? null,
+      }));
   }
 
   function buildTrafficConflictMessage(conflict) {

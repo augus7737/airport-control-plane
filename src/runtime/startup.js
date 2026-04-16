@@ -1,5 +1,6 @@
 export function createServerStartupRuntime(dependencies) {
   const {
+    ensureNodeManagementMigration,
     ensureBootstrapInitTasks,
     listen,
     loadAccessUserStore,
@@ -9,6 +10,7 @@ export function createServerStartupRuntime(dependencies) {
     loadNodeGroupStore,
     loadOperationStore,
     loadPlatformSingBoxDistribution,
+    loadProviderStore,
     loadProbeStore,
     loadProxyProfileStore,
     loadSystemTemplateReleaseStore,
@@ -23,6 +25,8 @@ export function createServerStartupRuntime(dependencies) {
 
   async function start() {
     await loadNodeStore();
+    await ensureNodeManagementMigration?.();
+    await loadProviderStore?.();
     await loadOperationStore();
     await loadTaskStore();
     await loadProbeStore();

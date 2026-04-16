@@ -189,7 +189,7 @@ export function createPlatformSshDomain(dependencies) {
         AIRPORT_NODE_NAME: shellSessionLabel(node),
         AIRPORT_NODE_PROVIDER: node.labels?.provider ?? "",
         AIRPORT_NODE_REGION: node.labels?.region ?? "",
-        AIRPORT_NODE_ACCESS_MODE: node.management?.access_mode ?? node.networking?.access_mode ?? "direct",
+        AIRPORT_NODE_ACCESS_MODE: node.management?.access_mode ?? "direct",
       },
     };
   }

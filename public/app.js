@@ -94,12 +94,14 @@ import {
   createAccessUser,
   createConfigRelease,
   createNodeGroup,
+  createProvider,
   createProxyProfile,
   createSystemTemplate,
   createSystemUser,
   applySystemTemplate,
   deleteAccessUser,
   deleteNodeGroup,
+  deleteProvider,
   deleteProxyProfile,
   deleteSystemTemplate,
   deleteSystemUser,
@@ -111,6 +113,7 @@ import {
   applySystemUsers,
   updateAccessUser,
   updateNodeGroup,
+  updateProvider,
   updateProxyProfile,
   updateSystemTemplate,
   updateSystemUser,
@@ -210,8 +213,8 @@ const pageMeta = {
     title: "云厂商",
     subtitle: "管理供应商账户、区域、自动建机能力和到期信息来源。",
     actions: [
-      { label: "同步云资源", kind: "default" },
-      { label: "接入新厂商", kind: "primary" },
+      { label: "同步云资源", kind: "default", id: "providers-sync-placeholder" },
+      { label: "接入新厂商", kind: "primary", id: "focus-provider-form" },
     ],
   },
   "access-users": {
@@ -475,11 +478,20 @@ const { renderTasksPage, setupTasksPage } = createTasksPageModule({
   statusText,
   windowRef: window,
 });
-const { renderProvidersPage } = createProvidersPageModule({
+const { renderProvidersPage, setupProvidersPage } = createProvidersPageModule({
   appState,
+  createProvider,
+  deleteProvider,
+  documentRef: document,
   escapeHtml,
+  formatRelativeTime,
+  page,
+  refreshRuntimeData,
+  renderCurrentContent,
   statusClassName,
   statusText,
+  updateProvider,
+  windowRef: window,
 });
 const { renderAccessUsersPage, setupAccessUsersPage } = createAccessUsersPageModule({
   appState,
@@ -792,6 +804,7 @@ pageRenderRuntime = createPageRenderRuntime({
   setupHoverPanels,
   setupNodesFilters,
   setupPlatformKeyActions,
+  setupProvidersPage,
   setupProxyProfilesPage,
   setupReleasesPage,
   setupSystemTemplatesPage,
