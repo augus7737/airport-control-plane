@@ -480,7 +480,7 @@ export function buildNodeDetailViewModel({
       ];
   const heroChips = [
     { label: "云厂商", value: node.labels?.provider || "未标记" },
-    { label: "区域", value: node.labels?.region || "-" },
+    { label: "国家", value: node.labels?.region || "-" },
     { label: "接入方式", value: accessModeText },
     { label: "基础配置", value: configSummary },
     { label: "公网入口", value: primaryPublicIp?.address || "未探测" },

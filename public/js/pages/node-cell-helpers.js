@@ -133,7 +133,7 @@ export function createNodeCellHelpersModule(dependencies = {}) {
           <div class="cell-hover-grid">
             ${detailsHtml}
             <div class="cell-hover-row">
-              <span>标签区域</span>
+              <span>标签国家</span>
               <strong>${escapeHtml(regionLabel)}</strong>
             </div>
             <div class="cell-hover-row">

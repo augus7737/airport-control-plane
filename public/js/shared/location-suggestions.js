@@ -49,18 +49,11 @@ const REGION_LOCATION_PRESETS = [
     aliases: ["HKG", "HK", "中国香港", "Hong Kong"],
   }),
   buildLocationRecord({
-    value: "东京",
-    code: "TYO",
-    english: "Tokyo",
+    value: "日本",
+    code: "JP",
+    english: "Japan",
     country: "日本",
-    aliases: ["NRT", "TOK", "Tokyo", "Narita"],
-  }),
-  buildLocationRecord({
-    value: "大阪",
-    code: "OSA",
-    english: "Osaka",
-    country: "日本",
-    aliases: ["Osaka"],
+    aliases: ["Japan", "JP", "Tokyo", "TYO", "NRT", "TOK", "Narita", "Osaka", "OSA", "东京", "大阪"],
   }),
   buildLocationRecord({
     value: "新加坡",
@@ -70,116 +63,79 @@ const REGION_LOCATION_PRESETS = [
     aliases: ["SIN", "Singapore"],
   }),
   buildLocationRecord({
-    value: "首尔",
-    code: "SEL",
-    english: "Seoul",
+    value: "韩国",
+    code: "KR",
+    english: "South Korea",
     country: "韩国",
-    aliases: ["ICN", "Seoul", "Incheon", "首尔仁川"],
+    aliases: ["South Korea", "KR", "Seoul", "SEL", "ICN", "Incheon", "首尔", "首尔仁川"],
   }),
   buildLocationRecord({
-    value: "台北",
-    code: "TPE",
-    english: "Taipei",
+    value: "中国台湾",
+    code: "TW",
+    english: "Taiwan",
     country: "中国台湾",
-    aliases: ["Taipei", "Taiwan", "中国台湾"],
-  }),
-  buildLocationRecord({
-    value: "洛杉矶",
-    code: "LAX",
-    english: "Los Angeles",
-    country: "美国",
-    aliases: ["Los Angeles"],
-  }),
-  buildLocationRecord({
-    value: "圣何塞",
-    code: "SJC",
-    english: "San Jose",
-    country: "美国",
-    aliases: ["San Jose"],
-  }),
-  buildLocationRecord({
-    value: "西雅图",
-    code: "SEA",
-    english: "Seattle",
-    country: "美国",
-    aliases: ["Seattle"],
-  }),
-  buildLocationRecord({
-    value: "法兰克福",
-    code: "FRA",
-    english: "Frankfurt",
-    country: "德国",
-    aliases: ["Frankfurt"],
-  }),
-  buildLocationRecord({
-    value: "纽伦堡",
-    code: "NBG",
-    english: "Nuremberg",
-    country: "德国",
-    aliases: ["Nuremberg"],
-  }),
-  buildLocationRecord({
-    value: "赫尔辛基",
-    code: "HEL",
-    english: "Helsinki",
-    country: "芬兰",
-    aliases: ["Helsinki"],
-  }),
-  buildLocationRecord({
-    value: "伦敦",
-    code: "LON",
-    english: "London",
-    country: "英国",
-    aliases: ["London"],
-  }),
-  buildLocationRecord({
-    value: "阿姆斯特丹",
-    code: "AMS",
-    english: "Amsterdam",
-    country: "荷兰",
-    aliases: ["Amsterdam"],
-  }),
-  buildLocationRecord({
-    value: "巴黎",
-    code: "PAR",
-    english: "Paris",
-    country: "法国",
-    aliases: ["Paris"],
-  }),
-  buildLocationRecord({
-    value: "悉尼",
-    code: "SYD",
-    english: "Sydney",
-    country: "澳大利亚",
-    aliases: ["Sydney"],
+    aliases: ["Taiwan", "TW", "TPE", "Taipei", "台湾", "台北"],
   }),
   buildLocationRecord({
     value: "美国",
     code: "US",
     english: "United States",
     country: "美国",
-    aliases: ["United States"],
+    aliases: [
+      "United States",
+      "US",
+      "Los Angeles",
+      "LAX",
+      "San Jose",
+      "SJC",
+      "Seattle",
+      "SEA",
+      "洛杉矶",
+      "圣何塞",
+      "西雅图",
+    ],
   }),
   buildLocationRecord({
     value: "德国",
     code: "DE",
     english: "Germany",
     country: "德国",
-    aliases: ["Germany"],
+    aliases: ["Germany", "DE", "Frankfurt", "FRA", "Nuremberg", "NBG", "法兰克福", "纽伦堡"],
   }),
   buildLocationRecord({
-    value: "日本",
-    code: "JP",
-    english: "Japan",
-    country: "日本",
-    aliases: ["Japan"],
+    value: "芬兰",
+    code: "FI",
+    english: "Finland",
+    country: "芬兰",
+    aliases: ["Finland", "FI", "Helsinki", "HEL", "赫尔辛基"],
   }),
   buildLocationRecord({
-    value: "韩国",
-    code: "KR",
-    english: "South Korea",
-    country: "韩国",
-    aliases: ["South Korea"],
+    value: "英国",
+    code: "GB",
+    english: "United Kingdom",
+    country: "英国",
+    aliases: ["United Kingdom", "UK", "GB", "London", "LON", "伦敦"],
+  }),
+  buildLocationRecord({
+    value: "荷兰",
+    code: "NL",
+    english: "Netherlands",
+    country: "荷兰",
+    aliases: ["Netherlands", "NL", "Amsterdam", "AMS", "阿姆斯特丹"],
+  }),
+  buildLocationRecord({
+    value: "法国",
+    code: "FR",
+    english: "France",
+    country: "法国",
+    aliases: ["France", "FR", "Paris", "PAR", "巴黎"],
+  }),
+  buildLocationRecord({
+    value: "澳大利亚",
+    code: "AU",
+    english: "Australia",
+    country: "澳大利亚",
+    aliases: ["Australia", "AU", "Sydney", "SYD", "悉尼"],
   }),
 ];
 
@@ -314,7 +270,7 @@ export function findLocationPreset(value, options = {}) {
   }
 
   if (normalizedValue.includes("台湾")) {
-    return presetsForScope(scope).find((preset) => preset.value === (scope === "entry" ? "台湾" : "台北")) || null;
+    return presetsForScope(scope).find((preset) => preset.value === (scope === "entry" ? "台湾" : "中国台湾")) || null;
   }
 
   if (normalizedValue.includes("日本")) {
@@ -403,6 +359,10 @@ export function getLocationSuggestions(query, options = {}) {
     .map(({ preset }) => preset);
 
   return presets;
+}
+
+export function getLocationPresetOptions(scope = "region") {
+  return [...presetsForScope(scope)];
 }
 
 function closeSuggestionPanel(field) {

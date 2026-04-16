@@ -127,7 +127,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
     const region = formatLocationDisplay(node.labels?.region, {
       scope: "region",
       style: "compact",
-      fallback: "未标记区域",
+      fallback: "未标记国家",
     });
     const accessMode = formatAccessMode(getAccessMode(node));
     const country = getNodeCountry(node);
@@ -147,7 +147,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
               <strong>${escapeHtml(provider)}</strong>
             </div>
             <div class="cell-hover-row">
-              <span>标签区域</span>
+              <span>标签国家</span>
               <strong>${escapeHtml(region)}</strong>
             </div>
             <div class="cell-hover-row">

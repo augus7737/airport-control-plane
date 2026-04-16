@@ -58,25 +58,32 @@ function readRecordSource(source, key) {
 const REGION_LOCATION_PRESETS = [
   { value: "中国大陆", aliases: ["中国", "Mainland China", "CN"] },
   { value: "香港", aliases: ["HKG", "HK", "中国香港", "Hong Kong"] },
-  { value: "东京", aliases: ["TYO", "NRT", "TOK", "Tokyo", "Narita"] },
-  { value: "大阪", aliases: ["OSA", "Osaka"] },
+  { value: "日本", aliases: ["Japan", "JP", "Tokyo", "TYO", "NRT", "TOK", "Narita", "Osaka", "OSA", "东京", "大阪"] },
   { value: "新加坡", aliases: ["SIN", "Singapore"] },
-  { value: "首尔", aliases: ["SEL", "ICN", "Seoul", "Incheon", "首尔仁川"] },
-  { value: "台北", aliases: ["TPE", "Taipei", "Taiwan", "中国台湾"] },
-  { value: "洛杉矶", aliases: ["LAX", "Los Angeles"] },
-  { value: "圣何塞", aliases: ["SJC", "San Jose"] },
-  { value: "西雅图", aliases: ["SEA", "Seattle"] },
-  { value: "法兰克福", aliases: ["FRA", "Frankfurt"] },
-  { value: "纽伦堡", aliases: ["NBG", "Nuremberg"] },
-  { value: "赫尔辛基", aliases: ["HEL", "Helsinki"] },
-  { value: "伦敦", aliases: ["LON", "London"] },
-  { value: "阿姆斯特丹", aliases: ["AMS", "Amsterdam"] },
-  { value: "巴黎", aliases: ["PAR", "Paris"] },
-  { value: "悉尼", aliases: ["SYD", "Sydney"] },
-  { value: "美国", aliases: ["United States", "US"] },
-  { value: "德国", aliases: ["Germany", "DE"] },
-  { value: "日本", aliases: ["Japan", "JP"] },
-  { value: "韩国", aliases: ["South Korea", "KR"] },
+  { value: "韩国", aliases: ["South Korea", "KR", "Seoul", "SEL", "ICN", "Incheon", "首尔", "首尔仁川"] },
+  { value: "中国台湾", aliases: ["Taiwan", "TW", "TPE", "Taipei", "台湾", "台北", "中国台湾"] },
+  {
+    value: "美国",
+    aliases: [
+      "United States",
+      "US",
+      "Los Angeles",
+      "LAX",
+      "San Jose",
+      "SJC",
+      "Seattle",
+      "SEA",
+      "洛杉矶",
+      "圣何塞",
+      "西雅图",
+    ],
+  },
+  { value: "德国", aliases: ["Germany", "DE", "Frankfurt", "FRA", "Nuremberg", "NBG", "法兰克福", "纽伦堡"] },
+  { value: "芬兰", aliases: ["Finland", "FI", "Helsinki", "HEL", "赫尔辛基"] },
+  { value: "英国", aliases: ["United Kingdom", "UK", "GB", "London", "LON", "伦敦"] },
+  { value: "荷兰", aliases: ["Netherlands", "NL", "Amsterdam", "AMS", "阿姆斯特丹"] },
+  { value: "法国", aliases: ["France", "FR", "Paris", "PAR", "巴黎"] },
+  { value: "澳大利亚", aliases: ["Australia", "AU", "Sydney", "SYD", "悉尼"] },
 ];
 
 const ENTRY_LOCATION_PRESETS = [
@@ -117,7 +124,7 @@ function findLocationPreset(value, scope = "region") {
     return presets.find((preset) => preset.value === "中国大陆") || null;
   }
   if (normalized.includes("台湾")) {
-    return presets.find((preset) => preset.value === (scope === "entry" ? "台湾" : "台北")) || null;
+    return presets.find((preset) => preset.value === (scope === "entry" ? "台湾" : "中国台湾")) || null;
   }
   if (normalized.includes("日本")) {
     return presets.find((preset) => preset.value === "日本") || null;

@@ -176,7 +176,7 @@ export function createNodesPageModule(dependencies) {
           <div class="panel-title">
             <div>
               <h3>节点筛选</h3>
-              <p>按来源、厂商、区域、续费和接入方式快速收敛范围。</p>
+              <p>按来源、厂商、国家、续费和接入方式快速收敛范围。</p>
             </div>
             <div class="provider-pill">共 ${filteredNodes.length} 台</div>
           </div>
@@ -201,7 +201,7 @@ export function createNodesPageModule(dependencies) {
               </select>
             </div>
             <div class="field">
-              <label for="filter-region">区域</label>
+              <label for="filter-region">国家</label>
               <select id="filter-region">
                 <option value="">全部</option>
                 ${regions

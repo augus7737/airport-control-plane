@@ -1,50 +1,75 @@
 import { normalizeLocationValue } from "../shared/location-suggestions.js";
 
 export function createNodeAssetModalPayloadsModule(dependencies = {}) {
-  const { toNumberOrNull } = dependencies;
+  const {
+    toNumberOrNull,
+    findNodeById = () => null,
+  } = dependencies;
+
+  function resolveNodeLabel(node) {
+    return node?.name || node?.hostname || node?.facts?.hostname || node?.id || null;
+  }
+
+  function resolveRelayReference({
+    nodeId,
+    fallbackLabel,
+    fallbackRegion,
+  }) {
+    const normalizedNodeId = String(nodeId || "").trim() || null;
+    const matchedNode = normalizedNodeId ? findNodeById(normalizedNodeId) : null;
+
+    return {
+      relay_node_id: normalizedNodeId,
+      relay_label:
+        resolveNodeLabel(matchedNode) ||
+        String(fallbackLabel || "").trim() ||
+        null,
+      relay_region: matchedNode
+        ? normalizeLocationValue(matchedNode.labels?.region, { scope: "region" })
+        : normalizeLocationValue(fallbackRegion, { scope: "region" }),
+    };
+  }
 
   function collectBusinessRoutePayload(formData) {
     const accessMode = String(formData.get("access_mode") || "").trim() || "direct";
+    const relayReference =
+      accessMode === "relay"
+        ? resolveRelayReference({
+            nodeId: formData.get("relay_node_id"),
+            fallbackLabel: formData.get("relay_label"),
+            fallbackRegion: formData.get("relay_region"),
+          })
+        : null;
     return {
       access_mode: accessMode,
       entry_region: normalizeLocationValue(formData.get("entry_region"), { scope: "entry" }),
       entry_port: toNumberOrNull(formData.get("entry_port")),
-      relay_node_id:
-        accessMode === "relay"
-          ? String(formData.get("relay_node_id") || "").trim() || null
-          : null,
-      relay_label:
-        accessMode === "relay"
-          ? String(formData.get("relay_label") || "").trim() || null
-          : null,
-      relay_region:
-        accessMode === "relay"
-          ? normalizeLocationValue(formData.get("relay_region"), { scope: "region" })
-          : null,
+      relay_node_id: relayReference?.relay_node_id ?? null,
+      relay_label: relayReference?.relay_label ?? null,
+      relay_region: relayReference?.relay_region ?? null,
       route_note: String(formData.get("route_note") || "").trim() || null,
     };
   }
 
   function collectManagementPayload(formData) {
     const accessMode = String(formData.get("management_access_mode") || "").trim() || "direct";
+    const relayReference =
+      accessMode === "relay"
+        ? resolveRelayReference({
+            nodeId: formData.get("management_relay_node_id"),
+            fallbackLabel: formData.get("management_relay_label"),
+            fallbackRegion: formData.get("management_relay_region"),
+          })
+        : null;
     return {
       access_mode: accessMode,
       relay_strategy:
         accessMode === "relay"
           ? String(formData.get("management_relay_strategy") || "").trim() || "auto"
           : null,
-      relay_node_id:
-        accessMode === "relay"
-          ? String(formData.get("management_relay_node_id") || "").trim() || null
-          : null,
-      relay_label:
-        accessMode === "relay"
-          ? String(formData.get("management_relay_label") || "").trim() || null
-          : null,
-      relay_region:
-        accessMode === "relay"
-          ? normalizeLocationValue(formData.get("management_relay_region"), { scope: "region" })
-          : null,
+      relay_node_id: relayReference?.relay_node_id ?? null,
+      relay_label: relayReference?.relay_label ?? null,
+      relay_region: relayReference?.relay_region ?? null,
       proxy_host:
         accessMode === "relay"
           ? String(formData.get("management_proxy_host") || "").trim() || null

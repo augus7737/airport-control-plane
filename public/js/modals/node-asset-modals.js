@@ -1,7 +1,12 @@
 import { createNodeAssetModalEventsModule } from "./node-asset-modal-events.js";
 import { createNodeAssetModalPayloadsModule } from "./node-asset-modal-payloads.js";
 import { createNodeAssetModalTemplatesModule } from "./node-asset-modal-templates.js";
-import { createLocationSuggestionsModule, normalizeLocationValue } from "../shared/location-suggestions.js";
+import {
+  createLocationSuggestionsModule,
+  formatLocationDisplay,
+  getLocationPresetOptions,
+  normalizeLocationValue,
+} from "../shared/location-suggestions.js";
 
 export function createNodeAssetModalsModule(dependencies) {
   const {
@@ -21,6 +26,7 @@ export function createNodeAssetModalsModule(dependencies) {
   const { assetModalTemplate, manualModalTemplate } = createNodeAssetModalTemplatesModule();
   const { bindLocationAutocomplete } = createLocationSuggestionsModule({ documentRef });
   const { buildAssetPayload, buildManualNodePayload } = createNodeAssetModalPayloadsModule({
+    findNodeById: (nodeId) => appState.nodes.find((node) => node.id === nodeId) || null,
     toNumberOrNull,
   });
   const {
@@ -38,7 +44,7 @@ export function createNodeAssetModalsModule(dependencies) {
 
   function getProviderOptionsHtml(selectedId = null) {
     const normalizedSelectedId = String(selectedId || "").trim();
-    return [
+    const options = [
       '<option value="">未绑定厂商台账</option>',
       ...appState.providers.map((provider) => {
         const providerId = String(provider.id || "");
@@ -48,7 +54,18 @@ export function createNodeAssetModalsModule(dependencies) {
           : provider.name || provider.id;
         return `<option value="${escapeHtml(providerId)}"${selected}>${escapeHtml(label)}</option>`;
       }),
-    ].join("");
+    ];
+    if (
+      normalizedSelectedId &&
+      !appState.providers.some((provider) => String(provider.id || "") === normalizedSelectedId)
+    ) {
+      options.push(
+        `<option value="${escapeHtml(normalizedSelectedId)}" selected>${escapeHtml(
+          `${normalizedSelectedId} · 当前台账已不存在`,
+        )}</option>`,
+      );
+    }
+    return options.join("");
   }
 
   function syncProviderField(selectElement, inputElement) {
@@ -59,9 +76,106 @@ export function createNodeAssetModalsModule(dependencies) {
     const selectedProvider = appState.providers.find(
       (provider) => provider.id === selectElement.value,
     );
-    if (selectedProvider && !String(inputElement.value || "").trim()) {
+    if (selectedProvider) {
       inputElement.value = selectedProvider.name || "";
+      inputElement.readOnly = true;
+      inputElement.dataset.lockedByProvider = "1";
+      return;
     }
+
+    if (inputElement.dataset.lockedByProvider === "1") {
+      inputElement.value = "";
+    }
+
+    inputElement.readOnly = false;
+    delete inputElement.dataset.lockedByProvider;
+  }
+
+  function getLocationOptionsHtml(scope, selectedValue = null, placeholder = "未填写") {
+    const normalizedSelectedValue =
+      normalizeLocationValue(selectedValue, { scope }) || String(selectedValue || "").trim();
+    const options = [
+      `<option value="">${escapeHtml(placeholder)}</option>`,
+      ...getLocationPresetOptions(scope).map((preset) => {
+        const optionValue = preset.value;
+        const selected = optionValue === normalizedSelectedValue ? " selected" : "";
+        const label = formatLocationDisplay(optionValue, { scope, style: "compact" });
+        return `<option value="${escapeHtml(optionValue)}"${selected}>${escapeHtml(label)}</option>`;
+      }),
+    ];
+    if (
+      normalizedSelectedValue &&
+      !getLocationPresetOptions(scope).some((preset) => preset.value === normalizedSelectedValue)
+    ) {
+      options.push(
+        `<option value="${escapeHtml(normalizedSelectedValue)}" selected>${escapeHtml(normalizedSelectedValue)}</option>`,
+      );
+    }
+    return options.join("");
+  }
+
+  function getRelayNodeOptionsHtml(selectedId = null, options = {}) {
+    const normalizedSelectedId = String(selectedId || "").trim();
+    const excludeNodeId = String(options.excludeNodeId || "").trim();
+    const placeholder = options.placeholder || "未选择已纳管节点";
+
+    const sortedNodes = [...appState.nodes]
+      .filter((node) => String(node?.id || "") !== excludeNodeId)
+      .sort((left, right) => getNodeDisplayName(left).localeCompare(getNodeDisplayName(right), "zh-Hans-CN"));
+
+    return [
+      `<option value="">${escapeHtml(placeholder)}</option>`,
+      ...sortedNodes.map((node) => {
+        const nodeId = String(node?.id || "");
+        const selected = nodeId === normalizedSelectedId ? " selected" : "";
+        const regionLabel = formatLocationDisplay(node?.labels?.region, {
+          scope: "region",
+          style: "compact",
+          fallback: "未标记国家",
+        });
+        const optionLabel = `${getNodeDisplayName(node)} · ${regionLabel}`;
+        return `<option value="${escapeHtml(nodeId)}"${selected}>${escapeHtml(optionLabel)}</option>`;
+      }),
+      ...(
+        normalizedSelectedId &&
+        !sortedNodes.some((node) => String(node?.id || "") === normalizedSelectedId)
+          ? [
+              `<option value="${escapeHtml(normalizedSelectedId)}" selected>${escapeHtml(
+                `${normalizedSelectedId} · 当前节点台账里已不存在`,
+              )}</option>`,
+            ]
+          : []
+      ),
+    ].join("");
+  }
+
+  function syncRouteFieldVisibility(root, options = {}) {
+    if (!root) {
+      return;
+    }
+
+    const businessMode = options.businessModeSelector
+      ? root.querySelector(options.businessModeSelector)
+      : null;
+    const managementMode = options.managementModeSelector
+      ? root.querySelector(options.managementModeSelector)
+      : null;
+
+    root.querySelectorAll("[data-business-relay-field]").forEach((element) => {
+      element.hidden = businessMode ? businessMode.value !== "relay" : false;
+    });
+
+    root.querySelectorAll("[data-management-relay-field]").forEach((element) => {
+      element.hidden = managementMode ? managementMode.value !== "relay" : false;
+    });
+  }
+
+  function shouldOpenRoutingAdvanced(options = {}) {
+    return Boolean(
+      String(options.businessMode || "").trim() === "relay" ||
+        String(options.managementMode || "").trim() === "relay" ||
+        String(options.proxyHost || "").trim(),
+    );
   }
 
   function getAssetEditorNode(nodes = appState.nodes) {
@@ -85,15 +199,58 @@ export function createNodeAssetModalsModule(dependencies) {
     const message = documentRef.getElementById("manual-message");
     const providerSelect = documentRef.getElementById("manual-provider-id");
     const providerInput = documentRef.getElementById("manual-provider");
+    const regionSelect = documentRef.getElementById("manual-region");
+    const entryRegionSelect = documentRef.getElementById("manual-entry-region");
+    const relayNodeSelect = documentRef.getElementById("manual-relay-node-id");
+    const managementRelayNodeSelect = documentRef.getElementById("manual-management-relay-node-id");
+    const businessModeSelect = documentRef.getElementById("manual-access-mode");
+    const managementModeSelect = documentRef.getElementById("manual-management-access-mode");
+    const managementProxyHostInput = documentRef.getElementById("manual-management-proxy-host");
+    const routingAdvanced = documentRef.getElementById("manual-routing-advanced");
 
     if (!modal || !closeButton || !form || !message) return;
     if (modal.dataset.bound === "1") return;
     modal.dataset.bound = "1";
 
-    const open = () => {
+    const refreshManualSelects = () => {
       if (providerSelect) {
-        providerSelect.innerHTML = getProviderOptionsHtml();
+        providerSelect.innerHTML = getProviderOptionsHtml(providerSelect.value || null);
       }
+      if (regionSelect) {
+        regionSelect.innerHTML = getLocationOptionsHtml("region", regionSelect.value, "未填写");
+      }
+      if (entryRegionSelect) {
+        entryRegionSelect.innerHTML = getLocationOptionsHtml("entry", entryRegionSelect.value, "未填写");
+      }
+      if (relayNodeSelect) {
+        relayNodeSelect.innerHTML = getRelayNodeOptionsHtml(relayNodeSelect.value || null, {
+          placeholder: "未选择已纳管入口节点",
+        });
+      }
+      if (managementRelayNodeSelect) {
+        managementRelayNodeSelect.innerHTML = getRelayNodeOptionsHtml(
+          managementRelayNodeSelect.value || null,
+          {
+            placeholder: "未选择已纳管跳板",
+          },
+        );
+      }
+      syncProviderField(providerSelect, providerInput);
+      syncRouteFieldVisibility(form, {
+        businessModeSelector: "#manual-access-mode",
+        managementModeSelector: "#manual-management-access-mode",
+      });
+      if (routingAdvanced) {
+        routingAdvanced.open = shouldOpenRoutingAdvanced({
+          businessMode: businessModeSelect?.value,
+          managementMode: managementModeSelect?.value,
+          proxyHost: managementProxyHostInput?.value,
+        });
+      }
+    };
+
+    const open = () => {
+      refreshManualSelects();
       modal.classList.add("open");
     };
     const close = () => modal.classList.remove("open");
@@ -111,6 +268,53 @@ export function createNodeAssetModalsModule(dependencies) {
     bindLocationAutocomplete(modal);
     providerSelect?.addEventListener("change", () => {
       syncProviderField(providerSelect, providerInput);
+    });
+    businessModeSelect?.addEventListener("change", () => {
+      syncRouteFieldVisibility(form, {
+        businessModeSelector: "#manual-access-mode",
+        managementModeSelector: "#manual-management-access-mode",
+      });
+      if (
+        routingAdvanced &&
+        shouldOpenRoutingAdvanced({
+          businessMode: businessModeSelect?.value,
+          managementMode: managementModeSelect?.value,
+          proxyHost: managementProxyHostInput?.value,
+        })
+      ) {
+        routingAdvanced.open = true;
+      }
+    });
+    managementModeSelect?.addEventListener("change", () => {
+      syncRouteFieldVisibility(form, {
+        businessModeSelector: "#manual-access-mode",
+        managementModeSelector: "#manual-management-access-mode",
+      });
+      if (
+        routingAdvanced &&
+        shouldOpenRoutingAdvanced({
+          businessMode: businessModeSelect?.value,
+          managementMode: managementModeSelect?.value,
+          proxyHost: managementProxyHostInput?.value,
+        })
+      ) {
+        routingAdvanced.open = true;
+      }
+    });
+    managementProxyHostInput?.addEventListener("input", () => {
+      if (
+        routingAdvanced &&
+        shouldOpenRoutingAdvanced({
+          businessMode: businessModeSelect?.value,
+          managementMode: managementModeSelect?.value,
+          proxyHost: managementProxyHostInput?.value,
+        })
+      ) {
+        routingAdvanced.open = true;
+      }
+    });
+    resetButton?.addEventListener("click", () => {
+      setTimeout(refreshManualSelects, 0);
     });
 
     form.addEventListener("submit", async (event) => {
@@ -161,6 +365,16 @@ export function createNodeAssetModalsModule(dependencies) {
     const resetButton = documentRef.getElementById("asset-reset");
     const message = documentRef.getElementById("asset-message");
     const summary = documentRef.getElementById("asset-node-summary");
+    const providerSelect = documentRef.getElementById("asset-provider-id");
+    const providerInput = documentRef.getElementById("asset-provider");
+    const regionSelect = documentRef.getElementById("asset-region");
+    const entryRegionSelect = documentRef.getElementById("asset-entry-region");
+    const relayNodeSelect = documentRef.getElementById("asset-relay-node-id");
+    const managementRelayNodeSelect = documentRef.getElementById("asset-management-relay-node-id");
+    const businessModeSelect = documentRef.getElementById("asset-access-mode");
+    const managementModeSelect = documentRef.getElementById("asset-management-access-mode");
+    const managementProxyHostInput = documentRef.getElementById("asset-management-proxy-host");
+    const routingAdvanced = documentRef.getElementById("asset-routing-advanced");
 
     if (!modal || !closeButton || !form || !message) return;
 
@@ -177,13 +391,35 @@ export function createNodeAssetModalsModule(dependencies) {
         summary.textContent = `当前编辑节点：${getNodeDisplayName(node)} · ${node.id}`;
       }
 
-      const assetProviderSelect = documentRef.getElementById("asset-provider-id");
-      if (assetProviderSelect) {
-        assetProviderSelect.innerHTML = getProviderOptionsHtml(node.provider_id || null);
+      if (providerSelect) {
+        providerSelect.innerHTML = getProviderOptionsHtml(node.provider_id || null);
+      }
+      if (regionSelect) {
+        regionSelect.innerHTML = getLocationOptionsHtml("region", node.labels?.region, "未填写");
+      }
+      if (entryRegionSelect) {
+        entryRegionSelect.innerHTML = getLocationOptionsHtml(
+          "entry",
+          node.networking?.entry_region,
+          "未填写",
+        );
+      }
+      if (relayNodeSelect) {
+        relayNodeSelect.innerHTML = getRelayNodeOptionsHtml(node.networking?.relay_node_id || null, {
+          excludeNodeId: node.id,
+          placeholder: "未选择已纳管入口节点",
+        });
+      }
+      if (managementRelayNodeSelect) {
+        managementRelayNodeSelect.innerHTML = getRelayNodeOptionsHtml(
+          node.management?.relay_node_id || null,
+          {
+            excludeNodeId: node.id,
+            placeholder: "未选择已纳管跳板",
+          },
+        );
       }
       documentRef.getElementById("asset-provider").value = node.labels?.provider || "";
-      documentRef.getElementById("asset-region").value =
-        normalizeLocationValue(node.labels?.region, { scope: "region" }) || "";
       documentRef.getElementById("asset-role").value = node.labels?.role || "";
       documentRef.getElementById("asset-public-ip").value = node.facts?.public_ipv4 || "";
       documentRef.getElementById("asset-public-ipv6").value = node.facts?.public_ipv6 || "";
@@ -202,26 +438,14 @@ export function createNodeAssetModalsModule(dependencies) {
         formatDateInput(node.commercial?.billing_started_at);
       documentRef.getElementById("asset-expire").value = formatDateInput(node.commercial?.expires_at);
       documentRef.getElementById("asset-access-mode").value = node.networking?.access_mode || "direct";
-      documentRef.getElementById("asset-entry-region").value =
-        normalizeLocationValue(node.networking?.entry_region, { scope: "entry" }) || "";
       documentRef.getElementById("asset-entry-port").value = node.networking?.entry_port ?? "";
       documentRef.getElementById("asset-ssh-port").value =
         node.management?.ssh_port ?? node.facts?.ssh_port ?? 19822;
-      documentRef.getElementById("asset-relay-node-id").value = node.networking?.relay_node_id || "";
-      documentRef.getElementById("asset-relay-label").value = node.networking?.relay_label || "";
-      documentRef.getElementById("asset-relay-region").value =
-        normalizeLocationValue(node.networking?.relay_region, { scope: "region" }) || "";
       documentRef.getElementById("asset-management-access-mode").value =
         node.management?.access_mode || "direct";
       documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";
       documentRef.getElementById("asset-management-relay-strategy").value =
         node.management?.relay_strategy || "auto";
-      documentRef.getElementById("asset-management-relay-node-id").value =
-        node.management?.relay_node_id || "";
-      documentRef.getElementById("asset-management-relay-label").value =
-        node.management?.relay_label || "";
-      documentRef.getElementById("asset-management-relay-region").value =
-        normalizeLocationValue(node.management?.relay_region, { scope: "region" }) || "";
       documentRef.getElementById("asset-management-proxy-host").value =
         node.management?.proxy_host || "";
       documentRef.getElementById("asset-management-proxy-port").value =
@@ -239,6 +463,18 @@ export function createNodeAssetModalsModule(dependencies) {
         node.management?.route_note || "";
       documentRef.getElementById("asset-cost-note").value = node.commercial?.cost_note || "";
       documentRef.getElementById("asset-note").value = node.commercial?.note || "";
+      syncProviderField(providerSelect, providerInput);
+      syncRouteFieldVisibility(form, {
+        businessModeSelector: "#asset-access-mode",
+        managementModeSelector: "#asset-management-access-mode",
+      });
+      if (routingAdvanced) {
+        routingAdvanced.open = shouldOpenRoutingAdvanced({
+          businessMode: node.networking?.access_mode || "direct",
+          managementMode: node.management?.access_mode || "direct",
+          proxyHost: node.management?.proxy_host || "",
+        });
+      }
     };
 
     const open = () => {
@@ -256,11 +492,55 @@ export function createNodeAssetModalsModule(dependencies) {
     if (modal.dataset.coreBound !== "1") {
       modal.dataset.coreBound = "1";
       bindLocationAutocomplete(modal);
-      documentRef.getElementById("asset-provider-id")?.addEventListener("change", () => {
-        syncProviderField(
-          documentRef.getElementById("asset-provider-id"),
-          documentRef.getElementById("asset-provider"),
-        );
+      providerSelect?.addEventListener("change", () => {
+        syncProviderField(providerSelect, providerInput);
+      });
+      businessModeSelect?.addEventListener("change", () => {
+        syncRouteFieldVisibility(form, {
+          businessModeSelector: "#asset-access-mode",
+          managementModeSelector: "#asset-management-access-mode",
+        });
+        if (
+          routingAdvanced &&
+          shouldOpenRoutingAdvanced({
+            businessMode: businessModeSelect?.value,
+            managementMode: managementModeSelect?.value,
+            proxyHost: managementProxyHostInput?.value,
+          })
+        ) {
+          routingAdvanced.open = true;
+        }
+      });
+      managementModeSelect?.addEventListener("change", () => {
+        syncRouteFieldVisibility(form, {
+          businessModeSelector: "#asset-access-mode",
+          managementModeSelector: "#asset-management-access-mode",
+        });
+        if (
+          routingAdvanced &&
+          shouldOpenRoutingAdvanced({
+            businessMode: businessModeSelect?.value,
+            managementMode: managementModeSelect?.value,
+            proxyHost: managementProxyHostInput?.value,
+          })
+        ) {
+          routingAdvanced.open = true;
+        }
+      });
+      managementProxyHostInput?.addEventListener("input", () => {
+        if (
+          routingAdvanced &&
+          shouldOpenRoutingAdvanced({
+            businessMode: businessModeSelect?.value,
+            managementMode: managementModeSelect?.value,
+            proxyHost: managementProxyHostInput?.value,
+          })
+        ) {
+          routingAdvanced.open = true;
+        }
+      });
+      resetButton?.addEventListener("click", () => {
+        setTimeout(fillForm, 0);
       });
       bindAssetModalCoreEvents({
         modal,
