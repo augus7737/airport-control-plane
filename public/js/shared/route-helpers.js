@@ -80,12 +80,17 @@ export function buildRelayGroups(nodes = []) {
 
     if (!relayMap.has(relayKey)) {
       const relayNode = resolveRelayNode(node, nodes);
+      const relayRegionValue = normalizeLocationValue(
+        node.networking?.relay_region || relayNode?.labels?.region,
+        { scope: "region" },
+      );
       const group = {
         key: relayKey,
         relayNode,
         relayLabel: relayNode ? getNodeDisplayName(relayNode) : getRelayDisplayName(node, nodes),
+        relayRegionValue,
         relayRegion:
-          formatLocationDisplay(node.networking?.relay_region || relayNode?.labels?.region, {
+          formatLocationDisplay(relayRegionValue, {
             scope: "region",
             style: "compact",
           }) || "-",

@@ -15,6 +15,7 @@ function buildLocationRecord({
   code,
   english,
   country,
+  coord = null,
   aliases = [],
 }) {
   const normalizedAliases = [...new Set(
@@ -28,6 +29,10 @@ function buildLocationRecord({
     code,
     english,
     country,
+    coord:
+      Array.isArray(coord) && coord.length === 2 && coord.every((item) => Number.isFinite(Number(item)))
+        ? [Number(coord[0]), Number(coord[1])]
+        : null,
     aliases: normalizedAliases,
     searchTokens: normalizedAliases.map((item) => normalizeSearch(item)),
   };
@@ -39,6 +44,7 @@ const REGION_LOCATION_PRESETS = [
     code: "CN",
     english: "Mainland China",
     country: "中国大陆",
+    coord: [103.82, 35.72],
     aliases: ["中国", "Mainland China", "CN"],
   }),
   buildLocationRecord({
@@ -46,6 +52,7 @@ const REGION_LOCATION_PRESETS = [
     code: "HK",
     english: "Hong Kong",
     country: "中国香港",
+    coord: [114.1694, 22.3193],
     aliases: ["HKG", "HK", "中国香港", "Hong Kong"],
   }),
   buildLocationRecord({
@@ -53,6 +60,7 @@ const REGION_LOCATION_PRESETS = [
     code: "JP",
     english: "Japan",
     country: "日本",
+    coord: [138.2529, 36.2048],
     aliases: ["Japan", "JP", "Tokyo", "TYO", "NRT", "TOK", "Narita", "Osaka", "OSA", "东京", "大阪"],
   }),
   buildLocationRecord({
@@ -60,6 +68,7 @@ const REGION_LOCATION_PRESETS = [
     code: "SG",
     english: "Singapore",
     country: "新加坡",
+    coord: [103.8198, 1.3521],
     aliases: ["SIN", "Singapore"],
   }),
   buildLocationRecord({
@@ -67,6 +76,7 @@ const REGION_LOCATION_PRESETS = [
     code: "MY",
     english: "Malaysia",
     country: "马来西亚",
+    coord: [101.9758, 4.2105],
     aliases: ["Malaysia", "MY", "Kuala Lumpur", "KUL", "吉隆坡"],
   }),
   buildLocationRecord({
@@ -74,6 +84,7 @@ const REGION_LOCATION_PRESETS = [
     code: "VN",
     english: "Vietnam",
     country: "越南",
+    coord: [108.2772, 14.0583],
     aliases: ["Vietnam", "VN", "Ho Chi Minh", "SGN", "HCMC", "Hanoi", "HAN", "胡志明", "河内"],
   }),
   buildLocationRecord({
@@ -81,6 +92,7 @@ const REGION_LOCATION_PRESETS = [
     code: "TH",
     english: "Thailand",
     country: "泰国",
+    coord: [100.9925, 15.87],
     aliases: ["Thailand", "TH", "Bangkok", "BKK", "曼谷"],
   }),
   buildLocationRecord({
@@ -88,6 +100,7 @@ const REGION_LOCATION_PRESETS = [
     code: "ID",
     english: "Indonesia",
     country: "印度尼西亚",
+    coord: [113.9213, -0.7893],
     aliases: ["Indonesia", "ID", "Jakarta", "CGK", "雅加达"],
   }),
   buildLocationRecord({
@@ -95,6 +108,7 @@ const REGION_LOCATION_PRESETS = [
     code: "PH",
     english: "Philippines",
     country: "菲律宾",
+    coord: [121.774, 12.8797],
     aliases: ["Philippines", "PH", "Manila", "MNL", "马尼拉"],
   }),
   buildLocationRecord({
@@ -102,6 +116,7 @@ const REGION_LOCATION_PRESETS = [
     code: "KR",
     english: "South Korea",
     country: "韩国",
+    coord: [127.7669, 35.9078],
     aliases: ["South Korea", "KR", "Seoul", "SEL", "ICN", "Incheon", "首尔", "首尔仁川"],
   }),
   buildLocationRecord({
@@ -109,6 +124,7 @@ const REGION_LOCATION_PRESETS = [
     code: "TW",
     english: "Taiwan",
     country: "中国台湾",
+    coord: [121.0, 23.7],
     aliases: ["Taiwan", "TW", "TPE", "Taipei", "台湾", "台北"],
   }),
   buildLocationRecord({
@@ -116,6 +132,7 @@ const REGION_LOCATION_PRESETS = [
     code: "US",
     english: "United States",
     country: "美国",
+    coord: [-98.5795, 39.8283],
     aliases: [
       "United States",
       "US",
@@ -135,6 +152,7 @@ const REGION_LOCATION_PRESETS = [
     code: "DE",
     english: "Germany",
     country: "德国",
+    coord: [10.4515, 51.1657],
     aliases: ["Germany", "DE", "Frankfurt", "FRA", "Nuremberg", "NBG", "法兰克福", "纽伦堡"],
   }),
   buildLocationRecord({
@@ -142,6 +160,7 @@ const REGION_LOCATION_PRESETS = [
     code: "FI",
     english: "Finland",
     country: "芬兰",
+    coord: [25.7482, 61.9241],
     aliases: ["Finland", "FI", "Helsinki", "HEL", "赫尔辛基"],
   }),
   buildLocationRecord({
@@ -149,6 +168,7 @@ const REGION_LOCATION_PRESETS = [
     code: "GB",
     english: "United Kingdom",
     country: "英国",
+    coord: [-3.436, 55.3781],
     aliases: ["United Kingdom", "UK", "GB", "London", "LON", "伦敦"],
   }),
   buildLocationRecord({
@@ -156,6 +176,7 @@ const REGION_LOCATION_PRESETS = [
     code: "NL",
     english: "Netherlands",
     country: "荷兰",
+    coord: [5.2913, 52.1326],
     aliases: ["Netherlands", "NL", "Amsterdam", "AMS", "阿姆斯特丹"],
   }),
   buildLocationRecord({
@@ -163,6 +184,7 @@ const REGION_LOCATION_PRESETS = [
     code: "FR",
     english: "France",
     country: "法国",
+    coord: [2.2137, 46.2276],
     aliases: ["France", "FR", "Paris", "PAR", "巴黎"],
   }),
   buildLocationRecord({
@@ -170,6 +192,7 @@ const REGION_LOCATION_PRESETS = [
     code: "AU",
     english: "Australia",
     country: "澳大利亚",
+    coord: [133.7751, -25.2744],
     aliases: ["Australia", "AU", "Sydney", "SYD", "悉尼"],
   }),
   buildLocationRecord({
@@ -177,6 +200,7 @@ const REGION_LOCATION_PRESETS = [
     code: "CA",
     english: "Canada",
     country: "加拿大",
+    coord: [-106.3468, 56.1304],
     aliases: ["Canada", "CA", "Toronto", "YYZ", "Vancouver", "YVR", "多伦多", "温哥华"],
   }),
   buildLocationRecord({
@@ -184,6 +208,7 @@ const REGION_LOCATION_PRESETS = [
     code: "ES",
     english: "Spain",
     country: "西班牙",
+    coord: [-3.7492, 40.4637],
     aliases: ["Spain", "ES", "Madrid", "MAD", "马德里"],
   }),
   buildLocationRecord({
@@ -191,6 +216,7 @@ const REGION_LOCATION_PRESETS = [
     code: "IT",
     english: "Italy",
     country: "意大利",
+    coord: [12.5674, 41.8719],
     aliases: ["Italy", "IT", "Milan", "MXP", "Rome", "ROM", "米兰", "罗马"],
   }),
   buildLocationRecord({
@@ -198,6 +224,7 @@ const REGION_LOCATION_PRESETS = [
     code: "PL",
     english: "Poland",
     country: "波兰",
+    coord: [19.1451, 51.9194],
     aliases: ["Poland", "PL", "Warsaw", "WAW", "华沙"],
   }),
   buildLocationRecord({
@@ -205,6 +232,7 @@ const REGION_LOCATION_PRESETS = [
     code: "SE",
     english: "Sweden",
     country: "瑞典",
+    coord: [18.6435, 60.1282],
     aliases: ["Sweden", "SE", "Stockholm", "ARN", "斯德哥尔摩"],
   }),
   buildLocationRecord({
@@ -212,6 +240,7 @@ const REGION_LOCATION_PRESETS = [
     code: "IN",
     english: "India",
     country: "印度",
+    coord: [78.9629, 20.5937],
     aliases: ["India", "IN", "Mumbai", "BOM", "Delhi", "DEL", "孟买", "德里"],
   }),
   buildLocationRecord({
@@ -219,6 +248,7 @@ const REGION_LOCATION_PRESETS = [
     code: "AE",
     english: "United Arab Emirates",
     country: "阿联酋",
+    coord: [53.8478, 23.4241],
     aliases: ["UAE", "United Arab Emirates", "AE", "Dubai", "DXB", "迪拜"],
   }),
 ];
@@ -229,6 +259,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "CN",
     english: "Mainland China",
     country: "中国大陆",
+    coord: [103.82, 35.72],
     aliases: ["中国", "Mainland China"],
   }),
   buildLocationRecord({
@@ -236,6 +267,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "HK",
     english: "Hong Kong",
     country: "中国香港",
+    coord: [114.1694, 22.3193],
     aliases: ["HKG", "HK", "中国香港", "Hong Kong"],
   }),
   buildLocationRecord({
@@ -243,6 +275,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "TW",
     english: "Taiwan",
     country: "中国台湾",
+    coord: [121.0, 23.7],
     aliases: ["中国台湾", "Taiwan", "TPE"],
   }),
   buildLocationRecord({
@@ -250,6 +283,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "JP",
     english: "Japan",
     country: "日本",
+    coord: [138.2529, 36.2048],
     aliases: ["Japan"],
   }),
   buildLocationRecord({
@@ -257,6 +291,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "KR",
     english: "South Korea",
     country: "韩国",
+    coord: [127.7669, 35.9078],
     aliases: ["South Korea"],
   }),
   buildLocationRecord({
@@ -264,6 +299,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "SG",
     english: "Singapore",
     country: "新加坡",
+    coord: [103.8198, 1.3521],
     aliases: ["Singapore"],
   }),
   buildLocationRecord({
@@ -271,6 +307,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "MY",
     english: "Malaysia",
     country: "马来西亚",
+    coord: [101.9758, 4.2105],
     aliases: ["Malaysia", "MY", "KUL", "吉隆坡"],
   }),
   buildLocationRecord({
@@ -278,6 +315,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "VN",
     english: "Vietnam",
     country: "越南",
+    coord: [108.2772, 14.0583],
     aliases: ["Vietnam", "VN", "SGN", "HAN", "胡志明", "河内"],
   }),
   buildLocationRecord({
@@ -285,6 +323,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "TH",
     english: "Thailand",
     country: "泰国",
+    coord: [100.9925, 15.87],
     aliases: ["Thailand", "TH", "BKK", "曼谷"],
   }),
   buildLocationRecord({
@@ -292,6 +331,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "USW",
     english: "US West Coast",
     country: "美国",
+    coord: [-122.3321, 47.6062],
     aliases: ["US West Coast", "西海岸"],
   }),
   buildLocationRecord({
@@ -299,6 +339,7 @@ const ENTRY_LOCATION_PRESETS = [
     code: "EU",
     english: "Europe",
     country: "欧洲",
+    coord: [10.0, 50.0],
     aliases: ["Europe"],
   }),
 ];
@@ -339,6 +380,7 @@ function fallbackLocationMeta(rawValue) {
       code: "--",
       english: "",
       country: "未识别",
+      coord: null,
       aliases: [],
     };
   }
@@ -349,6 +391,7 @@ function fallbackLocationMeta(rawValue) {
     code: alphaCode || "--",
     english: "",
     country: value,
+    coord: null,
     aliases: [value],
   };
 }
@@ -463,6 +506,11 @@ export function getLocationCountry(value, options = {}) {
 
 export function getLocationCode(value, options = {}) {
   return getLocationMeta(value, options).code;
+}
+
+export function getLocationCoordinates(value, options = {}) {
+  const coord = getLocationMeta(value, options).coord;
+  return Array.isArray(coord) ? [...coord] : null;
 }
 
 export function getLocationSuggestions(query, options = {}) {

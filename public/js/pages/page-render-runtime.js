@@ -31,6 +31,7 @@ export function createPageRenderRuntime({
   setupProvidersPage,
   setupProxyProfilesPage,
   setupReleasesPage,
+  setupRoutesPage,
   setupHoverPanels,
   setupSystemTemplatesPage,
   setupSystemUsersPage,
@@ -91,6 +92,9 @@ export function createPageRenderRuntime({
     setupSystemTemplatesPage();
     setupProxyProfilesPage();
     setupReleasesPage();
+    if (page === "routes") {
+      void setupRoutesPage(appState.nodes);
+    }
     setupPlatformKeyActions();
     setupProvidersPage();
     setupHoverPanels();
