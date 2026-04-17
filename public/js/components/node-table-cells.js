@@ -132,6 +132,10 @@ export function createNodeTableCellsModule(dependencies = {}) {
     const accessMode = formatAccessMode(getAccessMode(node));
     const country = getNodeCountry(node);
     const routeSummary = formatRouteSummary(node, getRouteNodes());
+    const primaryIpv4 = node?.facts?.public_ipv4 || "-";
+    const primaryIpv6 = node?.facts?.public_ipv6 || "-";
+    const privateIpv4 = node?.facts?.private_ipv4 || "-";
+    const configuration = renderNodeConfigurationSummary(node);
 
     return `
       <div class="cell-hover-card placement-cell-card">
@@ -162,10 +166,40 @@ export function createNodeTableCellsModule(dependencies = {}) {
               <span>链路摘要</span>
               <strong>${escapeHtml(routeSummary)}</strong>
             </div>
+            <div class="cell-hover-row">
+              <span>公网 IPv4</span>
+              <strong class="mono">${escapeHtml(primaryIpv4)}</strong>
+            </div>
+            <div class="cell-hover-row">
+              <span>公网 IPv6</span>
+              <strong class="mono">${escapeHtml(primaryIpv6)}</strong>
+            </div>
+            <div class="cell-hover-row">
+              <span>内网 IPv4</span>
+              <strong class="mono">${escapeHtml(privateIpv4)}</strong>
+            </div>
+            <div class="cell-hover-row">
+              <span>配置摘要</span>
+              <strong>${escapeHtml(configuration)}</strong>
+            </div>
           </div>
         </div>
       </div>
     `;
+  }
+
+  function renderNodeConfigurationSummary(node) {
+    const cpu = node?.facts?.cpu_cores ? `${node.facts.cpu_cores}C` : null;
+    const memory =
+      Number.isFinite(Number(node?.facts?.memory_mb)) && Number(node.facts.memory_mb) > 0
+        ? `${Math.round(Number(node.facts.memory_mb) / 1024)}G`
+        : null;
+    const disk =
+      Number.isFinite(Number(node?.facts?.disk_gb)) && Number(node.facts.disk_gb) > 0
+        ? `${Math.round(Number(node.facts.disk_gb))}G`
+        : null;
+    const summary = [cpu, memory, disk].filter(Boolean).join(" / ");
+    return summary || "待补配置";
   }
 
   function renderNodeAssetCell(node, options = {}) {
@@ -233,8 +267,8 @@ export function createNodeTableCellsModule(dependencies = {}) {
   function renderNodeTableActions(node, options = {}) {
     return `
       <div class="table-actions node-table-actions">
-        <a class="table-action-primary table-action-shell" href="${nodeShellHref(node.id)}">终端</a>
-        <a class="table-action-pill" href="${nodeDetailHref(node.id)}">详情</a>
+        <a class="table-action-primary table-action-shell" href="${nodeShellHref(node.id)}">打开终端</a>
+        <a class="table-action-inline" href="${nodeDetailHref(node.id)}">查看详情</a>
       </div>
     `;
   }
@@ -242,8 +276,9 @@ export function createNodeTableCellsModule(dependencies = {}) {
   function nodeTable(nodes, options = {}) {
     const variant = options.variant || "ledger";
     const showPlacement = options.showPlacement ?? variant !== "preview";
+    const isPreview = variant === "preview";
     const colgroup =
-      variant === "preview"
+      isPreview
         ? `
             <colgroup>
               <col style="width:22%">
@@ -256,28 +291,37 @@ export function createNodeTableCellsModule(dependencies = {}) {
           `
         : `
             <colgroup>
-              <col style="width:17%">
-              <col style="width:15%">
-              <col style="width:15%">
-              <col style="width:16%">
-              <col style="width:12%">
-              <col style="width:13%">
-              <col style="width:12%">
+              <col style="width:22%">
+              <col style="width:18%">
+              <col style="width:28%">
+              <col style="width:18%">
+              <col style="width:14%">
             </colgroup>
           `;
     const rows = nodes
       .map(
-        (node) => `
-          <tr>
-            <td>${renderNodeIdentityCell(node, { variant })}</td>
-            <td>${renderNodeStatusCell(node)}</td>
-            ${showPlacement ? `<td>${renderNodePlacementCell(node)}</td>` : ""}
-            <td>${renderPublicIpCell(node)}</td>
-            <td>${renderNodeConfigurationCell(node)}</td>
-            <td>${renderNodeAssetCell(node, { compact: variant === "preview" })}</td>
-            <td>${renderNodeTableActions(node, { variant })}</td>
-          </tr>
-        `,
+        (node) =>
+          isPreview
+            ? `
+              <tr>
+                <td>${renderNodeIdentityCell(node, { variant })}</td>
+                <td>${renderNodeStatusCell(node)}</td>
+                ${showPlacement ? `<td>${renderNodePlacementCell(node)}</td>` : ""}
+                <td>${renderPublicIpCell(node)}</td>
+                <td>${renderNodeConfigurationCell(node)}</td>
+                <td>${renderNodeAssetCell(node, { compact: true })}</td>
+                <td>${renderNodeTableActions(node, { variant })}</td>
+              </tr>
+            `
+            : `
+              <tr>
+                <td>${renderNodeIdentityCell(node, { variant })}</td>
+                <td>${renderNodeStatusCell(node)}</td>
+                <td>${renderNodePlacementCell(node)}</td>
+                <td>${renderNodeAssetCell(node)}</td>
+                <td>${renderNodeTableActions(node, { variant })}</td>
+              </tr>
+            `,
       )
       .join("");
 
@@ -289,10 +333,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
             <tr>
               <th>节点</th>
               <th>状态</th>
-              ${showPlacement ? "<th>归属</th>" : ""}
-              <th>公网地址</th>
-              <th>配置</th>
-              <th>资产</th>
+              ${isPreview ? `${showPlacement ? "<th>归属</th>" : ""}<th>公网地址</th><th>配置</th><th>资产</th>` : "<th>归属与接入</th><th>资产</th>"}
               <th>操作</th>
             </tr>
           </thead>

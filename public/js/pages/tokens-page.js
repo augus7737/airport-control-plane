@@ -16,6 +16,7 @@ export function createTokensPageModule(dependencies) {
     page,
     renderCurrentContent,
     renderPlatformSshPanel,
+    renderPlatformSshSummaryPanel,
     statusClassName,
     statusText,
     upsertBootstrapToken,
@@ -60,7 +61,7 @@ export function createTokensPageModule(dependencies) {
                 <button class="button ghost token-table-button" type="button" data-token-copy="${escapeHtml(token.id)}">复制接管命令</button>
                 ${
                   canToggle
-                    ? `<button class="button ghost token-table-button" type="button" data-token-toggle="${escapeHtml(token.id)}" data-next-status="${effectiveStatus === "disabled" ? "active" : "disabled"}">${actionLabel}</button>`
+                    ? `<button class="button quiet token-inline-action" type="button" data-token-toggle="${escapeHtml(token.id)}" data-next-status="${effectiveStatus === "disabled" ? "active" : "disabled"}">${actionLabel}</button>`
                     : `<span class="tiny">需调整上限或重建令牌</span>`
                 }
               </div>
@@ -84,12 +85,21 @@ export function createTokensPageModule(dependencies) {
         <article class="panel"><div class="panel-body"><div class="stat-label">需关注</div><div class="stat-value">${riskyTokens.length}</div><div class="stat-foot">已过期、已用尽，或 7 天内到期的令牌数量。</div></div></article>
         <article class="panel"><div class="panel-body"><div class="stat-label">累计注册</div><div class="stat-value">${tokens.reduce((total, token) => total + Number(token.uses || 0), 0)}</div><div class="stat-foot">所有令牌历史触发过的纳管次数。</div></div></article>
       </section>
-      <section class="workspace fade-up">
+      <section class="workspace fade-up tokens-workspace">
         <article class="panel">
           <div class="panel-body">
             <div class="panel-title"><div><h3>令牌列表</h3><p>把入口凭证的用途、状态和使用轨迹收在一起，避免“谁在随便注册节点”这件事失控。</p></div></div>
-            <div class="table-shell">
+            <div class="table-shell tokens-table-shell">
               <table>
+                <colgroup>
+                  <col style="width:19%">
+                  <col style="width:11%">
+                  <col style="width:10%">
+                  <col style="width:12%">
+                  <col style="width:12%">
+                  <col style="width:16%">
+                  <col style="width:20%">
+                </colgroup>
                 <thead>
                   <tr><th>用途 / 范围</th><th>状态</th><th>已使用</th><th>到期时间</th><th>最近使用</th><th>备注</th><th>操作</th></tr>
                 </thead>
@@ -99,7 +109,7 @@ export function createTokensPageModule(dependencies) {
           </div>
         </article>
         <aside class="aside-stack">
-          ${renderPlatformSshPanel()}
+          ${renderPlatformSshSummaryPanel ? renderPlatformSshSummaryPanel() : renderPlatformSshPanel()}
           <article class="panel">
             <div class="panel-body">
               <div class="panel-title"><div><h3>默认入口令牌</h3><p>${primaryToken ? "这里仅保留当前优先令牌的状态摘要，不再把纳管步骤铺在令牌页。" : "当前没有可用令牌，请先创建一条可用入口。"} </p></div></div>

@@ -881,7 +881,10 @@ export function createAccessUsersPageModule(dependencies) {
                 )
               : "待发布";
             return `
-              <tr class="${state.selectedId === user.id ? "is-selected" : ""}">
+              <tr
+                class="${state.selectedId === user.id ? "is-selected" : ""}"
+                data-access-user-select="${escapeHtml(user.id)}"
+              >
                 <td>
                   <div class="node-meta">
                     <span class="node-name">${escapeHtml(displayName)}</span>
@@ -952,7 +955,7 @@ export function createAccessUsersPageModule(dependencies) {
                   <label for="access-user-filter">筛选</label>
                   <input id="access-user-filter" value="${escapeHtml(state.filter)}" placeholder="名称 / UUID / 备注 / 绑定模板" />
                 </div>
-                <button class="button" type="button" id="access-user-create-empty">新建空白用户</button>
+                <button class="button primary" type="button" id="access-user-create-empty">新建空白用户</button>
               </div>
             </div>
             <div class="table-shell">
@@ -1092,7 +1095,7 @@ export function createAccessUsersPageModule(dependencies) {
 
               ${
                 state.message
-                  ? `<div class="message ${state.message.type}">${escapeHtml(state.message.text)}</div>`
+                  ? `<div class="message ${state.message.type}" aria-live="polite">${escapeHtml(state.message.text)}</div>`
                   : ""
               }
             </div>
@@ -1159,6 +1162,29 @@ export function createAccessUsersPageModule(dependencies) {
         if (state.selectedId !== nextSelectedId) {
           clearShareState();
         }
+        state.selectedId = nextSelectedId;
+        state.message = null;
+        renderCurrentContent();
+        scrollToForm();
+      });
+    });
+
+    documentRef.querySelectorAll("[data-access-user-select]").forEach((row) => {
+      row.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("button, a, input, select, textarea, label")) {
+          return;
+        }
+
+        const nextSelectedId = row.dataset.accessUserSelect || null;
+        if (!nextSelectedId) {
+          return;
+        }
+
+        if (state.selectedId !== nextSelectedId) {
+          clearShareState();
+        }
+
         state.selectedId = nextSelectedId;
         state.message = null;
         renderCurrentContent();

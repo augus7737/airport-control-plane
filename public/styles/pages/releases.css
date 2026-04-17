@@ -1,11 +1,157 @@
-body[data-page="releases"] .ops-release-layout {
-  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.92fr);
+body[data-page="releases"] .ops-release-primary {
+  grid-template-columns: minmax(0, 1.62fr) minmax(300px, 0.68fr);
+  gap: 16px;
+  align-items: start;
+}
+
+body[data-page="releases"] .ops-release-groups-stage {
+  grid-template-columns: minmax(0, 1.26fr) minmax(360px, 0.88fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 18px;
+}
+
+body[data-page="releases"] .ops-release-rail {
+  gap: 14px;
+}
+
+body[data-page="releases"] .ops-release-rail > .panel:first-child,
+body[data-page="releases"] .ops-release-groups-stage > .aside-stack > .panel:first-child {
+  position: sticky;
+  top: 18px;
+}
+
+body[data-page="releases"] .release-builder-overview,
+body[data-page="releases"] .release-group-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+
+body[data-page="releases"] .release-builder-overview-card,
+body[data-page="releases"] .release-group-overview-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid rgba(20, 32, 43, 0.07);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(245, 249, 252, 0.96));
+}
+
+body[data-page="releases"] .release-builder-overview-card span,
+body[data-page="releases"] .release-group-overview-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+body[data-page="releases"] .release-builder-overview-card strong,
+body[data-page="releases"] .release-group-overview-card strong {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+body[data-page="releases"] .release-focus-summary {
+  display: grid;
+  gap: 12px;
+}
+
+body[data-page="releases"] .release-focus-strip {
+  display: grid;
+  gap: 6px;
+  padding: 14px 15px;
+  border: 1px solid rgba(31, 111, 127, 0.12);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(246, 251, 253, 0.98), rgba(255, 255, 255, 0.95)),
+    rgba(255, 255, 255, 0.9);
+}
+
+body[data-page="releases"] .release-focus-strip strong {
+  font-size: 20px;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+body[data-page="releases"] .release-group-callout {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(31, 111, 127, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(47, 111, 182, 0.1), transparent 40%),
+    linear-gradient(180deg, rgba(248, 251, 254, 0.98), rgba(242, 247, 251, 0.94));
+}
+
+body[data-page="releases"] .release-group-callout strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+body[data-page="releases"] .release-group-callout p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+body[data-page="releases"] .release-soft-list-foot {
+  padding-inline: 2px;
 }
 
 body[data-page="releases"] .ops-node-check-grid {
   max-height: 320px;
   overflow: auto;
   padding-right: 4px;
+}
+
+body[data-page="releases"] #release-builder-panel .ops-check-grid {
+  max-height: 190px;
+  overflow: auto;
+  padding-right: 4px;
+  align-content: start;
+}
+
+body[data-page="releases"] .release-picker-section {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 253, 0.93)),
+    rgba(255, 255, 255, 0.84);
+}
+
+body[data-page="releases"] .release-picker-section summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 600;
+  list-style: none;
+}
+
+body[data-page="releases"] .release-picker-section summary::-webkit-details-marker {
+  display: none;
+}
+
+body[data-page="releases"] .release-picker-section summary::after {
+  content: "展开";
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+body[data-page="releases"] .release-picker-section[open] summary::after {
+  content: "收起";
 }
 
 body[data-page="releases"] .ops-soft-item {
@@ -18,8 +164,42 @@ body[data-page="releases"] .ops-soft-item:focus-visible {
   background: rgba(31, 111, 127, 0.06);
 }
 
+body[data-page="releases"] .table-shell table {
+  min-width: 1080px;
+}
+
+body[data-page="releases"] .release-builder-links {
+  margin-top: -2px;
+  color: var(--muted);
+}
+
+body[data-page="releases"] .release-builder-links a {
+  color: var(--text);
+  font-weight: 600;
+}
+
+body[data-page="releases"] .ops-release-primary .table-shell th:last-child,
+body[data-page="releases"] .ops-release-primary .table-shell td:last-child,
+body[data-page="releases"] .ops-release-groups-stage .table-shell th:last-child,
+body[data-page="releases"] .ops-release-groups-stage .table-shell td:last-child {
+  width: 132px;
+}
+
 @media (max-width: 1180px) {
-  body[data-page="releases"] .ops-release-layout {
+  body[data-page="releases"] .ops-release-primary,
+  body[data-page="releases"] .ops-release-groups-stage {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="releases"] .ops-release-rail > .panel:first-child,
+  body[data-page="releases"] .ops-release-groups-stage > .aside-stack > .panel:first-child {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  body[data-page="releases"] .release-builder-overview,
+  body[data-page="releases"] .release-group-overview {
     grid-template-columns: 1fr;
   }
 }

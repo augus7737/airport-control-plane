@@ -22,7 +22,7 @@ body[data-page="routes"] .routes-map-panel .panel-body {
 }
 
 .route-map-kicker {
-  color: #fb923c;
+  color: var(--accent);
   font-size: 12px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -129,7 +129,9 @@ body[data-page="routes"] .routes-map-panel .panel-body {
   padding: 14px 16px;
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(7, 14, 28, 0.76);
+  background:
+    linear-gradient(180deg, rgba(9, 18, 34, 0.74), rgba(14, 30, 52, 0.68)),
+    rgba(7, 14, 28, 0.72);
   backdrop-filter: blur(14px);
   color: rgba(226, 232, 240, 0.92);
   box-shadow: 0 18px 34px rgba(2, 6, 23, 0.18);

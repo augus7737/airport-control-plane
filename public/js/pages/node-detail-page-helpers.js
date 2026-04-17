@@ -617,21 +617,48 @@ export function buildNodeDetailViewModel({
     ["成本备注", node.commercial?.cost_note || "-"],
     ["备注", node.commercial?.note || "-"],
   ];
-  const routeOverview = [
-    ["业务链路", accessModeText],
-    ["业务入口区域", node.networking?.entry_region || "中国大陆"],
-    ["业务入口端口", node.networking?.entry_port ? String(node.networking.entry_port) : "跟随代理配置"],
-    ["业务中转节点", accessMode === "relay" ? relayLabel : "无需中转"],
-    ["业务中转区域", accessMode === "relay" ? node.networking?.relay_region || relayNode?.labels?.region || "-" : "-"],
-    ["业务链路摘要", routeSummaryText],
-    ["业务备注", node.networking?.route_note || "-"],
-    ["管理链路", formatManagementAccessMode(node)],
+  const managementOverview = [
+    ["管理接入", formatManagementAccessMode(node)],
+    ["管理 SSH 端口", sshPort],
     ["管理中转", managementRelayLabel],
-    ["管理配置策略", managementRelayStrategyText],
-    ["管理生效策略", effectiveManagementRelayStrategyText],
+    ["策略配置", managementRelayStrategyText],
+    ["生效策略", effectiveManagementRelayStrategyText],
     ["最近中转诊断", managementRelayDiagnosticText],
     ["管理备注", node.management?.route_note || "-"],
   ];
+  const trafficOverview = [
+    ["业务链路", accessModeText],
+    ["业务入口区域", node.networking?.entry_region || "中国大陆"],
+    ["业务入口地址", primaryPublicIp?.address || node.networking?.entry_host || "未探测"],
+    ["业务入口端口", node.networking?.entry_port ? String(node.networking.entry_port) : "跟随代理配置"],
+    ["业务中转节点", accessMode === "relay" ? relayLabel : "无需中转"],
+    ["业务中转区域", accessMode === "relay" ? node.networking?.relay_region || relayNode?.labels?.region || "-" : "-"],
+    ["链路摘要", routeSummaryText],
+    ["业务备注", node.networking?.route_note || "-"],
+  ];
+  const costOverview = [
+    ["到期时间", expiryText],
+    ["续费方式", formatRenewal(node.commercial?.auto_renew)],
+    ["计费周期", node.commercial?.billing_cycle || "-"],
+    ["账单金额", nodeCost?.billing_amount != null ? `${nodeCost.billing_amount} ${nodeCost.billing_currency || ""}`.trim() : "-"],
+    ["带宽", node.commercial?.bandwidth_mbps ? `${node.commercial.bandwidth_mbps} Mbps` : "-"],
+    ["流量", formatTraffic(node.commercial?.traffic_used_gb, node.commercial?.traffic_quota_gb)],
+    ["总月成本", nodeCost ? formatCurrencyTotals(nodeCost, nodeCost.problems?.[0] || "-") : "-"],
+    ["成本状态", formatCostStatus(nodeCost?.cost_status, "-")],
+    ["备注", node.commercial?.note || "-"],
+  ];
+  const managementSummaryText =
+    managementAccessMode === "relay"
+      ? `${managementRelayLabel} · ${effectiveManagementRelayStrategyText}`
+      : "控制面将直接接入当前节点";
+  const trafficSummaryText =
+    accessMode === "relay"
+      ? `${routeSummaryText} · 入口与落地已拆分`
+      : `${routeSummaryText} · 当前直接以落地节点作为入口`;
+  const costSummaryText =
+    nodeCost
+      ? `${formatCurrencyTotals(nodeCost, nodeCost.problems?.[0] || "-")} · ${expiryNote}`
+      : `${formatCostStatus(nodeCost?.cost_status, "待补成本字段")} · ${expiryNote}`;
   const healthOverviewRows = [
     ["探测阶段", probeStageText],
     ["公网入口", primaryPublicIp?.address || "未探测"],
@@ -642,6 +669,7 @@ export function buildNodeDetailViewModel({
   return {
     activityItems,
     commercialOverview,
+    costOverview,
     dashboardCards,
     diagnosticActionMeta,
     diagnosticOverviewRows,
@@ -654,6 +682,8 @@ export function buildNodeDetailViewModel({
     healthSummaryText: probeLongSummary,
     heroChips,
     heroHighlights,
+    managementOverview,
+    managementSummaryText,
     networkOverviewRows,
     node,
     nodeName,
@@ -662,7 +692,6 @@ export function buildNodeDetailViewModel({
     probeLongSummary,
     probeSummaryText,
     recommendationItems,
-    routeOverview,
     routeSummaryText,
     selectedApplyTemplate,
     selectedApplyTemplateId,
@@ -684,6 +713,9 @@ export function buildNodeDetailViewModel({
     systemTemplateMessage: nodeDetailState?.message || null,
     systemTemplatePendingAction: nodeDetailState?.pendingAction || null,
     systemText,
+    trafficOverview,
+    trafficSummaryText,
+    costSummaryText,
   };
 }
 
@@ -856,13 +888,17 @@ export function renderNodeDetailTemplateActions({ escapeHtml, formatRelativeTime
 export function renderNodeDetailMain({ escapeHtml, formatRelativeTime, viewModel }) {
   const {
     activityItems,
-    commercialOverview,
+    costOverview,
+    costSummaryText,
     dashboardCards,
+    managementOverview,
+    managementSummaryText,
     networkOverviewRows,
     probeLongSummary,
     probeSummaryText,
-    routeOverview,
     systemOverviewRows,
+    trafficOverview,
+    trafficSummaryText,
   } = viewModel;
 
   return `
@@ -917,21 +953,42 @@ export function renderNodeDetailMain({ escapeHtml, formatRelativeTime, viewModel
       <section class="node-detail-section" id="node-detail-assets">
         <div class="node-detail-section-head">
           <div>
-            <h4>资产与链路</h4>
-            <p>把资产台账和接入链路集中在一个视图里。</p>
+            <h4>管理 / 业务 / 成本</h4>
+            <p>按运维动作来分区，不再把不同语义的字段硬塞进同一张表里。</p>
           </div>
         </div>
-        <div class="node-detail-two-column">
+        <div class="node-detail-service-grid">
           <article class="node-detail-subsection">
-            <div class="node-detail-subsection-label">资产信息</div>
+            <div class="node-detail-subsection-label">管理接入</div>
+            <div class="node-detail-subsection-copy">
+              <span>控制面链路</span>
+              <strong>${escapeHtml(managementSummaryText)}</strong>
+              <p>这里单独描述纳管 SSH，不和业务转发语义混用。</p>
+            </div>
             <div class="detail-kv node-detail-compact-kv">
-              ${renderKvRows(escapeHtml, commercialOverview)}
+              ${renderKvRows(escapeHtml, managementOverview)}
             </div>
           </article>
           <article class="node-detail-subsection">
-            <div class="node-detail-subsection-label">链路信息</div>
+            <div class="node-detail-subsection-label">业务链路</div>
+            <div class="node-detail-subsection-copy">
+              <span>入口到落地</span>
+              <strong>${escapeHtml(trafficSummaryText)}</strong>
+              <p>用户订阅、入口转发和落地链路统一在这里查看。</p>
+            </div>
             <div class="detail-kv node-detail-compact-kv">
-              ${renderKvRows(escapeHtml, routeOverview)}
+              ${renderKvRows(escapeHtml, trafficOverview)}
+            </div>
+          </article>
+          <article class="node-detail-subsection">
+            <div class="node-detail-subsection-label">资产成本</div>
+            <div class="node-detail-subsection-copy">
+              <span>台账与成本</span>
+              <strong>${escapeHtml(costSummaryText)}</strong>
+              <p>把资产到期、带宽流量和月成本统一收口，减少来回切换。</p>
+            </div>
+            <div class="detail-kv node-detail-compact-kv">
+              ${renderKvRows(escapeHtml, costOverview)}
             </div>
           </article>
         </div>
@@ -995,8 +1052,8 @@ export function renderNodeDetailAside({ escapeHtml, formatRelativeTime, viewMode
       <section class="node-detail-section" id="node-detail-health">
         <div class="node-detail-section-head">
           <div>
-            <h4>接管诊断</h4>
-            <p>聚焦入口识别与接管阻塞点，不再重复罗列概览信息。</p>
+            <h4>管理接入诊断</h4>
+            <p>只看控制面纳管链路，优先定位 SSH 入口、认证和中转阻塞点。</p>
           </div>
         </div>
         <div class="node-detail-diagnostic-grid">
@@ -1011,8 +1068,8 @@ export function renderNodeDetailAside({ escapeHtml, formatRelativeTime, viewMode
       <section class="node-detail-section" id="node-detail-external-diagnostics">
         <div class="node-detail-section-head">
           <div>
-            <h4>外部诊断</h4>
-            <p>轻量诊断默认以快速模式跑硬件 / IP，深度诊断只在手动触发时运行网络质量体检。</p>
+            <h4>外部报告</h4>
+            <p>轻量诊断默认跑硬件 / IP，深度诊断只在手动触发时运行网络质量体检。</p>
           </div>
         </div>
         <div class="node-detail-diagnostic-grid">

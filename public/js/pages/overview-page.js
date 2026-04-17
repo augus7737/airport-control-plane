@@ -536,19 +536,21 @@ export function createOverviewPageRenderer({
                       </div>
                       <p class="overview-attention-meta">${escapeHtml(metaParts.join(" / "))}</p>
                       <p class="overview-attention-note">${escapeHtml(item.note)}</p>
-                    </div>
-                    <div class="overview-attention-tags">
-                      ${item.tags
-                        .slice(0, 2)
-                        .map(
-                          (tag) =>
-                            `<span class="overview-issue-pill ${tag.tone}">${escapeHtml(tag.label)}</span>`,
-                        )
-                        .join("")}
-                    </div>
-                    <div class="table-actions overview-attention-actions">
-                      <a class="table-action-primary" href="${nodeShellHref(node.id)}">终端</a>
-                      <a class="table-action-pill" href="${nodeDetailHref(node.id)}">详情</a>
+                      <div class="overview-attention-foot">
+                        <div class="overview-attention-tags">
+                          ${item.tags
+                            .slice(0, 2)
+                            .map(
+                              (tag) =>
+                                `<span class="overview-issue-pill ${tag.tone}">${escapeHtml(tag.label)}</span>`,
+                            )
+                            .join("")}
+                        </div>
+                        <div class="table-actions overview-attention-actions">
+                          <a class="table-action-primary" href="${nodeShellHref(node.id)}">终端</a>
+                          <a class="table-action-inline" href="${nodeDetailHref(node.id)}">查看详情</a>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 `;

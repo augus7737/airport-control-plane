@@ -77,9 +77,14 @@ export function createTerminalPageModule(dependencies) {
     syncTerminalOperationFromUrl(operations);
     const selectedIds = new Set(appState.terminal.selectedNodeIds);
     const selectedNodes = nodes.filter((node) => selectedIds.has(node.id));
+    const selectedRelayCount = selectedNodes.filter(
+      (node) => String(getAccessMode(node) || "").toLowerCase() === "relay",
+    ).length;
+    const selectedDirectCount = Math.max(selectedNodes.length - selectedRelayCount, 0);
     const activeOperation = getActiveOperation(operations);
     const successfulOperations = operations.filter((item) => item.status === "success").length;
     const partialOperations = operations.filter((item) => item.status === "partial").length;
+    const pendingOperations = operations.filter((item) => ["queued", "running"].includes(item.status)).length;
 
     const selectedNodeCards = nodes.map((node) => `
     <label class="terminal-node-card ${selectedIds.has(node.id) ? "selected" : ""}">
@@ -202,47 +207,96 @@ export function createTerminalPageModule(dependencies) {
             </div>
             <div class="provider-pill">当前已选 ${selectedNodes.length} 台</div>
           </div>
-          <div class="terminal-toolbar">
-            <button class="button ghost" type="button" id="terminal-select-active">选择可用节点</button>
-            <button class="button ghost" type="button" id="terminal-select-relay">只选经中转</button>
-            <button class="button ghost" type="button" id="terminal-select-all">全选</button>
-            <button class="button ghost" type="button" id="terminal-clear-selection">清空选择</button>
+          <div class="terminal-operations-overview">
+            <div class="terminal-operation-focus">
+              <span>当前工作流</span>
+              <strong>${appState.terminal.mode === "script" ? "脚本批量下发" : "命令批量执行"}</strong>
+              <p>先整理执行目标，再发命令或脚本；真正的终端深色只保留给日志回显。</p>
+            </div>
+            <div class="terminal-selection-summary">
+              <div class="terminal-selection-stat">
+                <span>执行目标</span>
+                <strong>${selectedNodes.length} 台</strong>
+                <p>已选直连 ${selectedDirectCount} / 中转 ${selectedRelayCount}</p>
+              </div>
+              <div class="terminal-selection-stat">
+                <span>当前模式</span>
+                <strong>${appState.terminal.mode === "script" ? "脚本模式" : "命令模式"}</strong>
+                <p>${appState.terminal.mode === "script" ? "适合初始化与重复运维动作" : "适合快速诊断和短命令"}</p>
+              </div>
+              <div class="terminal-selection-stat">
+                <span>在途批次</span>
+                <strong>${pendingOperations}</strong>
+                <p>排队或运行中的批量执行任务。</p>
+              </div>
+            </div>
           </div>
           <form id="terminal-form" class="terminal-form-stack">
-            <div class="mode-toggle">
-              <button class="mode-chip ${appState.terminal.mode === "command" ? "active" : ""}" type="button" data-terminal-mode="command">命令模式</button>
-              <button class="mode-chip ${appState.terminal.mode === "script" ? "active" : ""}" type="button" data-terminal-mode="script">脚本模式</button>
-            </div>
-            <div class="field">
-              <label for="terminal-title">任务标题</label>
-              <input id="terminal-title" name="title" value="${escapeHtml(appState.terminal.title)}" placeholder="例如：批量安装 curl / 批量重启 sing-box" />
-            </div>
-            ${
-              appState.terminal.mode === "command"
-                ? `
-                  <div class="field full">
-                    <label for="terminal-command">Shell 命令</label>
-                    <textarea id="terminal-command" name="command" placeholder="例如：apk update && apk add curl bash">${escapeHtml(appState.terminal.command)}</textarea>
+            <div class="terminal-composer-grid">
+              <section class="terminal-composer-card">
+                <div class="terminal-section-head">
+                  <div>
+                    <h4>执行内容</h4>
+                    <p>先确定模式和标题，再写命令或脚本内容。</p>
                   </div>
-                `
-                : `
-                  <div class="field">
-                    <label for="terminal-script-name">脚本名称</label>
-                    <input id="terminal-script-name" name="script_name" value="${escapeHtml(appState.terminal.script_name)}" placeholder="例如：Alpine 节点基础初始化（含目录/计划任务）" />
+                </div>
+                <div class="mode-toggle">
+                  <button class="mode-chip ${appState.terminal.mode === "command" ? "active" : ""}" type="button" data-terminal-mode="command">命令模式</button>
+                  <button class="mode-chip ${appState.terminal.mode === "script" ? "active" : ""}" type="button" data-terminal-mode="script">脚本模式</button>
+                </div>
+                <div class="field">
+                  <label for="terminal-title">任务标题</label>
+                  <input id="terminal-title" name="title" value="${escapeHtml(appState.terminal.title)}" placeholder="例如：批量安装 curl / 批量重启 sing-box" />
+                </div>
+                ${
+                  appState.terminal.mode === "command"
+                    ? `
+                      <div class="field full">
+                        <label for="terminal-command">Shell 命令</label>
+                        <textarea id="terminal-command" name="command" placeholder="例如：apk update && apk add curl bash">${escapeHtml(appState.terminal.command)}</textarea>
+                      </div>
+                    `
+                    : `
+                      <div class="field">
+                        <label for="terminal-script-name">脚本名称</label>
+                        <input id="terminal-script-name" name="script_name" value="${escapeHtml(appState.terminal.script_name)}" placeholder="例如：Alpine 节点基础初始化（含目录/计划任务）" />
+                      </div>
+                      <div class="field full">
+                        <label for="terminal-script-body">脚本内容</label>
+                        <textarea id="terminal-script-body" name="script_body" placeholder="#!/bin/sh&#10;set -eu">${escapeHtml(appState.terminal.script_body)}</textarea>
+                      </div>
+                    `
+                }
+                <div class="terminal-section-head terminal-section-head-inline">
+                  <div>
+                    <h4>常用预设</h4>
+                    <p>把高频动作收成按钮，减少重复手敲。</p>
                   </div>
-                  <div class="field full">
-                    <label for="terminal-script-body">脚本内容</label>
-                    <textarea id="terminal-script-body" name="script_body" placeholder="#!/bin/sh&#10;set -eu">${escapeHtml(appState.terminal.script_body)}</textarea>
+                </div>
+                <div class="terminal-presets">
+                  <button class="button ghost" type="button" data-terminal-preset="apk">安装基础依赖</button>
+                  <button class="button ghost" type="button" data-terminal-preset="restart">重启代理服务</button>
+                  <button class="button ghost" type="button" data-terminal-preset="probe">网络自检</button>
+                  <button class="button ghost" type="button" data-terminal-preset="bootstrap">Alpine 初始化（推荐）</button>
+                </div>
+              </section>
+              <section class="terminal-composer-card terminal-selection-card">
+                <div class="terminal-section-head">
+                  <div>
+                    <h4>执行目标</h4>
+                    <p>先按节点类型筛一轮，再确认本次执行范围。</p>
                   </div>
-                `
-            }
-            <div class="terminal-presets">
-              <button class="button ghost" type="button" data-terminal-preset="apk">安装基础依赖</button>
-              <button class="button ghost" type="button" data-terminal-preset="restart">重启代理服务</button>
-              <button class="button ghost" type="button" data-terminal-preset="probe">网络自检</button>
-              <button class="button ghost" type="button" data-terminal-preset="bootstrap">Alpine 初始化（推荐）</button>
+                  <span class="provider-pill">直连 ${selectedDirectCount} / 中转 ${selectedRelayCount}</span>
+                </div>
+                <div class="terminal-toolbar">
+                  <button class="button ghost" type="button" id="terminal-select-active">选择可用节点</button>
+                  <button class="button ghost" type="button" id="terminal-select-relay">只选经中转</button>
+                  <button class="button ghost" type="button" id="terminal-select-all">全选</button>
+                  <button class="button ghost" type="button" id="terminal-clear-selection">清空选择</button>
+                </div>
+                <div class="terminal-node-grid">${selectedNodeCards}</div>
+              </section>
             </div>
-            <div class="terminal-node-grid">${selectedNodeCards}</div>
             <div class="modal-actions">
               <button class="button primary" type="submit" id="terminal-run-button">批量执行</button>
               <button class="button ghost" type="button" id="terminal-refresh">刷新执行记录</button>
@@ -258,11 +312,11 @@ export function createTerminalPageModule(dependencies) {
       <aside class="aside-stack">
         <section class="panel">
           <div class="panel-body">
-            <div class="panel-title"><div><h3>预设思路</h3><p>按真实执行链路回传传输方式、退出码、耗时和完成时间，便于快速判断节点健康。</p></div></div>
-            <div class="event-list">
-              <div class="event"><strong>命令模式</strong><p>适合快速执行诊断、重启服务、看进程和安装少量依赖。</p></div>
-              <div class="event"><strong>脚本模式</strong><p>适合做初始化、部署模板和面板接入动作，支持复用同一份标准脚本。</p></div>
-              <div class="event"><strong>按入口/中转分批</strong><p>如果一批节点都挂在同一台香港中转机下，后续最好支持限流并发，避免把链路打爆。</p></div>
+            <div class="panel-title"><div><h3>执行策略</h3><p>把批量终端当成运维编排台来用，不只是一个大文本框。</p></div></div>
+            <div class="terminal-guide-grid">
+              <article class="terminal-guide-card"><strong>命令模式</strong><p>适合快速执行诊断、重启服务、看进程和安装少量依赖。</p></article>
+              <article class="terminal-guide-card"><strong>脚本模式</strong><p>适合做初始化、部署模板和面板接入动作，支持复用同一份标准脚本。</p></article>
+              <article class="terminal-guide-card"><strong>入口 / 中转分批</strong><p>如果一批节点都挂在同一台跳板下，后续最好支持限流并发，避免链路被打爆。</p></article>
             </div>
           </div>
         </section>
@@ -330,30 +384,28 @@ export function createTerminalPageModule(dependencies) {
       getAccessMode(node) === "relay"
         ? `当前标记为经中转，链路为 ${formatRouteSummary(node, nodes)}。`
         : "当前标记为直连，后续接 SSH 时会优先尝试直连当前节点。";
+    const sessionUpdatedLabel = appState.nodeTerminal.sessionUpdatedAt
+      ? formatRelativeTime(appState.nodeTerminal.sessionUpdatedAt)
+      : "-";
 
     return `
-    <section class="workspace fade-up" id="node-terminal" style="margin-top:18px;scroll-margin-top:24px;">
+    <section class="workspace fade-up" id="node-terminal" style="scroll-margin-top:24px;">
       <article class="panel">
         <div class="panel-body">
           <div class="panel-title">
             <div>
               <h3>实时 Web Shell</h3>
-              <p>为当前节点建立一条可持续复用的命令会话，保留上下文，不再只是一次性命令回显。</p>
+              <p>为当前节点建立一条持续复用的命令会话，链路信息压缩到工具带里，进入页面先看到终端本身。</p>
             </div>
             <span class="${shellStatusClassName(appState.nodeTerminal.sessionStatus)}" id="node-shell-status">${sessionStatus}</span>
           </div>
-          <div class="chips">
-            <div class="pill"><span>当前目标</span><strong>${escapeHtml(hostname)}</strong></div>
-            <div class="pill"><span>SSH 端口</span><strong>${escapeHtml(sshPort)}</strong></div>
-            <div class="pill"><span>传输方式</span><strong id="node-shell-transport">${escapeHtml(sessionLabel)}</strong></div>
-            <div class="pill"><span>会话编号</span><strong id="node-shell-session-id">${escapeHtml(appState.nodeTerminal.sessionId || "未创建")}</strong></div>
-            <div class="pill"><span>最近更新</span><strong id="node-shell-updated-at">${
-              appState.nodeTerminal.sessionUpdatedAt
-                ? formatRelativeTime(appState.nodeTerminal.sessionUpdatedAt)
-                : "-"
-            }</strong></div>
-          </div>
-          <div class="modal-actions" style="margin-top:18px;">
+          <div class="terminal-shell-toolbar">
+            <div class="chips terminal-shell-inline-meta">
+              <div class="pill"><span>目标</span><strong>${escapeHtml(hostname)}</strong></div>
+              <div class="pill"><span>SSH</span><strong>${escapeHtml(sshPort)}</strong></div>
+              <div class="pill"><span>链路</span><strong>${escapeHtml(formatRouteSummary(node, nodes))}</strong></div>
+            </div>
+            <div class="modal-actions terminal-shell-actions">
             <button class="button primary" type="button" id="node-shell-open"${
               ["starting", "open"].includes(appState.nodeTerminal.sessionStatus) ? " disabled" : ""
             }>打开 Web Shell</button>
@@ -368,6 +420,7 @@ export function createTerminalPageModule(dependencies) {
             }>复制输出</button>
             <a class="button ghost" href="/terminal.html">切到批量终端</a>
           </div>
+          </div>
           <p class="field-note" id="node-shell-note">${escapeHtml(appState.nodeTerminal.sessionTransportNote)}</p>
           <div id="node-terminal-message">${
             appState.nodeTerminal.message
@@ -379,7 +432,11 @@ export function createTerminalPageModule(dependencies) {
           <div class="terminal-window single-terminal-window">
             <div class="terminal-window-head">
               <span id="node-shell-head-left">${escapeHtml(sessionLabel)}</span>
-              <span id="node-shell-head-right">${escapeHtml(appState.nodeTerminal.sessionId || "未建立会话")}</span>
+              <div class="terminal-window-head-meta">
+                <span id="node-shell-transport">${escapeHtml(sessionLabel)}</span>
+                <span id="node-shell-session-id">${escapeHtml(appState.nodeTerminal.sessionId || "未建立会话")}</span>
+                <span id="node-shell-updated-at">${escapeHtml(sessionUpdatedLabel)}</span>
+              </div>
             </div>
             <div class="terminal-screen terminal-screen-xterm" id="node-shell-terminal" role="application" aria-label="节点 Web Shell"></div>
             <pre class="terminal-screen" id="node-shell-screen">${sessionOutput}</pre>
@@ -406,17 +463,17 @@ export function createTerminalPageModule(dependencies) {
       </article>
       <aside class="aside-stack">
         <section class="panel">
-          <div class="panel-body">
-            <div class="panel-title"><div><h3>接入说明</h3><p>先把传输方式、链路依赖和当前回退策略解释清楚。</p></div></div>
-            <div class="detail-kv">
-              <div class="kv-row"><span>节点状态</span><strong>${statusText(node.status)}</strong></div>
-              <div class="kv-row"><span>接入方式</span><strong>${formatAccessMode(getAccessMode(node))}</strong></div>
-              <div class="kv-row"><span>SSH 端口</span><strong>${escapeHtml(sshPort)}</strong></div>
-              <div class="kv-row"><span>中转节点</span><strong>${
-                getAccessMode(node) === "relay" ? relayLabel : "无需中转"
-              }</strong></div>
-              <div class="kv-row"><span>链路摘要</span><strong>${formatRouteSummary(node, nodes)}</strong></div>
-            </div>
+            <div class="panel-body">
+              <div class="panel-title"><div><h3>接入说明</h3><p>先把传输方式、链路依赖和当前回退策略解释清楚。</p></div></div>
+              <div class="detail-kv">
+                <div class="kv-row"><span>节点状态</span><strong>${statusText(node.status)}</strong></div>
+                <div class="kv-row"><span>接入方式</span><strong>${formatAccessMode(getAccessMode(node))}</strong></div>
+                <div class="kv-row"><span>SSH 端口</span><strong>${escapeHtml(sshPort)}</strong></div>
+                <div class="kv-row"><span>中转节点</span><strong>${
+                  getAccessMode(node) === "relay" ? relayLabel : "无需中转"
+                }</strong></div>
+                <div class="kv-row"><span>链路摘要</span><strong>${formatRouteSummary(node, nodes)}</strong></div>
+              </div>
             <div class="event-list" style="margin-top:14px;">
               <div class="event"><strong>传输策略</strong><p>当前会优先尝试真实 SSH；若节点地址或密钥暂时不可用，平台会明确提示原因并使用本机兜底模式。</p></div>
               <div class="event"><strong>链路提示</strong><p>${escapeHtml(relayHint)}</p></div>

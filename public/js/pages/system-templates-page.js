@@ -234,6 +234,13 @@ export function createSystemTemplatesPageModule(dependencies) {
       (item) => Array.isArray(item.node_group_ids) && item.node_group_ids.length > 0,
     ).length;
     const recentReleases = appState.systemTemplateReleases.slice(0, 8);
+    const selectedTemplateScopeCount = Array.isArray(selectedTemplate?.node_group_ids)
+      ? selectedTemplate.node_group_ids.length
+      : 0;
+    const selectedTemplateTagSummary = joinCommaList(selectedTemplate?.tags) || "未打标签";
+    const selectedTemplateLineCount = String(selectedTemplate?.script_body || "")
+      .split(/\r?\n/)
+      .filter((line) => line.trim()).length;
 
     const templateRows = templates.length
       ? templates
@@ -285,48 +292,31 @@ export function createSystemTemplatesPageModule(dependencies) {
         </tr>
       `;
 
-    const releaseRows = recentReleases.length
+    const releaseItems = recentReleases.length
       ? recentReleases
           .map(
             (release) => `
-              <tr>
-                <td>
-                  <div class="ops-inline-meta">
-                    <strong>${escapeHtml(release.title || release.id)}</strong>
-                    <span class="tiny mono">${escapeHtml(release.id || "-")}</span>
-                  </div>
-                </td>
-                <td><span class="${statusClassName(release.status)}">${statusText(release.status)}</span></td>
-                <td>
-                  <div class="ops-inline-meta">
-                    <strong>${escapeHtml(release.template_name || getTemplateName(release.template_id))}</strong>
-                    <span class="tiny">${escapeHtml(renderApplyTargetSummary(release))}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="ops-inline-meta">
-                    <strong>${escapeHtml(
-                      `${Number(release.summary?.apply_summary?.success || 0)} / ${Number(release.summary?.apply_summary?.total || 0)}`,
-                    )}</strong>
-                    <span class="tiny">${formatDateTime(release.created_at)}</span>
-                  </div>
-                </td>
-                <td>
+              <article class="ops-soft-item">
+                <div class="ops-soft-main">
+                  <strong>${escapeHtml(release.title || release.id)}</strong>
+                  <span class="tiny">${escapeHtml(release.template_name || getTemplateName(release.template_id))} · ${escapeHtml(renderApplyTargetSummary(release))}</span>
+                  <span class="tiny">${escapeHtml(
+                    `${Number(release.summary?.apply_summary?.success || 0)} / ${Number(release.summary?.apply_summary?.total || 0)}`,
+                  )} · ${formatDateTime(release.created_at)}</span>
+                </div>
+                <div class="ops-table-actions">
+                  <span class="${statusClassName(release.status)}">${statusText(release.status)}</span>
                   ${
                     release.operation_id
                       ? `<a class="button ghost" href="/terminal.html?operation_id=${encodeURIComponent(release.operation_id)}">查看回显</a>`
                       : '<span class="tiny">等待执行链路</span>'
                   }
-                </td>
-              </tr>
+                </div>
+              </article>
             `,
           )
           .join("")
-      : `
-        <tr>
-          <td colspan="5"><div class="empty">还没有系统模板下发记录。</div></td>
-        </tr>
-      `;
+      : '<div class="empty">还没有系统模板下发记录。</div>';
 
     return `
       <section class="metrics-grid fade-up">
@@ -336,7 +326,7 @@ export function createSystemTemplatesPageModule(dependencies) {
         <article class="panel"><div class="panel-body"><div class="stat-label">最近下发</div><div class="stat-value">${recentReleases.length}</div><div class="stat-foot">最近 8 次模板执行记录，可回看终端回显。</div></div></article>
       </section>
 
-      <section class="workspace fade-up ops-page-grid">
+      <section class="workspace fade-up ops-control-stage">
         <article class="panel">
           <div class="panel-body">
             <div class="panel-title">
@@ -364,168 +354,43 @@ export function createSystemTemplatesPageModule(dependencies) {
           </div>
         </article>
 
-        <aside class="aside-stack">
-          <article class="panel" id="system-template-form-panel">
+        <aside class="aside-stack ops-control-rail">
+          <article class="panel">
             <div class="panel-body">
               <div class="panel-title">
                 <div>
-                  <h3>${selectedTemplate ? "编辑系统模板" : "新建系统模板"}</h3>
-                  <p>${selectedTemplate ? "修改后可再次下发覆盖到节点。" : "建议先把 Alpine 初始化和常用硬化动作沉淀成模板。"} </p>
-                </div>
-                ${selectedTemplate ? `<span class="pill mono">${escapeHtml(selectedTemplate.id)}</span>` : ""}
-              </div>
-
-              <form id="system-template-form" class="ops-form-grid">
-                <div class="field">
-                  <label for="system-template-name">模板名称</label>
-                  <input id="system-template-name" name="name" value="${escapeHtml(draft.name)}" placeholder="例如：Alpine 基线初始化" />
-                </div>
-                <div class="field">
-                  <label for="system-template-script-name">脚本名称</label>
-                  <input id="system-template-script-name" name="script_name" value="${escapeHtml(draft.script_name)}" placeholder="例如：Alpine 节点基础初始化" />
-                </div>
-                <div class="field">
-                  <label for="system-template-category">分类</label>
-                  <select id="system-template-category" name="category">
-                    <option value="baseline"${draft.category === "baseline" ? " selected" : ""}>基线</option>
-                    <option value="bootstrap"${draft.category === "bootstrap" ? " selected" : ""}>初始化</option>
-                    <option value="hardening"${draft.category === "hardening" ? " selected" : ""}>加固</option>
-                    <option value="custom"${draft.category === "custom" ? " selected" : ""}>自定义</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="system-template-status">状态</label>
-                  <select id="system-template-status" name="status">
-                    <option value="active"${draft.status === "active" ? " selected" : ""}>启用</option>
-                    <option value="draft"${draft.status === "draft" ? " selected" : ""}>草稿</option>
-                    <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
-                  </select>
-                </div>
-                <div class="field full">
-                  <label for="system-template-tags">标签</label>
-                  <input id="system-template-tags" name="tags" value="${escapeHtml(draft.tags)}" placeholder="例如：alpine, baseline, ssh" />
-                </div>
-                <div class="field full">
-                  <label>默认节点组范围</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.nodeGroups.length
-                        ? appState.nodeGroups
-                            .map(
-                              (group) => `
-                                <label class="ops-check-card">
-                                  <input type="checkbox" name="node_group_ids" value="${escapeHtml(group.id)}" ${draft.node_group_ids.includes(group.id) ? "checked" : ""} />
-                                  <span>
-                                    <strong>${escapeHtml(group.name || group.id)}</strong>
-                                    <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">当前还没有节点组，可以先去发布中心创建。</div>'
-                    }
-                  </div>
-                </div>
-                <div class="field full">
-                  <label for="system-template-script-body">脚本内容</label>
-                  <textarea id="system-template-script-body" name="script_body" placeholder="#!/bin/sh&#10;set -eu">${escapeHtml(draft.script_body)}</textarea>
-                </div>
-                <div class="field full">
-                  <label for="system-template-note">备注</label>
-                  <textarea id="system-template-note" name="note" placeholder="记录模板用途、适用节点和执行注意事项。">${escapeHtml(draft.note)}</textarea>
-                </div>
-                <div class="ops-action-row">
-                  <button class="button primary" type="submit">${selectedTemplate ? "保存修改" : "创建模板"}</button>
-                  <button class="button" type="button" id="system-template-form-reset">重置</button>
-                  ${selectedTemplate ? '<button class="button ghost" type="button" id="system-template-delete-current">删除当前模板</button>' : ""}
-                </div>
-              </form>
-
-              ${state.message ? `<div class="message ${state.message.type}">${escapeHtml(state.message.text)}</div>` : ""}
-            </div>
-          </article>
-
-          <article class="panel" id="system-template-apply-panel">
-            <div class="panel-body">
-              <div class="panel-title">
-                <div>
-                  <h3>批量下发</h3>
-                  <p>把选中的系统模板下发到节点。未显式选择目标范围时，会回落到模板自身绑定的默认节点组。</p>
+                  <h3>${selectedTemplate ? "当前模板" : "桌面工作流"}</h3>
+                  <p>${selectedTemplate ? "先确认模板语义和默认范围，再进入编辑或下发。" : "先从模板列表里选中一个脚本，或者直接新建空白模板。"} </p>
                 </div>
               </div>
-
-              <form id="system-template-apply-form" class="ops-form-grid">
-                <div class="field full">
-                  <label for="system-template-apply-title">下发标题</label>
-                  <input id="system-template-apply-title" name="title" value="${escapeHtml(state.applyDraft.title)}" placeholder="例如：批量执行 Alpine 基线初始化" />
-                </div>
-                <div class="field full">
-                  <label for="system-template-apply-template">选择模板</label>
-                  <select id="system-template-apply-template" name="template_id">
-                    <option value="">请选择系统模板</option>
-                    ${appState.systemTemplates
-                      .map(
-                        (template) => `<option value="${escapeHtml(template.id)}"${state.applyDraft.template_id === template.id ? " selected" : ""}>${escapeHtml(template.name || template.id)} / ${escapeHtml(template.category || "baseline")}</option>`,
-                      )
-                      .join("")}
-                  </select>
-                </div>
-                <div class="field full">
-                  <label>目标节点组</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.nodeGroups.length
-                        ? appState.nodeGroups
-                            .map(
-                              (group) => `
-                                <label class="ops-check-card">
-                                  <input type="checkbox" data-system-template-apply-group="true" value="${escapeHtml(group.id)}" ${state.applyDraft.node_group_ids.includes(group.id) ? "checked" : ""} />
-                                  <span>
-                                    <strong>${escapeHtml(group.name || group.id)}</strong>
-                                    <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">当前还没有节点组，可直接勾选下面的单台节点。</div>'
-                    }
-                  </div>
-                </div>
-                <div class="field full">
-                  <label>直接节点</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.nodes.length
-                        ? appState.nodes
-                            .map(
-                              (node) => `
-                                <label class="ops-check-card">
-                                  <input type="checkbox" data-system-template-apply-node="true" value="${escapeHtml(node.id)}" ${state.applyDraft.node_ids.includes(node.id) ? "checked" : ""} />
-                                  <span>
-                                    <strong>${escapeHtml(getNodeName(node.id))}</strong>
-                                    <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml((node.management?.access_mode || "direct") === "relay" ? (node.management?.proxy_host ? "SSH 经代理" : "SSH 经跳板") : "SSH 直连")}</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">当前没有可选节点。</div>'
-                    }
-                  </div>
-                </div>
-                <div class="field full">
-                  <label for="system-template-apply-note">备注</label>
-                  <textarea id="system-template-apply-note" name="note" placeholder="记录本次执行目的、回滚方式和验收标准。">${escapeHtml(state.applyDraft.note)}</textarea>
-                </div>
-                <div class="ops-action-row">
-                  <button class="button primary" type="submit">开始下发</button>
-                  <button class="button" type="button" id="system-template-apply-reset">重置选择</button>
-                </div>
-              </form>
-
-              ${state.applyMessage ? `<div class="message ${state.applyMessage.type}">${escapeHtml(state.applyMessage.text)}</div>` : ""}
+              ${
+                selectedTemplate
+                  ? `
+                    <div class="ops-focus-summary">
+                      <div class="ops-focus-strip">
+                        <span class="eyebrow">当前模板</span>
+                        <strong>${escapeHtml(selectedTemplate.name || selectedTemplate.id)}</strong>
+                        <p class="tiny">${escapeHtml(selectedTemplate.script_name || "运行系统模板")} / ${escapeHtml(selectedTemplate.category || "baseline")}</p>
+                      </div>
+                      <div class="detail-kv">
+                        <div class="kv-row"><span>状态</span><strong>${statusText(selectedTemplate.status)}</strong></div>
+                        <div class="kv-row"><span>默认范围</span><strong>${escapeHtml(String(selectedTemplateScopeCount))} 个节点组</strong></div>
+                        <div class="kv-row"><span>标签</span><strong>${escapeHtml(selectedTemplateTagSummary)}</strong></div>
+                        <div class="kv-row"><span>脚本长度</span><strong>${escapeHtml(String(selectedTemplateLineCount || 0))} 行</strong></div>
+                      </div>
+                    </div>
+                  `
+                  : `
+                    <div class="event-list">
+                      <div class="event"><strong>先把模板语义拆清楚</strong><p>初始化、基线、加固、自定义脚本分开维护，后续才能稳定复用。</p></div>
+                      <div class="event"><strong>下发前确认默认范围</strong><p>把节点组绑定到模板上，真正执行时就不需要重复做大量勾选。</p></div>
+                    </div>
+                  `
+              }
+              <div class="ops-action-row">
+                <button class="button primary" type="button" id="focus-system-template-form">${selectedTemplate ? "编辑当前模板" : "新建系统模板"}</button>
+                <button class="button ghost" type="button" id="focus-system-template-apply">去批量下发</button>
+              </div>
             </div>
           </article>
 
@@ -534,20 +399,179 @@ export function createSystemTemplatesPageModule(dependencies) {
               <div class="panel-title">
                 <div>
                   <h3>最近下发记录</h3>
-                  <p>每次模板执行都会沉淀为独立记录，方便回放真实节点回显。</p>
+                  <p>先看最近 8 次模板执行结果，再决定是否继续扩大范围。</p>
                 </div>
               </div>
-              <div class="table-shell">
-                <table>
-                  <thead>
-                    <tr><th>记录</th><th>状态</th><th>模板与范围</th><th>结果</th><th>回显</th></tr>
-                  </thead>
-                  <tbody>${releaseRows}</tbody>
-                </table>
-              </div>
+              <div class="ops-soft-list">${releaseItems}</div>
             </div>
           </article>
         </aside>
+      </section>
+
+      <section class="workspace fade-up ops-editor-stage">
+        <article class="panel" id="system-template-form-panel">
+          <div class="panel-body">
+            <div class="panel-title">
+              <div>
+                <h3>${selectedTemplate ? "编辑系统模板" : "新建系统模板"}</h3>
+                <p>${selectedTemplate ? "修改后可再次下发覆盖到节点。" : "建议先把 Alpine 初始化和常用硬化动作沉淀成模板。"} </p>
+              </div>
+              ${selectedTemplate ? `<span class="pill mono">${escapeHtml(selectedTemplate.id)}</span>` : ""}
+            </div>
+
+            <form id="system-template-form" class="ops-form-grid">
+              <div class="field">
+                <label for="system-template-name">模板名称</label>
+                <input id="system-template-name" name="name" value="${escapeHtml(draft.name)}" placeholder="例如：Alpine 基线初始化" />
+              </div>
+              <div class="field">
+                <label for="system-template-script-name">脚本名称</label>
+                <input id="system-template-script-name" name="script_name" value="${escapeHtml(draft.script_name)}" placeholder="例如：Alpine 节点基础初始化" />
+              </div>
+              <div class="field">
+                <label for="system-template-category">分类</label>
+                <select id="system-template-category" name="category">
+                  <option value="baseline"${draft.category === "baseline" ? " selected" : ""}>基线</option>
+                  <option value="bootstrap"${draft.category === "bootstrap" ? " selected" : ""}>初始化</option>
+                  <option value="hardening"${draft.category === "hardening" ? " selected" : ""}>加固</option>
+                  <option value="custom"${draft.category === "custom" ? " selected" : ""}>自定义</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="system-template-status">状态</label>
+                <select id="system-template-status" name="status">
+                  <option value="active"${draft.status === "active" ? " selected" : ""}>启用</option>
+                  <option value="draft"${draft.status === "draft" ? " selected" : ""}>草稿</option>
+                  <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
+                </select>
+              </div>
+              <div class="field full">
+                <label for="system-template-tags">标签</label>
+                <input id="system-template-tags" name="tags" value="${escapeHtml(draft.tags)}" placeholder="例如：alpine, baseline, ssh" />
+              </div>
+              <div class="field full">
+                <label>默认节点组范围</label>
+                <div class="ops-check-grid">
+                  ${
+                    appState.nodeGroups.length
+                      ? appState.nodeGroups
+                          .map(
+                            (group) => `
+                              <label class="ops-check-card">
+                                <input type="checkbox" name="node_group_ids" value="${escapeHtml(group.id)}" ${draft.node_group_ids.includes(group.id) ? "checked" : ""} />
+                                <span>
+                                  <strong>${escapeHtml(group.name || group.id)}</strong>
+                                  <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
+                                </span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : '<div class="ops-empty-block">当前还没有节点组，可以先去发布中心创建。</div>'
+                  }
+                </div>
+              </div>
+              <div class="field full">
+                <label for="system-template-script-body">脚本内容</label>
+                <textarea id="system-template-script-body" name="script_body" placeholder="#!/bin/sh&#10;set -eu">${escapeHtml(draft.script_body)}</textarea>
+              </div>
+              <div class="field full">
+                <label for="system-template-note">备注</label>
+                <textarea id="system-template-note" name="note" placeholder="记录模板用途、适用节点和执行注意事项。">${escapeHtml(draft.note)}</textarea>
+              </div>
+              <div class="ops-action-row">
+                <button class="button primary" type="submit">${selectedTemplate ? "保存修改" : "创建模板"}</button>
+                <button class="button" type="button" id="system-template-form-reset">重置</button>
+                ${selectedTemplate ? '<button class="button ghost" type="button" id="system-template-delete-current">删除当前模板</button>' : ""}
+              </div>
+            </form>
+
+            ${state.message ? `<div class="message ${state.message.type}">${escapeHtml(state.message.text)}</div>` : ""}
+          </div>
+        </article>
+
+        <article class="panel" id="system-template-apply-panel">
+          <div class="panel-body">
+            <div class="panel-title">
+              <div>
+                <h3>批量下发</h3>
+                <p>把选中的系统模板下发到节点。未显式选择目标范围时，会回落到模板自身绑定的默认节点组。</p>
+              </div>
+            </div>
+
+            <form id="system-template-apply-form" class="ops-form-grid">
+              <div class="field full">
+                <label for="system-template-apply-title">下发标题</label>
+                <input id="system-template-apply-title" name="title" value="${escapeHtml(state.applyDraft.title)}" placeholder="例如：批量执行 Alpine 基线初始化" />
+              </div>
+              <div class="field full">
+                <label for="system-template-apply-template">选择模板</label>
+                <select id="system-template-apply-template" name="template_id">
+                  <option value="">请选择系统模板</option>
+                  ${appState.systemTemplates
+                    .map(
+                      (template) => `<option value="${escapeHtml(template.id)}"${state.applyDraft.template_id === template.id ? " selected" : ""}>${escapeHtml(template.name || template.id)} / ${escapeHtml(template.category || "baseline")}</option>`,
+                    )
+                    .join("")}
+                </select>
+              </div>
+              <div class="field full">
+                <label>目标节点组</label>
+                <div class="ops-check-grid">
+                  ${
+                    appState.nodeGroups.length
+                      ? appState.nodeGroups
+                          .map(
+                            (group) => `
+                              <label class="ops-check-card">
+                                <input type="checkbox" data-system-template-apply-group="true" value="${escapeHtml(group.id)}" ${state.applyDraft.node_group_ids.includes(group.id) ? "checked" : ""} />
+                                <span>
+                                  <strong>${escapeHtml(group.name || group.id)}</strong>
+                                  <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
+                                </span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : '<div class="ops-empty-block">当前还没有节点组，可直接勾选下面的单台节点。</div>'
+                  }
+                </div>
+              </div>
+              <div class="field full">
+                <label>直接节点</label>
+                <div class="ops-check-grid">
+                  ${
+                    appState.nodes.length
+                      ? appState.nodes
+                          .map(
+                            (node) => `
+                              <label class="ops-check-card">
+                                <input type="checkbox" data-system-template-apply-node="true" value="${escapeHtml(node.id)}" ${state.applyDraft.node_ids.includes(node.id) ? "checked" : ""} />
+                                <span>
+                                  <strong>${escapeHtml(getNodeName(node.id))}</strong>
+                                  <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml((node.management?.access_mode || "direct") === "relay" ? (node.management?.proxy_host ? "SSH 经代理" : "SSH 经跳板") : "SSH 直连")}</span>
+                                </span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : '<div class="ops-empty-block">当前没有可选节点。</div>'
+                  }
+                </div>
+              </div>
+              <div class="field full">
+                <label for="system-template-apply-note">备注</label>
+                <textarea id="system-template-apply-note" name="note" placeholder="记录本次执行目的、回滚方式和验收标准。">${escapeHtml(state.applyDraft.note)}</textarea>
+              </div>
+              <div class="ops-action-row">
+                <button class="button primary" type="submit">开始下发</button>
+                <button class="button" type="button" id="system-template-apply-reset">重置选择</button>
+              </div>
+            </form>
+
+            ${state.applyMessage ? `<div class="message ${state.applyMessage.type}">${escapeHtml(state.applyMessage.text)}</div>` : ""}
+          </div>
+        </article>
       </section>
     `;
   }

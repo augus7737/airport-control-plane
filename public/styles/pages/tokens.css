@@ -1,0 +1,82 @@
+body[data-page="tokens"] .content {
+  padding: 20px;
+}
+
+body[data-page="tokens"] .metrics-grid {
+  gap: 10px;
+}
+
+body[data-page="tokens"] .metrics-grid .panel-body {
+  padding: 14px 15px;
+}
+
+body[data-page="tokens"] .tokens-workspace {
+  margin-top: 18px;
+  grid-template-columns: minmax(0, 1.48fr) minmax(320px, 0.72fr);
+  align-items: start;
+}
+
+body[data-page="tokens"] .tokens-workspace .aside-stack {
+  gap: 14px;
+}
+
+body[data-page="tokens"] .tokens-workspace .aside-stack > .panel:first-child {
+  position: sticky;
+  top: 18px;
+}
+
+body[data-page="tokens"] .tokens-table-shell table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+body[data-page="tokens"] .tokens-table-shell th,
+body[data-page="tokens"] .tokens-table-shell td {
+  padding: 10px 12px;
+}
+
+body[data-page="tokens"] .tokens-table-shell th {
+  font-size: 11px;
+}
+
+body[data-page="tokens"] .token-actions {
+  align-items: center;
+}
+
+body[data-page="tokens"] .token-table-button {
+  min-height: 32px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+
+body[data-page="tokens"] .token-inline-action {
+  min-height: 28px;
+  padding-inline: 10px;
+}
+
+body[data-page="tokens"] .token-inline-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+body[data-page="tokens"] .detail-kv {
+  gap: 8px;
+}
+
+@media (max-width: 1180px) {
+  body[data-page="tokens"] .tokens-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="tokens"] .tokens-workspace .aside-stack > .panel:first-child {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  body[data-page="tokens"] .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -10,6 +10,7 @@
 @import "./styles/pages/terminal.css";
 @import "./styles/pages/node-detail.css";
 @import "./styles/pages/tasks.css";
+@import "./styles/pages/tokens.css";
 @import "./styles/pages/access-users.css";
 @import "./styles/pages/providers.css";
 @import "./styles/pages/proxy-profiles.css";

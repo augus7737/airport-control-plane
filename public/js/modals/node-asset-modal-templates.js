@@ -254,7 +254,7 @@ export function createNodeAssetModalTemplatesModule() {
                   <button class="button primary" type="submit">保存到节点清单</button>
                   <button class="button ghost" type="button" id="manual-reset">清空表单</button>
                 </div>
-                <div id="manual-message"></div>
+                <div id="manual-message" aria-live="polite"></div>
               </div>
             </form>
           </div>
@@ -515,7 +515,7 @@ export function createNodeAssetModalTemplatesModule() {
                   <button class="button primary" type="submit">保存资产信息</button>
                   <button class="button ghost" type="button" id="asset-reset">恢复当前值</button>
                 </div>
-                <div id="asset-message"></div>
+                <div id="asset-message" aria-live="polite"></div>
               </div>
             </form>
           </div>

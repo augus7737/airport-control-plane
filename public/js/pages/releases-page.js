@@ -194,6 +194,26 @@ export function createReleasesPageModule(dependencies) {
     const nodeCoverage = new Set(
       appState.nodeGroups.flatMap((group) => (Array.isArray(group.node_ids) ? group.node_ids : [])),
     ).size;
+    const selectedGroupNodeCount = Array.isArray(selectedGroup?.node_ids) ? selectedGroup.node_ids.length : 0;
+    const releaseBuilderSummaryRows = [
+      ["协议模板", `${appState.proxyProfiles.length} 套`],
+      ["接入用户", `${appState.accessUsers.length} 个`],
+      ["节点组", `${appState.nodeGroups.length} 个`],
+      ["运行中发布", `${runningCount} 次`],
+    ];
+    const nodeGroupSummaryRows = selectedGroup
+      ? [
+          ["当前节点组", selectedGroup.name || selectedGroup.id],
+          ["覆盖节点", `${selectedGroupNodeCount} 台`],
+          ["备注", selectedGroup.note || "未填写"],
+          ["适用方式", "供发布主流程复用"],
+        ]
+      : [
+          ["当前节点组", "未选择"],
+          ["覆盖节点", `${nodeCoverage} 台`],
+          ["建议方式", "按入口 / 中转 / 落地区分"],
+          ["适用方式", "先小组试发再放大"],
+        ];
     const rows = filteredReleases.length
       ? filteredReleases
           .map((release) => {
@@ -278,6 +298,63 @@ export function createReleasesPageModule(dependencies) {
           </td>
         </tr>
       `;
+    const selectedGroupReleaseCount = selectedGroup
+      ? appState.configReleases.filter((release) =>
+          Array.isArray(release.node_group_ids) && release.node_group_ids.includes(selectedGroup.id),
+        ).length
+      : 0;
+    const groupLedgerRows = appState.nodeGroups.length
+      ? appState.nodeGroups
+          .map((group) => {
+            const groupNodeCount = Array.isArray(group.node_ids) ? group.node_ids.length : 0;
+            const groupReleaseCount = appState.configReleases.filter((release) =>
+              Array.isArray(release.node_group_ids) && release.node_group_ids.includes(group.id),
+            ).length;
+            return `
+              <tr>
+                <td>
+                  <div class="node-meta">
+                    <span class="node-name">${escapeHtml(group.name || group.id)}</span>
+                    <span class="node-id mono">${escapeHtml(group.id || "-")}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="ops-inline-meta">
+                    <strong>${escapeHtml(String(groupNodeCount))} 台节点</strong>
+                    <span class="tiny">${escapeHtml(
+                      groupNodeCount ? group.node_ids.slice(0, 3).map((nodeId) => getNodeName(nodeId)).join(" / ") : "等待纳入节点",
+                    )}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="ops-inline-meta">
+                    <strong>${escapeHtml(String(groupReleaseCount))} 次</strong>
+                    <span class="tiny">${groupReleaseCount ? "发布主流程可直接复用" : "尚未被发布引用"}</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="ops-inline-meta">
+                    <strong>${escapeHtml(group.note || "未填写")}</strong>
+                    <span class="tiny">建议按入口 / 中转 / 落地或批次拆分</span>
+                  </div>
+                </td>
+                <td>
+                  <div class="ops-table-actions">
+                    <button class="button ghost" type="button" data-node-group-edit="${escapeHtml(group.id)}">编辑</button>
+                    <button class="button ghost" type="button" data-node-group-delete="${escapeHtml(group.id)}">删除</button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          })
+          .join("")
+      : `
+        <tr>
+          <td colspan="5">
+            <div class="empty">还没有节点组。建议先按入口、中转、落地或供应商批次建组，再开始发布。</div>
+          </td>
+        </tr>
+      `;
 
     return `
       <section class="metrics-grid fade-up">
@@ -287,7 +364,7 @@ export function createReleasesPageModule(dependencies) {
         <article class="panel"><div class="panel-body"><div class="stat-label">覆盖节点</div><div class="stat-value">${nodeCoverage}</div><div class="stat-foot">当前所有节点组覆盖到的唯一节点数。</div></div></article>
       </section>
 
-      <section class="workspace fade-up ops-release-layout">
+      <section class="workspace fade-up ops-release-primary">
         <div class="stack">
           <article class="panel" id="release-builder-panel">
             <div class="panel-body">
@@ -300,6 +377,19 @@ export function createReleasesPageModule(dependencies) {
               </div>
               <div class="field-note">
                 当前第一版真实发布会渲染 sing-box VLESS 配置，自动做节点侧校验、备份和重启；若节点还没装 sing-box，则先只落渲染产物。
+              </div>
+
+              <div class="release-builder-overview">
+                ${releaseBuilderSummaryRows
+                  .map(
+                    ([label, value]) => `
+                      <div class="release-builder-overview-card">
+                        <span>${escapeHtml(label)}</span>
+                        <strong>${escapeHtml(value)}</strong>
+                      </div>
+                    `,
+                  )
+                  .join("")}
               </div>
 
               <form id="config-release-form" class="ops-form-grid">
@@ -322,47 +412,53 @@ export function createReleasesPageModule(dependencies) {
                 </div>
                 <div class="field full">
                   <label>接入用户</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.accessUsers.length
-                        ? appState.accessUsers
-                            .map(
-                              (user) => `
-                                <label class="ops-check-card">
-                                  <input type="checkbox" name="access_user_ids" value="${escapeHtml(user.id)}" />
-                                  <span>
-                                    <strong>${escapeHtml(user.name || user.id)}</strong>
-                                    <span class="tiny">${escapeHtml(getProfileName(user.profile_id))}</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">还没有接入用户，请先到“接入用户”页面创建。</div>'
-                    }
-                  </div>
+                  <details class="release-picker-section">
+                    <summary>共 ${escapeHtml(String(appState.accessUsers.length))} 个接入用户，可展开滚动选择</summary>
+                    <div class="ops-check-grid">
+                      ${
+                        appState.accessUsers.length
+                          ? appState.accessUsers
+                              .map(
+                                (user) => `
+                                  <label class="ops-check-card">
+                                    <input type="checkbox" name="access_user_ids" value="${escapeHtml(user.id)}" />
+                                    <span>
+                                      <strong>${escapeHtml(user.name || user.id)}</strong>
+                                      <span class="tiny">${escapeHtml(getProfileName(user.profile_id))}</span>
+                                    </span>
+                                  </label>
+                                `,
+                              )
+                              .join("")
+                          : '<div class="ops-empty-block">还没有接入用户，请先到“接入用户”页面创建。</div>'
+                      }
+                    </div>
+                  </details>
                 </div>
                 <div class="field full">
                   <label>节点组</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.nodeGroups.length
-                        ? appState.nodeGroups
-                            .map(
-                              (group) => `
-                                <label class="ops-check-card">
-                                  <input type="checkbox" name="node_group_ids" value="${escapeHtml(group.id)}" />
-                                  <span>
-                                    <strong>${escapeHtml(group.name || group.id)}</strong>
-                                    <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">还没有节点组，请先在右侧创建。</div>'
-                    }
-                  </div>
+                  <details class="release-picker-section">
+                    <summary>共 ${escapeHtml(String(appState.nodeGroups.length))} 个节点组，可展开滚动选择</summary>
+                    <div class="ops-check-grid">
+                      ${
+                        appState.nodeGroups.length
+                          ? appState.nodeGroups
+                              .map(
+                                (group) => `
+                                  <label class="ops-check-card">
+                                    <input type="checkbox" name="node_group_ids" value="${escapeHtml(group.id)}" />
+                                    <span>
+                                      <strong>${escapeHtml(group.name || group.id)}</strong>
+                                      <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
+                                    </span>
+                                  </label>
+                                `,
+                              )
+                              .join("")
+                          : '<div class="ops-empty-block">还没有节点组，请先在右侧创建。</div>'
+                      }
+                    </div>
+                  </details>
                 </div>
                 <div class="field full">
                   <label for="config-release-note">发布备注</label>
@@ -370,8 +466,13 @@ export function createReleasesPageModule(dependencies) {
                 </div>
                 <div class="ops-action-row">
                   <button class="button primary" type="submit">立即发布</button>
-                  <a class="button" href="/access-users.html">去管理接入用户</a>
-                  <a class="button" href="/proxy-profiles.html">去管理模板</a>
+                </div>
+                <div class="release-builder-links tiny">
+                  缺接入用户或模板时，可前往
+                  <a href="/access-users.html">接入用户</a>
+                  /
+                  <a href="/proxy-profiles.html">协议模板</a>
+                  维护后再回来发版。
                 </div>
               </form>
 
@@ -420,20 +521,80 @@ export function createReleasesPageModule(dependencies) {
           </article>
         </div>
 
-        <aside class="aside-stack">
+        <aside class="aside-stack ops-release-rail">
           <article class="panel">
             <div class="panel-body">
               <div class="panel-title">
                 <div>
-                  <h3>节点组清单</h3>
-                  <p>第一版先用静态分组，把发布范围和中转链路显式收进控制台。</p>
+                  <h3>${selectedGroup ? "当前发布焦点" : "桌面工作流"}</h3>
+                  <p>${selectedGroup ? "先确认节点组语义，再回到发版主流程发起真实下发。" : "首屏先看发布主流程，节点组维护放到下一段单独处理。"} </p>
+                </div>
+              </div>
+              ${
+                selectedGroup
+                  ? `
+                    <div class="release-focus-summary">
+                      <div class="release-focus-strip">
+                        <span class="eyebrow">当前节点组</span>
+                        <strong>${escapeHtml(selectedGroup.name || selectedGroup.id)}</strong>
+                        <p class="tiny mono">${escapeHtml(selectedGroup.id || "-")}</p>
+                      </div>
+                      <div class="detail-kv">
+                        <div class="kv-row"><span>覆盖节点</span><strong>${escapeHtml(String(selectedGroupNodeCount))} 台</strong></div>
+                        <div class="kv-row"><span>被引用发布</span><strong>${escapeHtml(String(selectedGroupReleaseCount))} 次</strong></div>
+                        <div class="kv-row"><span>备注</span><strong>${escapeHtml(selectedGroup.note || "未填写")}</strong></div>
+                        <div class="kv-row"><span>用途</span><strong>发布主流程复用</strong></div>
+                      </div>
+                    </div>
+                  `
+                  : `
+                    <div class="event-list">
+                      <div class="event"><strong>先维护主数据</strong><p>把入口、中转、落地节点先拆成组，后续发布范围和回滚才稳定。</p></div>
+                      <div class="event"><strong>再进入发版</strong><p>模板、接入用户和节点组都准备好后，首屏就只做发布动作，不把编辑表单塞在旁边。</p></div>
+                    </div>
+                  `
+              }
+              <div class="ops-action-row">
+                <button class="button primary" type="button" id="focus-release-builder">回到发版主流程</button>
+                <button class="button ghost" type="button" id="focus-node-group-form">${selectedGroup ? "继续编辑节点组" : "新建节点组"}</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-body">
+              <div class="panel-title">
+                <div>
+                  <h3>节点组概览</h3>
+                  <p>首屏只保留节点组概览和跳转入口，不把整套编辑流程压在发布旁边。</p>
                 </div>
                 <button class="button" type="button" id="node-group-create-empty">新建节点组</button>
+              </div>
+              <div class="release-group-overview">
+                ${nodeGroupSummaryRows
+                  .map(
+                    ([label, value]) => `
+                      <div class="release-group-overview-card">
+                        <span>${escapeHtml(label)}</span>
+                        <strong>${escapeHtml(String(value || "-"))}</strong>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
+              <div class="release-group-callout">
+                <strong>${selectedGroup ? "当前正在维护选中节点组" : "建议先建组再发版"}</strong>
+                <p>${escapeHtml(
+                  selectedGroup
+                    ? "节点组变更后，后续发布会直接复用新的范围，不需要重复手选节点。"
+                    : "把入口、中转、落地或供应商批次拆成节点组后，发布回滚和分批验证都会更稳。",
+                )}</p>
               </div>
               <div class="ops-soft-list">
                 ${
                   appState.nodeGroups.length
                     ? appState.nodeGroups
+                        .slice(0, 6)
                         .map(
                           (group) => `
                             <button class="ops-soft-item" type="button" data-node-group-edit="${escapeHtml(group.id)}">
@@ -448,10 +609,39 @@ export function createReleasesPageModule(dependencies) {
                         .join("")
                     : '<div class="ops-empty-block">还没有节点组，建议先按入口地区、中转用途或供应商批次分组。</div>'
                 }
+                ${
+                  appState.nodeGroups.length > 6
+                    ? `<div class="tiny release-soft-list-foot">还有 ${escapeHtml(String(appState.nodeGroups.length - 6))} 个节点组可在下方维护区查看。</div>`
+                    : ""
+                }
               </div>
             </div>
           </article>
 
+        </aside>
+      </section>
+
+      <section class="workspace fade-up ops-release-groups-stage">
+        <article class="panel">
+          <div class="panel-body">
+            <div class="panel-title">
+              <div>
+                <h3>节点组维护区</h3>
+                <p>把节点组台账和编辑器放到独立工作区，避免和发布记录争抢首屏宽度。</p>
+              </div>
+            </div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr><th>节点组</th><th>覆盖节点</th><th>被引用发布</th><th>备注</th><th>操作</th></tr>
+                </thead>
+                <tbody>${groupLedgerRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </article>
+
+        <aside class="aside-stack">
           <article class="panel" id="node-group-form-panel">
             <div class="panel-body">
               <div class="panel-title">
@@ -516,22 +706,6 @@ export function createReleasesPageModule(dependencies) {
               }
             </div>
           </article>
-
-          <article class="panel">
-            <div class="panel-body">
-              <div class="panel-title">
-                <div>
-                  <h3>发布节奏建议</h3>
-                  <p>先从小范围节点组验证，再逐步扩大覆盖面。</p>
-                </div>
-              </div>
-              <div class="event-list">
-                <div class="event"><strong>先分节点组</strong><p>直连、中转、落地机分开管理，发布出错时更容易止损。</p></div>
-                <div class="event"><strong>先少量试发</strong><p>每次模板大改，先挑 1 个节点组验证再全量推进。</p></div>
-                <div class="event"><strong>回显直达终端</strong><p>发布成功后可直接跳转到批量执行回显，检查哪台节点掉队。</p></div>
-              </div>
-            </div>
-          </article>
         </aside>
       </section>
     `;
@@ -547,9 +721,10 @@ export function createReleasesPageModule(dependencies) {
     });
 
     documentRef.getElementById("focus-node-group-form")?.addEventListener("click", () => {
-      state.selectedGroupId = null;
       state.groupMessage = null;
-      renderCurrentContent();
+      if (!state.selectedGroupId) {
+        renderCurrentContent();
+      }
       scrollToGroupForm();
     });
 
@@ -571,6 +746,12 @@ export function createReleasesPageModule(dependencies) {
         state.groupMessage = null;
         renderCurrentContent();
         scrollToGroupForm();
+      });
+    });
+
+    documentRef.querySelectorAll("[data-node-group-delete]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        handleDeleteGroup(event.currentTarget.dataset.nodeGroupDelete || "");
       });
     });
 

@@ -4,6 +4,10 @@ body[data-page="tasks"] .aside-stack .panel-body {
   gap: 16px;
 }
 
+body[data-page="tasks"] .tasks-page-head {
+  margin-top: 0;
+}
+
 body[data-page="tasks"] .tasks-probe-panel .panel-body {
   gap: 14px;
 }
@@ -78,6 +82,51 @@ body[data-page="tasks"] .tasks-probe-chips .pill.danger {
   background: rgba(254, 242, 242, 0.92);
 }
 
+body[data-page="tasks"] .tasks-list-panel {
+  margin-top: 16px;
+}
+
+body[data-page="tasks"] .tasks-filter-toolbar {
+  position: sticky;
+  top: 16px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(280px, 1.5fr) repeat(2, minmax(140px, 0.6fr)) auto auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(247, 250, 252, 0.94)),
+    rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(18px);
+}
+
+body[data-page="tasks"] .tasks-filter-toolbar .field {
+  gap: 5px;
+}
+
+body[data-page="tasks"] .tasks-filter-toolbar .field label {
+  font-size: 11px;
+}
+
+body[data-page="tasks"] .tasks-filter-toolbar .field input,
+body[data-page="tasks"] .tasks-filter-toolbar .field select {
+  min-height: 40px;
+  border-radius: 12px;
+}
+
+body[data-page="tasks"] .tasks-filter-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 body[data-page="tasks"] .tasks-filter-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: end;
@@ -87,13 +136,13 @@ body[data-page="tasks"] .tasks-actionable-toggle {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: 40px;
   padding: 0 14px;
-  border-radius: 16px;
+  border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.84);
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
 }
 
 body[data-page="tasks"] .tasks-actionable-toggle input {
@@ -108,6 +157,51 @@ body[data-page="tasks"] tr[data-task-select] {
   cursor: pointer;
 }
 
+body[data-page="tasks"] .tasks-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+body[data-page="tasks"] .tasks-workspace.has-selection {
+  grid-template-columns: minmax(0, 1.52fr) minmax(320px, 0.78fr);
+  align-items: start;
+}
+
+body[data-page="tasks"] .tasks-detail-rail {
+  align-self: start;
+}
+
+body[data-page="tasks"] .tasks-detail-rail > .panel:first-child {
+  position: sticky;
+  top: 16px;
+}
+
+body[data-page="tasks"] .tasks-table-shell {
+  margin-top: 0;
+}
+
+body[data-page="tasks"] .tasks-table-shell table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+body[data-page="tasks"] .tasks-table-shell th,
+body[data-page="tasks"] .tasks-table-shell td {
+  padding: 9px 10px;
+}
+
+body[data-page="tasks"] .tasks-table-shell th {
+  font-size: 11px;
+}
+
+body[data-page="tasks"] .tasks-table-shell td:nth-child(7) {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 body[data-page="tasks"] .task-row-selected {
   background: rgba(14, 116, 144, 0.08);
 }
@@ -117,7 +211,7 @@ body[data-page="tasks"] .task-row-selected td {
 }
 
 body[data-page="tasks"] .task-action-button {
-  min-width: 112px;
+  min-width: 96px;
   justify-content: center;
 }
 
@@ -250,8 +344,22 @@ body[data-page="tasks"] .task-log-list .event p {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  body[data-page="tasks"] .tasks-filter-toolbar,
   body[data-page="tasks"] .tasks-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-page="tasks"] .tasks-filter-toolbar-search,
+  body[data-page="tasks"] .tasks-filter-toolbar-actions {
+    grid-column: 1 / -1;
+  }
+
+  body[data-page="tasks"] .tasks-workspace.has-selection {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="tasks"] .tasks-detail-rail > .panel:first-child {
+    position: static;
   }
 }
 
@@ -269,8 +377,13 @@ body[data-page="tasks"] .task-log-list .event p {
     grid-template-columns: 1fr;
   }
 
+  body[data-page="tasks"] .tasks-filter-toolbar,
   body[data-page="tasks"] .tasks-filter-grid {
     grid-template-columns: 1fr;
+  }
+
+  body[data-page="tasks"] .tasks-filter-toolbar {
+    position: static;
   }
 
   body[data-page="tasks"] .task-operation-meta {

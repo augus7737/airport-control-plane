@@ -97,7 +97,7 @@ export function createTasksPageModule(dependencies) {
       return;
     }
 
-    appState.taskCenter.selectedTaskId = filteredTasks[0]?.id || null;
+    appState.taskCenter.selectedTaskId = null;
     appState.taskCenter.operationOutputExpanded = false;
   }
 
@@ -343,187 +343,42 @@ export function createTasksPageModule(dependencies) {
           .slice(0, 8)
       : [];
     const logItems = Array.isArray(selectedTask?.log_excerpt) ? selectedTask.log_excerpt : [];
-
-    return `
-      <section class="metrics-grid fade-up">
-        <article class="panel"><div class="panel-body"><div class="stat-label">待执行</div><div class="stat-value">${pendingCount}</div><div class="stat-foot">刚注册、等待进入初始化或等待人工重试的任务。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">执行中</div><div class="stat-value">${runningCount}</div><div class="stat-foot">当前正在运行的初始化或修复任务。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">已成功</div><div class="stat-value">${successCount}</div><div class="stat-foot">已经完成并落账到节点生命周期里的任务。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">失败</div><div class="stat-value">${failedCount}</div><div class="stat-foot">需要人工确认或点击重试的任务。</div></div></article>
-      </section>
-      <section class="panel fade-up tasks-probe-panel" style="margin-top:18px;">
-        <div class="panel-body tasks-probe-body">
-          <div class="panel-title tasks-probe-title">
-            <div>
-              <h3>自动巡检</h3>
-              <p>集中查看周期调度状态、最近一轮结果，以及 <code>scheduled_probe</code> 任务积压。</p>
-            </div>
-            <div class="tasks-probe-badges">
-              <span class="${statusClassName(probeSchedulerView.scheduleTone)}">${probeSchedulerView.scheduleLabel}</span>
-              <span class="${statusClassName(probeSchedulerView.runtimeTone)}">${probeSchedulerView.runtimeLabel}</span>
-            </div>
-          </div>
-          <div class="tasks-probe-strip">
-            <div class="tasks-probe-item">
-              <span>调度节奏</span>
-              <strong>${escapeHtml(formatDurationCompact(probeScheduler?.interval_ms))}</strong>
-              <small>${escapeHtml(formatProbeBatchSize(probeScheduler?.batch_size))}，最小间隔 ${escapeHtml(
-                formatDurationCompact(probeScheduler?.min_probe_gap_ms),
-              )}</small>
-            </div>
-            <div class="tasks-probe-item">
-              <span>下一轮</span>
-              <strong>${escapeHtml(
-                probeScheduler?.enabled && probeScheduler?.next_run_at
-                  ? formatRelativeTime(probeScheduler.next_run_at)
-                  : "未安排",
-              )}</strong>
-              <small>${escapeHtml(
-                probeScheduler?.last_run_at
-                  ? `上次启动 ${formatRelativeTime(probeScheduler.last_run_at)}`
-                  : "尚未进入自动巡检",
-              )}</small>
-            </div>
-            <div class="tasks-probe-item">
-              <span>最近一轮</span>
-              <strong>${escapeHtml(formatProbeRunSummary(probeScheduler?.last_run_summary))}</strong>
-              <small>${escapeHtml(
-                probeScheduler?.last_finished_at
-                  ? `完成于 ${formatRelativeTime(probeScheduler.last_finished_at)}`
-                  : "还没有完成记录",
-              )}</small>
-            </div>
-            <div class="tasks-probe-item">
-              <span>周期任务</span>
-              <strong>${escapeHtml(String(scheduledProbeStats.total))} 条</strong>
-              <small>${escapeHtml(
-                `失败 ${scheduledProbeStats.failed} / 运行中 ${scheduledProbeStats.running} / 待执行 ${scheduledProbeStats.pending}`,
-              )}</small>
-            </div>
-          </div>
-          <div class="chips tasks-probe-chips">
-            <div class="pill"><span>成功沉淀</span><strong>${scheduledProbeStats.success} 条</strong></div>
-            <div class="pill"><span>最近周期任务</span><strong>${escapeHtml(
-              latestScheduledProbeTask
-                ? formatRelativeTime(
-                    latestScheduledProbeTask.started_at ||
-                      latestScheduledProbeTask.scheduled_at ||
-                      latestScheduledProbeTask.created_at,
-                  )
-                : "暂无",
-            )}</strong></div>
-            ${
-              probeScheduler?.jitter_ms
-                ? `<div class="pill"><span>抖动保护</span><strong>${escapeHtml(
-                    formatDurationCompact(probeScheduler.jitter_ms),
-                  )}</strong></div>`
-                : ""
-            }
-            ${
-              probeScheduler?.last_error
-                ? `<div class="pill danger"><span>最近异常</span><strong>${escapeHtml(probeScheduler.last_error)}</strong></div>`
-                : ""
-            }
-          </div>
-        </div>
-      </section>
-      <section class="panel fade-up tasks-filter-panel" style="margin-top:18px;">
-        <div class="panel-body">
-          <div class="panel-title"><div><h3>任务筛选</h3><p>先按状态、任务类型和关键字收敛，再进入单条任务的摘要和动作。</p></div></div>
-          <div class="form-grid tasks-filter-grid">
-            <div class="field full-row">
-              <label for="task-query">搜索任务</label>
-              <input id="task-query" value="${escapeHtml(appState.taskCenter.query)}" placeholder="任务名 / 节点名 / 任务 ID / 触发方式" />
-            </div>
-            <div class="field">
-              <label for="task-status">状态</label>
-              <select id="task-status">
-                <option value="all"${appState.taskCenter.status === "all" ? " selected" : ""}>全部</option>
-                <option value="new"${appState.taskCenter.status === "new" ? " selected" : ""}>待执行</option>
-                <option value="running"${appState.taskCenter.status === "running" ? " selected" : ""}>执行中</option>
-                <option value="success"${appState.taskCenter.status === "success" ? " selected" : ""}>已成功</option>
-                <option value="failed"${appState.taskCenter.status === "failed" ? " selected" : ""}>失败</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="task-type">任务类型</label>
-              <select id="task-type">
-                <option value="all"${appState.taskCenter.type === "all" ? " selected" : ""}>全部</option>
-                <option value="init_alpine"${appState.taskCenter.type === "init_alpine" ? " selected" : ""}>初始化</option>
-                <option value="probe_node"${appState.taskCenter.type === "probe_node" ? " selected" : ""}>探测</option>
-              </select>
-            </div>
-            <label class="tasks-actionable-toggle">
-              <input id="task-only-actionable" type="checkbox"${appState.taskCenter.onlyActionable ? " checked" : ""} />
-              <span>只看可直接处置的任务</span>
-            </label>
-          </div>
-          <div class="chips tasks-filter-summary">
-            <div class="pill"><span>当前筛选</span><strong>${filteredTasks.length} 条</strong></div>
-            <div class="pill"><span>可处置</span><strong>${actionableCount} 条</strong></div>
-            <button class="button ghost" type="button" id="task-filters-reset">清空筛选</button>
-            <button class="button ghost" type="button" id="task-refresh">刷新任务</button>
-          </div>
-          ${
-            appState.taskCenter.message
-              ? `<div class="message ${appState.taskCenter.message.type}" style="margin-top:12px;">${escapeHtml(appState.taskCenter.message.text)}</div>`
-              : ""
-          }
-        </div>
-      </section>
-      <section class="workspace fade-up" style="margin-top:18px;">
-        <article class="panel">
-          <div class="panel-body">
-            <div class="panel-title"><div><h3>任务列表</h3><p>初始化、自动首探、修复和面板同步等动作都会在这里持续追踪。</p></div><div class="provider-pill">共 ${filteredTasks.length} 条</div></div>
-            <div class="table-shell">
-              <table>
-                <thead>
-                  <tr><th>任务</th><th>目标节点</th><th>类型</th><th>状态</th><th>重试</th><th>计划时间</th><th>说明</th><th>动作</th></tr>
-                </thead>
-                <tbody>${rows}</tbody>
-              </table>
-            </div>
-          </div>
-        </article>
-        <aside class="aside-stack">
+    const selectedTaskLabel = selectedTask ? getTaskDisplayTitle(selectedTask) : null;
+    const detailRail = selectedTask
+      ? `
+        <aside class="aside-stack tasks-detail-rail">
           <section class="panel">
             <div class="panel-body">
-              <div class="panel-title"><div><h3>任务摘要</h3><p>${selectedTask ? "把当前任务的上下文、触发参数和动作收在一侧。" : "先从左侧选择一条任务。"} </p></div></div>
-              ${
-                selectedTask
-                  ? `
-                    <div class="detail-kv task-detail-kv">
-                      ${detailRows
-                        .map(
-                          ([label, value]) => `
-                            <div class="kv-row">
-                              <span>${escapeHtml(label)}</span>
-                              <strong>${escapeHtml(value)}</strong>
-                            </div>
-                          `,
-                        )
-                        .join("")}
-                    </div>
-                    <div class="task-detail-actions">
-                      ${
-                        selectedNode
-                          ? `<a class="button ghost" href="${nodeDetailHref(selectedNode.id)}">前往节点</a>`
-                          : ""
-                      }
-                      ${
-                        selectedOperation
-                          ? `<a class="button ghost" href="${terminalOperationHref(selectedOperation.id)}">查看完整执行</a>`
-                          : ""
-                      }
-                      ${
-                        isActionableTask(selectedTask)
-                          ? `<button class="button primary task-action-button${isTaskActionPending(selectedTask.id) ? " is-loading" : ""}" type="button" data-task-trigger="${escapeHtml(selectedTask.id)}"${isTaskActionPending(selectedTask.id) ? ' disabled aria-busy="true"' : ""}>${selectedTask.type === "init_alpine" ? (isTaskActionPending(selectedTask.id) ? "初始化中..." : "重新初始化") : isTaskActionPending(selectedTask.id) ? "复探中..." : "立即复探"}</button>`
-                          : ""
-                      }
-                    </div>
-                  `
-                  : '<div class="empty">当前没有可查看的任务摘要。</div>'
-              }
+              <div class="panel-title"><div><h3>任务摘要</h3><p>把当前任务的上下文、触发参数和动作收在一侧。</p></div></div>
+              <div class="detail-kv task-detail-kv">
+                ${detailRows
+                  .map(
+                    ([label, value]) => `
+                      <div class="kv-row">
+                        <span>${escapeHtml(label)}</span>
+                        <strong>${escapeHtml(value)}</strong>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
+              <div class="task-detail-actions">
+                ${
+                  selectedNode
+                    ? `<a class="button ghost" href="${nodeDetailHref(selectedNode.id)}">前往节点</a>`
+                    : ""
+                }
+                ${
+                  selectedOperation
+                    ? `<a class="button ghost" href="${terminalOperationHref(selectedOperation.id)}">查看完整执行</a>`
+                    : ""
+                }
+                ${
+                  isActionableTask(selectedTask)
+                    ? `<button class="button primary task-action-button${isTaskActionPending(selectedTask.id) ? " is-loading" : ""}" type="button" data-task-trigger="${escapeHtml(selectedTask.id)}"${isTaskActionPending(selectedTask.id) ? ' disabled aria-busy="true"' : ""}>${selectedTask.type === "init_alpine" ? (isTaskActionPending(selectedTask.id) ? "初始化中..." : "重新初始化") : isTaskActionPending(selectedTask.id) ? "复探中..." : "立即复探"}</button>`
+                    : ""
+                }
+              </div>
             </div>
           </section>
           <section class="panel">
@@ -566,9 +421,9 @@ export function createTasksPageModule(dependencies) {
                     : ""
                 }
               </div>
-                ${
-                  selectedOperation
-                    ? `
+              ${
+                selectedOperation
+                  ? `
                     <div class="task-operation-meta">
                       <div class="task-operation-kv"><span>执行方式</span><strong>${escapeHtml(selectedOperation.mode === "script" ? "脚本" : "命令")}</strong></div>
                       <div class="task-operation-kv"><span>执行记录</span><strong class="mono">${escapeHtml(selectedOperation.id)}</strong></div>
@@ -628,6 +483,164 @@ export function createTasksPageModule(dependencies) {
             </div>
           </section>
         </aside>
+      `
+      : "";
+
+    return `
+      <section class="panel fade-up tasks-probe-panel tasks-page-head">
+        <div class="panel-body tasks-probe-body">
+          <div class="panel-title tasks-probe-title">
+            <div>
+              <h3>自动巡检</h3>
+              <p>把巡检节奏、任务积压和人工处置入口压进一块桌面工作带，进入页面先看当前任务池。</p>
+            </div>
+            <div class="tasks-probe-badges">
+              <span class="${statusClassName(probeSchedulerView.scheduleTone)}">${probeSchedulerView.scheduleLabel}</span>
+              <span class="${statusClassName(probeSchedulerView.runtimeTone)}">${probeSchedulerView.runtimeLabel}</span>
+            </div>
+          </div>
+          <div class="tasks-probe-strip">
+            <div class="tasks-probe-item">
+              <span>调度节奏</span>
+              <strong>${escapeHtml(formatDurationCompact(probeScheduler?.interval_ms))}</strong>
+              <small>${escapeHtml(formatProbeBatchSize(probeScheduler?.batch_size))}，最小间隔 ${escapeHtml(
+                formatDurationCompact(probeScheduler?.min_probe_gap_ms),
+              )}</small>
+            </div>
+            <div class="tasks-probe-item">
+              <span>下一轮</span>
+              <strong>${escapeHtml(
+                probeScheduler?.enabled && probeScheduler?.next_run_at
+                  ? formatRelativeTime(probeScheduler.next_run_at)
+                  : "未安排",
+              )}</strong>
+              <small>${escapeHtml(
+                probeScheduler?.last_run_at
+                  ? `上次启动 ${formatRelativeTime(probeScheduler.last_run_at)}`
+                  : "尚未进入自动巡检",
+              )}</small>
+            </div>
+            <div class="tasks-probe-item">
+              <span>最近一轮</span>
+              <strong>${escapeHtml(formatProbeRunSummary(probeScheduler?.last_run_summary))}</strong>
+              <small>${escapeHtml(
+                probeScheduler?.last_finished_at
+                  ? `完成于 ${formatRelativeTime(probeScheduler.last_finished_at)}`
+                  : "还没有完成记录",
+              )}</small>
+            </div>
+            <div class="tasks-probe-item">
+              <span>周期任务</span>
+              <strong>${escapeHtml(String(scheduledProbeStats.total))} 条</strong>
+              <small>${escapeHtml(
+                `失败 ${scheduledProbeStats.failed} / 运行中 ${scheduledProbeStats.running} / 待执行 ${scheduledProbeStats.pending}`,
+              )}</small>
+            </div>
+          </div>
+          <div class="chips tasks-probe-chips">
+            <div class="pill"><span>待执行</span><strong>${pendingCount} 条</strong></div>
+            <div class="pill"><span>执行中</span><strong>${runningCount} 条</strong></div>
+            <div class="pill"><span>已成功</span><strong>${successCount} 条</strong></div>
+            <div class="pill"><span>失败</span><strong>${failedCount} 条</strong></div>
+            <div class="pill"><span>可处置</span><strong>${actionableCount} 条</strong></div>
+            <div class="pill"><span>成功沉淀</span><strong>${scheduledProbeStats.success} 条</strong></div>
+            <div class="pill"><span>最近周期任务</span><strong>${escapeHtml(
+              latestScheduledProbeTask
+                ? formatRelativeTime(
+                    latestScheduledProbeTask.started_at ||
+                      latestScheduledProbeTask.scheduled_at ||
+                      latestScheduledProbeTask.created_at,
+                  )
+                : "暂无",
+            )}</strong></div>
+            ${
+              probeScheduler?.jitter_ms
+                ? `<div class="pill"><span>抖动保护</span><strong>${escapeHtml(
+                    formatDurationCompact(probeScheduler.jitter_ms),
+                  )}</strong></div>`
+                : ""
+            }
+            ${
+              probeScheduler?.last_error
+                ? `<div class="pill danger"><span>最近异常</span><strong>${escapeHtml(probeScheduler.last_error)}</strong></div>`
+                : ""
+            }
+          </div>
+        </div>
+      </section>
+      <section class="panel fade-up tasks-list-panel">
+        <div class="panel-body">
+          <div class="panel-title">
+            <div>
+              <h3>任务池</h3>
+              <p>把列表抬回主舞台，先扫任务，再在右侧看摘要和回显。</p>
+            </div>
+            <div class="provider-pill">${selectedTaskLabel ? `已选：${escapeHtml(selectedTaskLabel)}` : `共 ${filteredTasks.length} 条`}</div>
+          </div>
+          <div class="tasks-filter-toolbar">
+            <div class="field tasks-filter-toolbar-search">
+              <label for="task-query">搜索任务</label>
+              <input id="task-query" value="${escapeHtml(appState.taskCenter.query)}" placeholder="任务名 / 节点名 / 任务 ID / 触发方式" />
+            </div>
+            <div class="field tasks-filter-toolbar-field">
+              <label for="task-status">状态</label>
+              <select id="task-status">
+                <option value="all"${appState.taskCenter.status === "all" ? " selected" : ""}>全部</option>
+                <option value="new"${appState.taskCenter.status === "new" ? " selected" : ""}>待执行</option>
+                <option value="running"${appState.taskCenter.status === "running" ? " selected" : ""}>执行中</option>
+                <option value="success"${appState.taskCenter.status === "success" ? " selected" : ""}>已成功</option>
+                <option value="failed"${appState.taskCenter.status === "failed" ? " selected" : ""}>失败</option>
+              </select>
+            </div>
+            <div class="field tasks-filter-toolbar-field">
+              <label for="task-type">任务类型</label>
+              <select id="task-type">
+                <option value="all"${appState.taskCenter.type === "all" ? " selected" : ""}>全部</option>
+                <option value="init_alpine"${appState.taskCenter.type === "init_alpine" ? " selected" : ""}>初始化</option>
+                <option value="probe_node"${appState.taskCenter.type === "probe_node" ? " selected" : ""}>探测</option>
+              </select>
+            </div>
+            <label class="tasks-actionable-toggle">
+              <input id="task-only-actionable" type="checkbox"${appState.taskCenter.onlyActionable ? " checked" : ""} />
+              <span>只看可直接处置的任务</span>
+            </label>
+            <div class="tasks-filter-toolbar-actions">
+              <button class="button ghost" type="button" id="task-filters-reset">清空筛选</button>
+              <button class="button ghost" type="button" id="task-refresh">刷新任务</button>
+            </div>
+          </div>
+          <div class="chips tasks-filter-summary">
+            <div class="pill"><span>当前筛选</span><strong>${filteredTasks.length} 条</strong></div>
+            <div class="pill"><span>当前选中</span><strong>${selectedTaskLabel ? escapeHtml(selectedTaskLabel) : "未选择"}</strong></div>
+            <div class="pill"><span>可处置</span><strong>${actionableCount} 条</strong></div>
+          </div>
+          ${
+            appState.taskCenter.message
+              ? `<div class="message ${appState.taskCenter.message.type}" style="margin-top:12px;">${escapeHtml(appState.taskCenter.message.text)}</div>`
+              : ""
+          }
+          <div class="tasks-workspace${selectedTask ? " has-selection" : ""}">
+            <div class="table-shell tasks-table-shell">
+              <table class="list-table">
+                <colgroup>
+                  <col style="width:20%">
+                  <col style="width:13%">
+                  <col style="width:10%">
+                  <col style="width:10%">
+                  <col style="width:8%">
+                  <col style="width:12%">
+                  <col style="width:17%">
+                  <col style="width:10%">
+                </colgroup>
+                <thead>
+                  <tr><th>任务</th><th>目标节点</th><th>类型</th><th>状态</th><th>重试</th><th>计划时间</th><th>说明</th><th>动作</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+            ${detailRail}
+          </div>
+        </div>
       </section>
     `;
   }

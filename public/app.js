@@ -455,6 +455,7 @@ const { renderTokensPage, setupTokensPage } = createTokensPageModule({
   renderBootstrapCommandPair,
   renderCurrentContent,
   renderPlatformSshPanel,
+  renderPlatformSshSummaryPanel,
   statusClassName,
   statusText,
   upsertBootstrapToken,

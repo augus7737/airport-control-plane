@@ -230,6 +230,13 @@ export function createSystemUsersPageModule(dependencies) {
       (item) => Array.isArray(item.ssh_authorized_keys) && item.ssh_authorized_keys.length > 0,
     ).length;
     const recentReleases = appState.systemUserReleases.slice(0, 8);
+    const selectedUserKeyCount = Array.isArray(selectedSystemUser?.ssh_authorized_keys)
+      ? selectedSystemUser.ssh_authorized_keys.length
+      : 0;
+    const selectedUserGroupSummary = joinCommaList(selectedSystemUser?.groups) || "无附加组";
+    const selectedUserScopeCount = Array.isArray(selectedSystemUser?.node_group_ids)
+      ? selectedSystemUser.node_group_ids.length
+      : 0;
     const systemUserRows = filteredSystemUsers.length
       ? filteredSystemUsers
           .map((systemUser) => {
@@ -282,50 +289,31 @@ export function createSystemUsersPageModule(dependencies) {
         </tr>
       `;
 
-    const releaseRows = recentReleases.length
+    const releaseItems = recentReleases.length
       ? recentReleases
           .map(
             (release) => `
-              <tr>
-                <td>
-                  <div class="ops-inline-meta">
-                    <strong>${escapeHtml(release.title || release.id)}</strong>
-                    <span class="tiny mono">${escapeHtml(release.id || "-")}</span>
-                  </div>
-                </td>
-                <td><span class="${statusClassName(release.status)}">${statusText(release.status)}</span></td>
-                <td>
-                  <div class="ops-inline-meta">
-                    <strong>${escapeHtml(String(release.summary?.system_user_count || 0))} 个系统用户</strong>
-                    <span class="tiny">${escapeHtml(renderApplyTargetSummary(release))}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="ops-inline-meta">
-                    <strong>${escapeHtml(
-                      `${Number(release.summary?.apply_summary?.success || 0)} / ${Number(release.summary?.apply_summary?.total || 0)}`,
-                    )}</strong>
-                    <span class="tiny">${formatDateTime(release.created_at)}</span>
-                  </div>
-                </td>
-                <td>
+              <article class="ops-soft-item">
+                <div class="ops-soft-main">
+                  <strong>${escapeHtml(release.title || release.id)}</strong>
+                  <span class="tiny">${escapeHtml(String(release.summary?.system_user_count || 0))} 个系统用户 · ${escapeHtml(renderApplyTargetSummary(release))}</span>
+                  <span class="tiny">${escapeHtml(
+                    `${Number(release.summary?.apply_summary?.success || 0)} / ${Number(release.summary?.apply_summary?.total || 0)}`,
+                  )} · ${formatDateTime(release.created_at)}</span>
+                </div>
+                <div class="ops-table-actions">
+                  <span class="${statusClassName(release.status)}">${statusText(release.status)}</span>
                   ${
                     release.operation_id
                       ? `<a class="button ghost" href="/terminal.html?operation_id=${encodeURIComponent(release.operation_id)}">查看回显</a>`
                       : '<span class="tiny">等待执行链路</span>'
                   }
-                </td>
-              </tr>
+                </div>
+              </article>
             `,
           )
           .join("")
-      : `
-        <tr>
-          <td colspan="5">
-            <div class="empty">还没有系统用户下发记录。创建用户后就可以直接批量应用到节点。</div>
-          </td>
-        </tr>
-      `;
+      : '<div class="empty">还没有系统用户下发记录。创建用户后就可以直接批量应用到节点。</div>';
 
     return `
       <section class="metrics-grid fade-up">
@@ -335,7 +323,7 @@ export function createSystemUsersPageModule(dependencies) {
         <article class="panel"><div class="panel-body"><div class="stat-label">已带密钥</div><div class="stat-value">${keyedCount}</div><div class="stat-foot">至少配置过一把 SSH 公钥的系统账号数。</div></div></article>
       </section>
 
-      <section class="workspace fade-up ops-page-grid">
+      <section class="workspace fade-up ops-control-stage">
         <article class="panel">
           <div class="panel-body">
             <div class="panel-title">
@@ -363,219 +351,43 @@ export function createSystemUsersPageModule(dependencies) {
           </div>
         </article>
 
-        <aside class="aside-stack">
-          <article class="panel" id="system-user-form-panel">
+        <aside class="aside-stack ops-control-rail">
+          <article class="panel">
             <div class="panel-body">
               <div class="panel-title">
                 <div>
-                  <h3>${selectedSystemUser ? "编辑系统用户" : "新建系统用户"}</h3>
-                  <p>${selectedSystemUser ? "修改后可直接再次批量下发覆盖到节点。" : "建议先从统一运维账号开始，例如 vell。"} </p>
-                </div>
-                ${selectedSystemUser ? `<span class="pill mono">${escapeHtml(selectedSystemUser.id)}</span>` : ""}
-              </div>
-
-              <form id="system-user-form" class="ops-form-grid">
-                <div class="field">
-                  <label for="system-user-name">显示名称</label>
-                  <input id="system-user-name" name="name" value="${escapeHtml(draft.name)}" placeholder="例如：统一运维账号" />
-                </div>
-                <div class="field">
-                  <label for="system-user-username">用户名</label>
-                  <input id="system-user-username" name="username" value="${escapeHtml(draft.username)}" placeholder="例如：vell" />
-                </div>
-                <div class="field">
-                  <label for="system-user-status">状态</label>
-                  <select id="system-user-status" name="status">
-                    <option value="active"${draft.status === "active" ? " selected" : ""}>启用</option>
-                    <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用并锁定</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="system-user-uid">UID</label>
-                  <input id="system-user-uid" name="uid" type="number" min="1" value="${escapeHtml(draft.uid)}" placeholder="留空则自动分配" />
-                </div>
-                <div class="field">
-                  <label for="system-user-shell">Shell</label>
-                  <input id="system-user-shell" name="shell" value="${escapeHtml(draft.shell)}" placeholder="/bin/sh" />
-                </div>
-                <div class="field">
-                  <label for="system-user-home-dir">Home 目录</label>
-                  <input id="system-user-home-dir" name="home_dir" value="${escapeHtml(draft.home_dir)}" placeholder="例如：/home/vell" />
-                </div>
-                <div class="field full">
-                  <label for="system-user-groups">附加用户组</label>
-                  <input id="system-user-groups" name="groups" value="${escapeHtml(draft.groups)}" placeholder="例如：wheel, docker" />
-                </div>
-                <div class="field full">
-                  <label class="checkbox-row">
-                    <input id="system-user-sudo-enabled" name="sudo_enabled" type="checkbox"${draft.sudo_enabled ? " checked" : ""} />
-                    <span>启用 sudo（平台会按需补齐 sudo 包并写入规则）</span>
-                  </label>
-                </div>
-                <div class="field full">
-                  <label>默认节点组范围</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.nodeGroups.length
-                        ? appState.nodeGroups
-                            .map(
-                              (group) => `
-                                <label class="ops-check-card">
-                                  <input
-                                    type="checkbox"
-                                    name="node_group_ids"
-                                    value="${escapeHtml(group.id)}"
-                                    ${draft.node_group_ids.includes(group.id) ? "checked" : ""}
-                                  />
-                                  <span>
-                                    <strong>${escapeHtml(group.name || group.id)}</strong>
-                                    <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">还没有节点组。可以先到发布中心创建节点组。</div>'
-                    }
-                  </div>
-                </div>
-                <div class="field full">
-                  <label for="system-user-ssh-authorized-keys">SSH 公钥（每行一把）</label>
-                  <textarea id="system-user-ssh-authorized-keys" name="ssh_authorized_keys" placeholder="ssh-ed25519 AAAA...">${escapeHtml(draft.ssh_authorized_keys)}</textarea>
-                </div>
-                <div class="field full">
-                  <label for="system-user-note">备注</label>
-                  <textarea id="system-user-note" name="note" placeholder="记录账号用途、适用范围和风控说明。">${escapeHtml(draft.note)}</textarea>
-                </div>
-                <div class="ops-action-row">
-                  <button class="button primary" type="submit">${selectedSystemUser ? "保存修改" : "创建系统用户"}</button>
-                  <button class="button" type="button" id="system-user-form-reset">重置</button>
-                  ${
-                    selectedSystemUser
-                      ? '<button class="button ghost" type="button" id="system-user-delete-current">删除当前用户</button>'
-                      : ""
-                  }
-                </div>
-              </form>
-
-              ${
-                state.message
-                  ? `<div class="message ${state.message.type}">${escapeHtml(state.message.text)}</div>`
-                  : ""
-              }
-            </div>
-          </article>
-
-          <article class="panel" id="system-user-apply-panel">
-            <div class="panel-body">
-              <div class="panel-title">
-                <div>
-                  <h3>批量下发</h3>
-                  <p>把系统用户配置批量写到节点。未显式选择节点时，会回落到系统用户自身绑定的默认节点组。</p>
+                  <h3>${selectedSystemUser ? "当前焦点" : "桌面工作流"}</h3>
+                  <p>${selectedSystemUser ? "先确认账号语义和范围，再进入编辑或批量下发。" : "先从列表里选中一个账号，或者直接创建新的统一运维账号。"}</p>
                 </div>
               </div>
-
-              <form id="system-user-apply-form" class="ops-form-grid">
-                <div class="field full">
-                  <label for="system-user-apply-title">下发标题</label>
-                  <input id="system-user-apply-title" name="title" value="${escapeHtml(state.applyDraft.title)}" placeholder="例如：统一下发 vell 运维账号" />
-                </div>
-                <div class="field full">
-                  <label>选择系统用户</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.systemUsers.length
-                        ? appState.systemUsers
-                            .map(
-                              (systemUser) => `
-                                <label class="ops-check-card">
-                                  <input
-                                    type="checkbox"
-                                    data-system-user-apply-user="true"
-                                    value="${escapeHtml(systemUser.id)}"
-                                    ${state.applyDraft.system_user_ids.includes(systemUser.id) ? "checked" : ""}
-                                  />
-                                  <span>
-                                    <strong>${escapeHtml(systemUser.name || systemUser.username || systemUser.id)}</strong>
-                                    <span class="tiny mono">${escapeHtml(systemUser.username || "-")}</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">还没有系统用户，先在上方创建一个。</div>'
-                    }
-                  </div>
-                </div>
-                <div class="field full">
-                  <label>目标节点组</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.nodeGroups.length
-                        ? appState.nodeGroups
-                            .map(
-                              (group) => `
-                                <label class="ops-check-card">
-                                  <input
-                                    type="checkbox"
-                                    data-system-user-apply-group="true"
-                                    value="${escapeHtml(group.id)}"
-                                    ${state.applyDraft.node_group_ids.includes(group.id) ? "checked" : ""}
-                                  />
-                                  <span>
-                                    <strong>${escapeHtml(group.name || group.id)}</strong>
-                                    <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">当前还没有节点组，可直接勾选下面的单台节点。</div>'
-                    }
-                  </div>
-                </div>
-                <div class="field full">
-                  <label>直接节点</label>
-                  <div class="ops-check-grid">
-                    ${
-                      appState.nodes.length
-                        ? appState.nodes
-                            .map(
-                              (node) => `
-                                <label class="ops-check-card">
-                                  <input
-                                    type="checkbox"
-                                    data-system-user-apply-node="true"
-                                    value="${escapeHtml(node.id)}"
-                                    ${state.applyDraft.node_ids.includes(node.id) ? "checked" : ""}
-                                  />
-                                  <span>
-                                    <strong>${escapeHtml(getNodeName(node.id))}</strong>
-                                    <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml((node.management?.access_mode || "direct") === "relay" ? (node.management?.proxy_host ? "SSH 经代理" : "SSH 经跳板") : "SSH 直连")}</span>
-                                  </span>
-                                </label>
-                              `,
-                            )
-                            .join("")
-                        : '<div class="ops-empty-block">当前没有可选节点。</div>'
-                    }
-                  </div>
-                </div>
-                <div class="field full">
-                  <label for="system-user-apply-note">备注</label>
-                  <textarea id="system-user-apply-note" name="note" placeholder="记录本次账号调整、目标范围和验证方式。">${escapeHtml(state.applyDraft.note)}</textarea>
-                </div>
-                <div class="ops-action-row">
-                  <button class="button primary" type="submit">开始下发</button>
-                  <button class="button" type="button" id="system-user-apply-reset">重置选择</button>
-                </div>
-              </form>
-
               ${
-                state.applyMessage
-                  ? `<div class="message ${state.applyMessage.type}">${escapeHtml(state.applyMessage.text)}</div>`
-                  : ""
+                selectedSystemUser
+                  ? `
+                    <div class="ops-focus-summary">
+                      <div class="ops-focus-strip">
+                        <span class="eyebrow">当前账号</span>
+                        <strong>${escapeHtml(selectedSystemUser.name || selectedSystemUser.username || selectedSystemUser.id)}</strong>
+                        <p class="tiny mono">${escapeHtml(selectedSystemUser.username || "-")} / ${escapeHtml(selectedSystemUser.shell || "/bin/sh")}</p>
+                      </div>
+                      <div class="detail-kv">
+                        <div class="kv-row"><span>状态</span><strong>${statusText(selectedSystemUser.status)}</strong></div>
+                        <div class="kv-row"><span>附加分组</span><strong>${escapeHtml(selectedUserGroupSummary)}</strong></div>
+                        <div class="kv-row"><span>SSH 公钥</span><strong>${escapeHtml(String(selectedUserKeyCount))} 把</strong></div>
+                        <div class="kv-row"><span>默认范围</span><strong>${escapeHtml(String(selectedUserScopeCount))} 个节点组</strong></div>
+                      </div>
+                    </div>
+                  `
+                  : `
+                    <div class="event-list">
+                      <div class="event"><strong>先定义账号语义</strong><p>把统一运维账号、只读账号、临时应急账号拆开，不要把所有节点都混成一个 root 入口。</p></div>
+                      <div class="event"><strong>把默认范围提前建好</strong><p>把常用节点组和系统用户绑定，后续下发时就不用每次重新勾选。</p></div>
+                    </div>
+                  `
               }
+              <div class="ops-action-row">
+                <button class="button primary" type="button" id="focus-system-user-form">${selectedSystemUser ? "编辑当前用户" : "新建系统用户"}</button>
+                <button class="button ghost" type="button" id="focus-system-user-apply">去批量下发</button>
+              </div>
             </div>
           </article>
 
@@ -584,20 +396,230 @@ export function createSystemUsersPageModule(dependencies) {
               <div class="panel-title">
                 <div>
                   <h3>最近下发记录</h3>
-                  <p>每次系统用户变更都会沉淀为独立记录，方便回放真实节点回显。</p>
+                  <p>先看最近 8 次真实落地结果，方便回放节点回显。</p>
                 </div>
               </div>
-              <div class="table-shell">
-                <table>
-                  <thead>
-                    <tr><th>记录</th><th>状态</th><th>范围</th><th>结果</th><th>回显</th></tr>
-                  </thead>
-                  <tbody>${releaseRows}</tbody>
-                </table>
-              </div>
+              <div class="ops-soft-list">${releaseItems}</div>
             </div>
           </article>
         </aside>
+      </section>
+
+      <section class="workspace fade-up ops-editor-stage">
+        <article class="panel" id="system-user-form-panel">
+          <div class="panel-body">
+            <div class="panel-title">
+              <div>
+                <h3>${selectedSystemUser ? "编辑系统用户" : "新建系统用户"}</h3>
+                <p>${selectedSystemUser ? "修改后可直接再次批量下发覆盖到节点。" : "建议先从统一运维账号开始，例如 vell。"} </p>
+              </div>
+              ${selectedSystemUser ? `<span class="pill mono">${escapeHtml(selectedSystemUser.id)}</span>` : ""}
+            </div>
+
+            <form id="system-user-form" class="ops-form-grid">
+              <div class="field">
+                <label for="system-user-name">显示名称</label>
+                <input id="system-user-name" name="name" value="${escapeHtml(draft.name)}" placeholder="例如：统一运维账号" />
+              </div>
+              <div class="field">
+                <label for="system-user-username">用户名</label>
+                <input id="system-user-username" name="username" value="${escapeHtml(draft.username)}" placeholder="例如：vell" />
+              </div>
+              <div class="field">
+                <label for="system-user-status">状态</label>
+                <select id="system-user-status" name="status">
+                  <option value="active"${draft.status === "active" ? " selected" : ""}>启用</option>
+                  <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用并锁定</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="system-user-uid">UID</label>
+                <input id="system-user-uid" name="uid" type="number" min="1" value="${escapeHtml(draft.uid)}" placeholder="留空则自动分配" />
+              </div>
+              <div class="field">
+                <label for="system-user-shell">Shell</label>
+                <input id="system-user-shell" name="shell" value="${escapeHtml(draft.shell)}" placeholder="/bin/sh" />
+              </div>
+              <div class="field">
+                <label for="system-user-home-dir">Home 目录</label>
+                <input id="system-user-home-dir" name="home_dir" value="${escapeHtml(draft.home_dir)}" placeholder="例如：/home/vell" />
+              </div>
+              <div class="field full">
+                <label for="system-user-groups">附加用户组</label>
+                <input id="system-user-groups" name="groups" value="${escapeHtml(draft.groups)}" placeholder="例如：wheel, docker" />
+              </div>
+              <div class="field full">
+                <label class="checkbox-row">
+                  <input id="system-user-sudo-enabled" name="sudo_enabled" type="checkbox"${draft.sudo_enabled ? " checked" : ""} />
+                  <span>启用 sudo（平台会按需补齐 sudo 包并写入规则）</span>
+                </label>
+              </div>
+              <div class="field full">
+                <label>默认节点组范围</label>
+                <div class="ops-check-grid">
+                  ${
+                    appState.nodeGroups.length
+                      ? appState.nodeGroups
+                          .map(
+                            (group) => `
+                              <label class="ops-check-card">
+                                <input
+                                  type="checkbox"
+                                  name="node_group_ids"
+                                  value="${escapeHtml(group.id)}"
+                                  ${draft.node_group_ids.includes(group.id) ? "checked" : ""}
+                                />
+                                <span>
+                                  <strong>${escapeHtml(group.name || group.id)}</strong>
+                                  <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
+                                </span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : '<div class="ops-empty-block">还没有节点组。可以先到发布中心创建节点组。</div>'
+                  }
+                </div>
+              </div>
+              <div class="field full">
+                <label for="system-user-ssh-authorized-keys">SSH 公钥（每行一把）</label>
+                <textarea id="system-user-ssh-authorized-keys" name="ssh_authorized_keys" placeholder="ssh-ed25519 AAAA...">${escapeHtml(draft.ssh_authorized_keys)}</textarea>
+              </div>
+              <div class="field full">
+                <label for="system-user-note">备注</label>
+                <textarea id="system-user-note" name="note" placeholder="记录账号用途、适用范围和风控说明。">${escapeHtml(draft.note)}</textarea>
+              </div>
+              <div class="ops-action-row">
+                <button class="button primary" type="submit">${selectedSystemUser ? "保存修改" : "创建系统用户"}</button>
+                <button class="button" type="button" id="system-user-form-reset">重置</button>
+                ${
+                  selectedSystemUser
+                    ? '<button class="button ghost" type="button" id="system-user-delete-current">删除当前用户</button>'
+                    : ""
+                }
+              </div>
+            </form>
+
+            ${
+              state.message
+                ? `<div class="message ${state.message.type}">${escapeHtml(state.message.text)}</div>`
+                : ""
+            }
+          </div>
+        </article>
+
+        <article class="panel" id="system-user-apply-panel">
+          <div class="panel-body">
+            <div class="panel-title">
+              <div>
+                <h3>批量下发</h3>
+                <p>把系统用户配置批量写到节点。未显式选择节点时，会回落到系统用户自身绑定的默认节点组。</p>
+              </div>
+            </div>
+
+            <form id="system-user-apply-form" class="ops-form-grid">
+              <div class="field full">
+                <label for="system-user-apply-title">下发标题</label>
+                <input id="system-user-apply-title" name="title" value="${escapeHtml(state.applyDraft.title)}" placeholder="例如：统一下发 vell 运维账号" />
+              </div>
+              <div class="field full">
+                <label>选择系统用户</label>
+                <div class="ops-check-grid">
+                  ${
+                    appState.systemUsers.length
+                      ? appState.systemUsers
+                          .map(
+                            (systemUser) => `
+                              <label class="ops-check-card">
+                                <input
+                                  type="checkbox"
+                                  data-system-user-apply-user="true"
+                                  value="${escapeHtml(systemUser.id)}"
+                                  ${state.applyDraft.system_user_ids.includes(systemUser.id) ? "checked" : ""}
+                                />
+                                <span>
+                                  <strong>${escapeHtml(systemUser.name || systemUser.username || systemUser.id)}</strong>
+                                  <span class="tiny mono">${escapeHtml(systemUser.username || "-")}</span>
+                                </span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : '<div class="ops-empty-block">还没有系统用户，先在上方创建一个。</div>'
+                  }
+                </div>
+              </div>
+              <div class="field full">
+                <label>目标节点组</label>
+                <div class="ops-check-grid">
+                  ${
+                    appState.nodeGroups.length
+                      ? appState.nodeGroups
+                          .map(
+                            (group) => `
+                              <label class="ops-check-card">
+                                <input
+                                  type="checkbox"
+                                  data-system-user-apply-group="true"
+                                  value="${escapeHtml(group.id)}"
+                                  ${state.applyDraft.node_group_ids.includes(group.id) ? "checked" : ""}
+                                />
+                                <span>
+                                  <strong>${escapeHtml(group.name || group.id)}</strong>
+                                  <span class="tiny">${Array.isArray(group.node_ids) ? group.node_ids.length : 0} 台节点</span>
+                                </span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : '<div class="ops-empty-block">当前还没有节点组，可直接勾选下面的单台节点。</div>'
+                  }
+                </div>
+              </div>
+              <div class="field full">
+                <label>直接节点</label>
+                <div class="ops-check-grid">
+                  ${
+                    appState.nodes.length
+                      ? appState.nodes
+                          .map(
+                            (node) => `
+                              <label class="ops-check-card">
+                                <input
+                                  type="checkbox"
+                                  data-system-user-apply-node="true"
+                                  value="${escapeHtml(node.id)}"
+                                  ${state.applyDraft.node_ids.includes(node.id) ? "checked" : ""}
+                                />
+                                <span>
+                                  <strong>${escapeHtml(getNodeName(node.id))}</strong>
+                                  <span class="tiny">${escapeHtml(node.labels?.region || "-")} / ${escapeHtml((node.management?.access_mode || "direct") === "relay" ? (node.management?.proxy_host ? "SSH 经代理" : "SSH 经跳板") : "SSH 直连")}</span>
+                                </span>
+                              </label>
+                            `,
+                          )
+                          .join("")
+                      : '<div class="ops-empty-block">当前没有可选节点。</div>'
+                  }
+                </div>
+              </div>
+              <div class="field full">
+                <label for="system-user-apply-note">备注</label>
+                <textarea id="system-user-apply-note" name="note" placeholder="记录本次账号调整、目标范围和验证方式。">${escapeHtml(state.applyDraft.note)}</textarea>
+              </div>
+              <div class="ops-action-row">
+                <button class="button primary" type="submit">开始下发</button>
+                <button class="button" type="button" id="system-user-apply-reset">重置选择</button>
+              </div>
+            </form>
+
+            ${
+              state.applyMessage
+                ? `<div class="message ${state.applyMessage.type}">${escapeHtml(state.applyMessage.text)}</div>`
+                : ""
+            }
+          </div>
+        </article>
       </section>
     `;
   }

@@ -461,6 +461,66 @@ export function createProxyProfilesPageModule(dependencies) {
     ).length;
     const realityCount = appState.proxyProfiles.filter((profile) => profile.reality_enabled).length;
     const muxCount = appState.proxyProfiles.filter((profile) => profile.mux_enabled).length;
+    const selectedAssignedUsers = selectedProfile
+      ? appState.accessUsers.filter((user) => user.profile_id === selectedProfile.id).length
+      : 0;
+    const selectedReleaseCount = selectedProfile
+      ? appState.configReleases.filter((release) => release.profile_id === selectedProfile.id).length
+      : 0;
+    const selectedProfileSummaryRows = selectedProfile
+      ? [
+          ["协议栈", `${String(selectedProfile.protocol || "vless").toUpperCase()} / ${String(selectedProfile.transport || "tcp").toUpperCase()} / ${String(selectedProfile.security || "reality").toUpperCase()}`],
+          ["监听端口", String(selectedProfile.listen_port || "-")],
+          ["已挂用户", `${selectedAssignedUsers} 个`],
+          ["历史发布", `${selectedReleaseCount} 次`],
+        ]
+      : [
+          ["模板目标", "统一协议主数据"],
+          ["推荐方式", "先结构化，后补高级 JSON"],
+          ["复用范围", "接入用户 / 发布中心 / 分享链路"],
+          ["维护策略", "一个区域一套模板更稳"],
+        ];
+    const selectedProfileAlert = selectedProfile
+      ? `当前模板已关联 ${selectedAssignedUsers} 个接入用户，修改后建议到发布中心重新下发。`
+      : "先收口高频协议参数，再把边角能力留给高级 JSON，避免每次发布都手工拼模板。";
+    const relatedReleases = [...appState.configReleases]
+      .filter((release) => (selectedProfile ? release.profile_id === selectedProfile.id : true))
+      .sort(
+        (left, right) =>
+          new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime(),
+      )
+      .slice(0, 6);
+    const relatedReleaseItems = relatedReleases.length
+      ? relatedReleases
+          .map(
+            (release) => `
+              <article class="ops-soft-item">
+                <div class="ops-soft-main">
+                  <strong>${escapeHtml(release.title || release.id)}</strong>
+                  <span class="tiny">${escapeHtml(
+                    release.profile_id === selectedProfile?.id
+                      ? "当前模板已参与此发布"
+                      : appState.proxyProfiles.find((profile) => profile.id === release.profile_id)?.name ||
+                          release.profile_id ||
+                          "未指定模板",
+                  )}</span>
+                  <span class="tiny">${formatDate(release.created_at)} · ${escapeHtml(
+                    formatRelativeTime(release.created_at),
+                  )}</span>
+                </div>
+                <div class="ops-table-actions">
+                  <span class="${statusClassName(release.status)}">${statusText(release.status)}</span>
+                  ${
+                    release.operation_id
+                      ? `<a class="button ghost" href="/terminal.html?operation_id=${encodeURIComponent(release.operation_id)}">查看回显</a>`
+                      : ""
+                  }
+                </div>
+              </article>
+            `,
+          )
+          .join("")
+      : `<div class="empty">${selectedProfile ? "当前模板还没有发布记录。" : "还没有协议模板发布记录。"}</div>`;
     const rows = filteredProfiles.length
       ? filteredProfiles
           .map((profile) => {
@@ -521,13 +581,13 @@ export function createProxyProfilesPageModule(dependencies) {
         <article class="panel"><div class="panel-body"><div class="stat-label">开启 Mux</div><div class="stat-value">${muxCount}</div><div class="stat-foot">已开启复用的模板，适合高并发场景统一切换。</div></div></article>
       </section>
 
-      <section class="workspace fade-up ops-page-grid">
+      <section class="workspace fade-up ops-control-stage">
         <article class="panel">
           <div class="panel-body">
             <div class="panel-title">
               <div>
-                <h3>模板列表</h3>
-                <p>模板把协议参数和节点侧配置统一抽象起来，后面发布只选模板不手填。</p>
+                <h3>模板台账</h3>
+                <p>模板是协议主数据，不只是端口和域名的备忘录。首屏先看清有哪些模板、被谁复用、最近是否还在更新。</p>
               </div>
               <div class="ops-toolbar">
                 <div class="field ops-inline-field">
@@ -548,193 +608,47 @@ export function createProxyProfilesPageModule(dependencies) {
           </div>
         </article>
 
-        <aside class="aside-stack">
-          <article class="panel" id="proxy-profile-form-panel">
+        <aside class="aside-stack ops-control-rail">
+          <article class="panel">
             <div class="panel-body">
               <div class="panel-title">
                 <div>
-                  <h3>${selectedProfile ? "编辑协议模板" : "新建协议模板"}</h3>
-                  <p>${selectedProfile ? "先改模板，再去发布中心重新下发。" : "先把高频 TLS / Reality / 传输参数结构化，复杂边角继续留给高级 JSON。"} </p>
+                  <h3>${selectedProfile ? "当前模板焦点" : "桌面工作流"}</h3>
+                  <p>${selectedProfile ? "先确认模板语义和复用面，再进入完整编辑器。" : "首屏只保留模板台账和上下文，完整编辑器放到下一段单独展开。"} </p>
                 </div>
-                ${selectedProfile ? `<span class="pill mono">${escapeHtml(selectedProfile.id)}</span>` : ""}
               </div>
-
-              <form id="proxy-profile-form" class="ops-form-grid">
-                <div class="field">
-                  <label for="proxy-profile-name">模板名称</label>
-                  <input id="proxy-profile-name" name="name" value="${escapeHtml(draft.name)}" placeholder="例如：VLESS-REALITY-HK-443" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-status">状态</label>
-                  <select id="proxy-profile-status" name="status">
-                    <option value="active"${draft.status === "active" ? " selected" : ""}>可用</option>
-                    <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-protocol">协议</label>
-                  <select id="proxy-profile-protocol" name="protocol">
-                    <option value="vless"${draft.protocol === "vless" ? " selected" : ""}>VLESS</option>
-                    <option value="vmess"${draft.protocol === "vmess" ? " selected" : ""}>VMess</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-listen-port">监听端口</label>
-                  <input id="proxy-profile-listen-port" name="listen_port" value="${escapeHtml(draft.listen_port)}" placeholder="443" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-transport">传输层</label>
-                  <select id="proxy-profile-transport" name="transport">
-                    <option value="tcp"${draft.transport === "tcp" ? " selected" : ""}>TCP</option>
-                    <option value="ws"${draft.transport === "ws" ? " selected" : ""}>WebSocket</option>
-                    <option value="grpc"${draft.transport === "grpc" ? " selected" : ""}>gRPC</option>
-                    <option value="http"${draft.transport === "http" ? " selected" : ""}>HTTP (H2)</option>
-                    <option value="httpupgrade"${draft.transport === "httpupgrade" ? " selected" : ""}>HTTP Upgrade</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-security">安全层</label>
-                  <select id="proxy-profile-security" name="security">
-                    <option value="reality"${draft.security === "reality" ? " selected" : ""}>Reality</option>
-                    <option value="tls"${draft.security === "tls" ? " selected" : ""}>TLS</option>
-                    <option value="none"${draft.security === "none" ? " selected" : ""}>无</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-server-name">伪装域名 / SNI</label>
-                  <input id="proxy-profile-server-name" name="server_name" value="${escapeHtml(draft.server_name)}" placeholder="cdn.example.com" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-flow">Flow</label>
-                  <input id="proxy-profile-flow" name="flow" value="${escapeHtml(draft.flow)}" placeholder="xtls-rprx-vision" />
-                  <div class="field-note">VLESS 常用该字段；如果选择 VMess，发布时会自动忽略。</div>
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-tag">模板标签</label>
-                  <input id="proxy-profile-tag" name="tag" value="${escapeHtml(draft.tag)}" placeholder="hk-primary / cn-relay" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-tls-cert-path">证书路径</label>
-                  <input id="proxy-profile-tls-cert-path" name="tls_certificate_path" value="${escapeHtml(draft.tls_certificate_path)}" placeholder="/etc/ssl/airport/fullchain.pem" />
-                  <div class="field-note">推荐配合系统模板里的 ACME 证书申请，把证书统一落到固定路径后再在这里引用。</div>
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-tls-key-path">证书私钥路径</label>
-                  <input id="proxy-profile-tls-key-path" name="tls_key_path" value="${escapeHtml(draft.tls_key_path)}" placeholder="/etc/ssl/airport/privkey.pem" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-tls-alpn">ALPN</label>
-                  <input id="proxy-profile-tls-alpn" name="tls_alpn" value="${escapeHtml(draft.tls_alpn)}" placeholder="h2, http/1.1" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-tls-min-version">TLS 最低版本</label>
-                  <input id="proxy-profile-tls-min-version" name="tls_min_version" value="${escapeHtml(draft.tls_min_version)}" placeholder="1.2" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-tls-max-version">TLS 最高版本</label>
-                  <input id="proxy-profile-tls-max-version" name="tls_max_version" value="${escapeHtml(draft.tls_max_version)}" placeholder="1.3" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-reality-key-path">Reality 私钥路径</label>
-                  <input id="proxy-profile-reality-key-path" name="reality_private_key_path" value="${escapeHtml(draft.reality_private_key_path)}" placeholder="/etc/airport/reality/private.key" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-reality-public-key">Reality 公钥</label>
-                  <input id="proxy-profile-reality-public-key" name="reality_public_key" value="${escapeHtml(draft.reality_public_key)}" placeholder="分享链接需要的 public key，可后补" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-reality-client-fingerprint">Reality 客户端指纹</label>
-                  <input id="proxy-profile-reality-client-fingerprint" name="reality_client_fingerprint" value="${escapeHtml(draft.reality_client_fingerprint)}" placeholder="例如 chrome / safari / edge" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-reality-short-ids">Reality Short IDs</label>
-                  <input id="proxy-profile-reality-short-ids" name="reality_short_ids" value="${escapeHtml(draft.reality_short_ids)}" placeholder="0123abcd, 89ef4567" />
-                </div>
-                <div class="field-note full">
-                  Reality 私钥仍然只建议存节点本地路径；这里新增的 public key / 客户端指纹主要用于后端生成订阅与直连分享链接。
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-reality-server">Reality 握手域名</label>
-                  <input id="proxy-profile-reality-server" name="reality_handshake_server" value="${escapeHtml(draft.reality_handshake_server)}" placeholder="www.cloudflare.com" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-reality-port">Reality 握手端口</label>
-                  <input id="proxy-profile-reality-port" name="reality_handshake_server_port" value="${escapeHtml(draft.reality_handshake_server_port)}" placeholder="443" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-reality-max-diff">Reality 时差容忍</label>
-                  <input id="proxy-profile-reality-max-diff" name="reality_max_time_difference" value="${escapeHtml(draft.reality_max_time_difference)}" placeholder="1m" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-transport-path">传输 Path</label>
-                  <input id="proxy-profile-transport-path" name="transport_path" value="${escapeHtml(draft.transport_path)}" placeholder="/ray / grpc / tunnel" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-transport-host">Host / H2 Host</label>
-                  <input id="proxy-profile-transport-host" name="transport_host" value="${escapeHtml(draft.transport_host)}" placeholder="cdn.example.com, static.example.com" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-http-method">HTTP 方法</label>
-                  <input id="proxy-profile-http-method" name="http_method" value="${escapeHtml(draft.http_method)}" placeholder="GET / POST / PUT" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-grpc-service">gRPC 服务名</label>
-                  <input id="proxy-profile-grpc-service" name="grpc_service_name" value="${escapeHtml(draft.grpc_service_name)}" placeholder="GunService" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-transport-idle-timeout">连接空闲超时</label>
-                  <input id="proxy-profile-transport-idle-timeout" name="transport_idle_timeout" value="${escapeHtml(draft.transport_idle_timeout)}" placeholder="15s" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-transport-ping-timeout">Ping 超时</label>
-                  <input id="proxy-profile-transport-ping-timeout" name="transport_ping_timeout" value="${escapeHtml(draft.transport_ping_timeout)}" placeholder="15s" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-early-data-header">Early Data 请求头</label>
-                  <input id="proxy-profile-early-data-header" name="early_data_header_name" value="${escapeHtml(draft.early_data_header_name)}" placeholder="Sec-WebSocket-Protocol" />
-                </div>
-                <div class="field">
-                  <label for="proxy-profile-max-early-data">Early Data 上限</label>
-                  <input id="proxy-profile-max-early-data" name="max_early_data" value="${escapeHtml(draft.max_early_data)}" placeholder="2048" />
-                </div>
-                <label class="check-row">
-                  <input id="proxy-profile-mux-enabled" name="mux_enabled" type="checkbox"${draft.mux_enabled ? " checked" : ""} />
-                  <span>开启 Mux</span>
-                </label>
-                <div class="field full">
-                  <label for="proxy-profile-transport-headers">传输头 JSON（可选）</label>
-                  <textarea id="proxy-profile-transport-headers" name="transport_headers" placeholder='例如：{"X-Forwarded-For":"cdn","User-Agent":"Mozilla/5.0"}' class="mono">${escapeHtml(draft.transport_headers)}</textarea>
-                  <div class="field-note">
-                    用于补充 WS / HTTP(H2) / HTTP Upgrade 的请求头。WS / HTTP Upgrade 的 Host 会自动写入 <span class="mono">headers.Host</span>，HTTP(H2) 则会写入 <span class="mono">host</span> 列表，这里更适合放其他头。
-                  </div>
-                </div>
-                <div class="field full">
-                  <label for="proxy-profile-note">备注</label>
-                  <textarea id="proxy-profile-note" name="note" placeholder="记录适用地区、伪装策略、上线计划。">${escapeHtml(draft.note)}</textarea>
-                </div>
-                <div class="field full">
-                  <label for="proxy-profile-template">高级模板 JSON（可选）</label>
-                  <textarea id="proxy-profile-template" name="template" placeholder='例如：{"outbounds":[...],"route":{...},"tls":{"client_auth":{...}}}' class="mono">${escapeHtml(draft.template)}</textarea>
-                  <div class="field-note">
-                    上面的结构化字段会优先覆盖这里的同名键。这里更适合补充 <span class="mono">outbounds</span>、<span class="mono">route</span>、高级 <span class="mono">tls</span> / <span class="mono">reality</span> 选项，以及更细的传输参数。私钥仍然建议只放节点本地文件路径，不要把真实内容直接贴进 JSON。
-                  </div>
-                </div>
-                <div class="ops-action-row">
-                  <button class="button primary" type="submit">${selectedProfile ? "保存模板" : "创建模板"}</button>
-                  <button class="button" type="button" id="proxy-profile-form-reset">重置</button>
-                  ${
-                    selectedProfile
-                      ? '<button class="button ghost" type="button" id="proxy-profile-delete-current">删除当前模板</button>'
-                      : ""
-                  }
-                </div>
-              </form>
-
               ${
-                state.message
-                  ? `<div class="message ${state.message.type}">${escapeHtml(state.message.text)}</div>`
-                  : ""
+                selectedProfile
+                  ? `
+                    <div class="ops-focus-summary">
+                      <div class="ops-focus-strip">
+                        <span class="eyebrow">当前模板</span>
+                        <strong>${escapeHtml(selectedProfile.name || selectedProfile.id)}</strong>
+                        <p class="tiny mono">${escapeHtml(selectedProfile.id || "-")}</p>
+                      </div>
+                      <div class="detail-kv">
+                        <div class="kv-row"><span>协议栈</span><strong>${escapeHtml(
+                          `${String(selectedProfile.protocol || "vless").toUpperCase()} / ${String(selectedProfile.transport || "tcp").toUpperCase()} / ${String(selectedProfile.security || "reality").toUpperCase()}`,
+                        )}</strong></div>
+                        <div class="kv-row"><span>监听端口</span><strong>${escapeHtml(String(selectedProfile.listen_port || "-"))}</strong></div>
+                        <div class="kv-row"><span>已挂用户</span><strong>${escapeHtml(String(selectedAssignedUsers))} 个</strong></div>
+                        <div class="kv-row"><span>历史发布</span><strong>${escapeHtml(String(selectedReleaseCount))} 次</strong></div>
+                      </div>
+                      <p class="tiny">${escapeHtml(selectedProfileAlert)}</p>
+                    </div>
+                  `
+                  : `
+                    <div class="event-list">
+                      <div class="event"><strong>先把高频参数结构化</strong><p>TLS、Reality、传输层、监听端口优先写成结构化字段，别把所有规则都塞进 JSON。</p></div>
+                      <div class="event"><strong>一套模板对应一类入口</strong><p>按区域、协议栈或入口类型拆模板，后续发布、分享和问题定位都会清楚很多。</p></div>
+                      <div class="event"><strong>发布前先看复用面</strong><p>${escapeHtml(selectedProfileAlert)}</p></div>
+                    </div>
+                  `
               }
+              <div class="ops-action-row">
+                <button class="button primary" type="button" id="focus-proxy-profile-form">${selectedProfile ? "编辑当前模板" : "新建模板"}</button>
+                <a class="button ghost" href="/releases.html">去发布中心</a>
+              </div>
             </div>
           </article>
 
@@ -742,18 +656,262 @@ export function createProxyProfilesPageModule(dependencies) {
             <div class="panel-body">
               <div class="panel-title">
                 <div>
-                  <h3>模板使用建议</h3>
-                  <p>把变化最频繁的参数留在模板层，节点只做执行和重载。</p>
+                  <h3>${selectedProfile ? "最近关联发布" : "最近模板发布"}</h3>
+                  <p>${selectedProfile ? "先看这个模板最近是否真的被发布过，再决定是否继续调整。" : "模板改动最终都要回到发布中心做真实下发。"} </p>
                 </div>
               </div>
-              <div class="event-list">
-                <div class="event"><strong>按区域拆模板</strong><p>香港入口、日本落地或中转链路可以独立维护。</p></div>
-                <div class="event"><strong>证书与伪装分层</strong><p>常用证书路径、SNI、Reality 握手参数放结构化字段，特殊站点伪装再放高级 JSON。</p></div>
-                <div class="event"><strong>配合发布记录</strong><p>模板变更后建议立即走发布中心做一次可追踪下发。</p></div>
-              </div>
+              <div class="ops-soft-list">${relatedReleaseItems}</div>
             </div>
           </article>
         </aside>
+      </section>
+
+      <section class="workspace fade-up ops-profile-editor-stage">
+        <article class="panel" id="proxy-profile-form-panel">
+          <div class="panel-body">
+            <div class="panel-title">
+              <div>
+                <h3>${selectedProfile ? "编辑协议模板" : "新建协议模板"}</h3>
+                <p>${selectedProfile ? "这里保留完整编辑器，便于集中处理模板结构和高级参数。" : "把完整编辑器放到第二工作区，首屏只做台账与焦点判断。"} </p>
+              </div>
+              ${selectedProfile ? `<span class="pill mono">${escapeHtml(selectedProfile.id)}</span>` : ""}
+            </div>
+
+            <form id="proxy-profile-form" class="stack proxy-profile-form-shell">
+              <div class="proxy-profile-form-overview">
+                ${selectedProfileSummaryRows
+                  .map(
+                    ([label, value]) => `
+                      <div class="proxy-profile-form-overview-card">
+                        <span>${escapeHtml(label)}</span>
+                        <strong>${escapeHtml(String(value || "-"))}</strong>
+                      </div>
+                    `,
+                  )
+                  .join("")}
+              </div>
+
+              <section class="proxy-profile-form-section">
+                <div class="proxy-profile-form-section-head">
+                  <div>
+                    <h4>模板身份</h4>
+                    <p>先定义模板是谁、给谁用、监听什么端口，后续其它能力都围绕这组主数据展开。</p>
+                  </div>
+                </div>
+                <div class="ops-form-grid">
+                  <div class="field">
+                    <label for="proxy-profile-name">模板名称</label>
+                    <input id="proxy-profile-name" name="name" value="${escapeHtml(draft.name)}" placeholder="例如：VLESS-REALITY-HK-443" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-status">状态</label>
+                    <select id="proxy-profile-status" name="status">
+                      <option value="active"${draft.status === "active" ? " selected" : ""}>可用</option>
+                      <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-protocol">协议</label>
+                    <select id="proxy-profile-protocol" name="protocol">
+                      <option value="vless"${draft.protocol === "vless" ? " selected" : ""}>VLESS</option>
+                      <option value="vmess"${draft.protocol === "vmess" ? " selected" : ""}>VMess</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-listen-port">监听端口</label>
+                    <input id="proxy-profile-listen-port" name="listen_port" value="${escapeHtml(draft.listen_port)}" placeholder="443" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-tag">模板标签</label>
+                    <input id="proxy-profile-tag" name="tag" value="${escapeHtml(draft.tag)}" placeholder="hk-primary / cn-relay" />
+                  </div>
+                  <label class="check-row proxy-profile-check-row">
+                    <input id="proxy-profile-mux-enabled" name="mux_enabled" type="checkbox"${draft.mux_enabled ? " checked" : ""} />
+                    <span>开启 Mux</span>
+                  </label>
+                  <div class="field full">
+                    <label for="proxy-profile-note">备注</label>
+                    <textarea id="proxy-profile-note" name="note" placeholder="记录适用地区、伪装策略、上线计划。">${escapeHtml(draft.note)}</textarea>
+                  </div>
+                </div>
+              </section>
+
+              <section class="proxy-profile-form-section">
+                <div class="proxy-profile-form-section-head">
+                  <div>
+                    <h4>传输与伪装</h4>
+                    <p>把入口链路最常改的传输层、安全层和伪装域名放在一组里，便于桌面端快速扫读和维护。</p>
+                  </div>
+                </div>
+                <div class="ops-form-grid">
+                  <div class="field">
+                    <label for="proxy-profile-transport">传输层</label>
+                    <select id="proxy-profile-transport" name="transport">
+                      <option value="tcp"${draft.transport === "tcp" ? " selected" : ""}>TCP</option>
+                      <option value="ws"${draft.transport === "ws" ? " selected" : ""}>WebSocket</option>
+                      <option value="grpc"${draft.transport === "grpc" ? " selected" : ""}>gRPC</option>
+                      <option value="http"${draft.transport === "http" ? " selected" : ""}>HTTP (H2)</option>
+                      <option value="httpupgrade"${draft.transport === "httpupgrade" ? " selected" : ""}>HTTP Upgrade</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-security">安全层</label>
+                    <select id="proxy-profile-security" name="security">
+                      <option value="reality"${draft.security === "reality" ? " selected" : ""}>Reality</option>
+                      <option value="tls"${draft.security === "tls" ? " selected" : ""}>TLS</option>
+                      <option value="none"${draft.security === "none" ? " selected" : ""}>无</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-server-name">伪装域名 / SNI</label>
+                    <input id="proxy-profile-server-name" name="server_name" value="${escapeHtml(draft.server_name)}" placeholder="cdn.example.com" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-flow">Flow</label>
+                    <input id="proxy-profile-flow" name="flow" value="${escapeHtml(draft.flow)}" placeholder="xtls-rprx-vision" />
+                    <div class="field-note">VLESS 常用该字段；如果选择 VMess，发布时会自动忽略。</div>
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-transport-path">传输 Path</label>
+                    <input id="proxy-profile-transport-path" name="transport_path" value="${escapeHtml(draft.transport_path)}" placeholder="/ray / grpc / tunnel" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-transport-host">Host / H2 Host</label>
+                    <input id="proxy-profile-transport-host" name="transport_host" value="${escapeHtml(draft.transport_host)}" placeholder="cdn.example.com, static.example.com" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-http-method">HTTP 方法</label>
+                    <input id="proxy-profile-http-method" name="http_method" value="${escapeHtml(draft.http_method)}" placeholder="GET / POST / PUT" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-grpc-service">gRPC 服务名</label>
+                    <input id="proxy-profile-grpc-service" name="grpc_service_name" value="${escapeHtml(draft.grpc_service_name)}" placeholder="GunService" />
+                  </div>
+                </div>
+              </section>
+
+              <section class="proxy-profile-form-section">
+                <div class="proxy-profile-form-section-head">
+                  <div>
+                    <h4>TLS / Reality 材料</h4>
+                    <p>证书路径、Reality 握手与客户端指纹集中管理，不让密钥类字段散在整个长表单里。</p>
+                  </div>
+                </div>
+                <div class="ops-form-grid">
+                  <div class="field">
+                    <label for="proxy-profile-tls-cert-path">证书路径</label>
+                    <input id="proxy-profile-tls-cert-path" name="tls_certificate_path" value="${escapeHtml(draft.tls_certificate_path)}" placeholder="/etc/ssl/airport/fullchain.pem" />
+                    <div class="field-note">推荐配合系统模板里的 ACME 证书申请，把证书统一落到固定路径后再在这里引用。</div>
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-tls-key-path">证书私钥路径</label>
+                    <input id="proxy-profile-tls-key-path" name="tls_key_path" value="${escapeHtml(draft.tls_key_path)}" placeholder="/etc/ssl/airport/privkey.pem" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-tls-alpn">ALPN</label>
+                    <input id="proxy-profile-tls-alpn" name="tls_alpn" value="${escapeHtml(draft.tls_alpn)}" placeholder="h2, http/1.1" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-tls-min-version">TLS 最低版本</label>
+                    <input id="proxy-profile-tls-min-version" name="tls_min_version" value="${escapeHtml(draft.tls_min_version)}" placeholder="1.2" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-tls-max-version">TLS 最高版本</label>
+                    <input id="proxy-profile-tls-max-version" name="tls_max_version" value="${escapeHtml(draft.tls_max_version)}" placeholder="1.3" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-reality-key-path">Reality 私钥路径</label>
+                    <input id="proxy-profile-reality-key-path" name="reality_private_key_path" value="${escapeHtml(draft.reality_private_key_path)}" placeholder="/etc/airport/reality/private.key" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-reality-public-key">Reality 公钥</label>
+                    <input id="proxy-profile-reality-public-key" name="reality_public_key" value="${escapeHtml(draft.reality_public_key)}" placeholder="分享链接需要的 public key，可后补" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-reality-client-fingerprint">Reality 客户端指纹</label>
+                    <input id="proxy-profile-reality-client-fingerprint" name="reality_client_fingerprint" value="${escapeHtml(draft.reality_client_fingerprint)}" placeholder="例如 chrome / safari / edge" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-reality-short-ids">Reality Short IDs</label>
+                    <input id="proxy-profile-reality-short-ids" name="reality_short_ids" value="${escapeHtml(draft.reality_short_ids)}" placeholder="0123abcd, 89ef4567" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-reality-server">Reality 握手域名</label>
+                    <input id="proxy-profile-reality-server" name="reality_handshake_server" value="${escapeHtml(draft.reality_handshake_server)}" placeholder="www.cloudflare.com" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-reality-port">Reality 握手端口</label>
+                    <input id="proxy-profile-reality-port" name="reality_handshake_server_port" value="${escapeHtml(draft.reality_handshake_server_port)}" placeholder="443" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-reality-max-diff">Reality 时差容忍</label>
+                    <input id="proxy-profile-reality-max-diff" name="reality_max_time_difference" value="${escapeHtml(draft.reality_max_time_difference)}" placeholder="1m" />
+                  </div>
+                  <div class="field-note full">
+                    Reality 私钥仍然只建议存节点本地路径；这里新增的 public key / 客户端指纹主要用于后端生成订阅与直连分享链接。
+                  </div>
+                </div>
+              </section>
+
+              <section class="proxy-profile-form-section">
+                <div class="proxy-profile-form-section-head">
+                  <div>
+                    <h4>高级扩展</h4>
+                    <p>超时、Early Data、补充请求头与高级 JSON 放在最后，避免把常用字段淹没在技术细节里。</p>
+                  </div>
+                </div>
+                <div class="ops-form-grid">
+                  <div class="field">
+                    <label for="proxy-profile-transport-idle-timeout">连接空闲超时</label>
+                    <input id="proxy-profile-transport-idle-timeout" name="transport_idle_timeout" value="${escapeHtml(draft.transport_idle_timeout)}" placeholder="15s" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-transport-ping-timeout">Ping 超时</label>
+                    <input id="proxy-profile-transport-ping-timeout" name="transport_ping_timeout" value="${escapeHtml(draft.transport_ping_timeout)}" placeholder="15s" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-early-data-header">Early Data 请求头</label>
+                    <input id="proxy-profile-early-data-header" name="early_data_header_name" value="${escapeHtml(draft.early_data_header_name)}" placeholder="Sec-WebSocket-Protocol" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-max-early-data">Early Data 上限</label>
+                    <input id="proxy-profile-max-early-data" name="max_early_data" value="${escapeHtml(draft.max_early_data)}" placeholder="2048" />
+                  </div>
+                  <div class="field full">
+                    <label for="proxy-profile-transport-headers">传输头 JSON（可选）</label>
+                    <textarea id="proxy-profile-transport-headers" name="transport_headers" placeholder='例如：{"X-Forwarded-For":"cdn","User-Agent":"Mozilla/5.0"}' class="mono">${escapeHtml(draft.transport_headers)}</textarea>
+                    <div class="field-note">
+                      用于补充 WS / HTTP(H2) / HTTP Upgrade 的请求头。WS / HTTP Upgrade 的 Host 会自动写入 <span class="mono">headers.Host</span>，HTTP(H2) 则会写入 <span class="mono">host</span> 列表，这里更适合放其他头。
+                    </div>
+                  </div>
+                  <div class="field full">
+                    <label for="proxy-profile-template">高级模板 JSON（可选）</label>
+                    <textarea id="proxy-profile-template" name="template" placeholder='例如：{"outbounds":[...],"route":{...},"tls":{"client_auth":{...}}}' class="mono">${escapeHtml(draft.template)}</textarea>
+                    <div class="field-note">
+                      上面的结构化字段会优先覆盖这里的同名键。这里更适合补充 <span class="mono">outbounds</span>、<span class="mono">route</span>、高级 <span class="mono">tls</span> / <span class="mono">reality</span> 选项，以及更细的传输参数。私钥仍然建议只放节点本地文件路径，不要把真实内容直接贴进 JSON。
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div class="ops-action-row">
+                <button class="button primary" type="submit">${selectedProfile ? "保存模板" : "创建模板"}</button>
+                <button class="button" type="button" id="proxy-profile-form-reset">重置</button>
+                ${
+                  selectedProfile
+                    ? '<button class="button ghost" type="button" id="proxy-profile-delete-current">删除当前模板</button>'
+                    : ""
+                }
+              </div>
+            </form>
+
+            ${
+              state.message
+                ? `<div class="message ${state.message.type}">${escapeHtml(state.message.text)}</div>`
+                : ""
+            }
+          </div>
+        </article>
       </section>
     `;
   }
@@ -764,9 +922,10 @@ export function createProxyProfilesPageModule(dependencies) {
     }
 
     documentRef.getElementById("focus-proxy-profile-form")?.addEventListener("click", () => {
-      state.selectedId = null;
       state.message = null;
-      renderCurrentContent();
+      if (!state.selectedId) {
+        renderCurrentContent();
+      }
       scrollToForm();
     });
 

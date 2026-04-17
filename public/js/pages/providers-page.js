@@ -1,4 +1,5 @@
 import {
+  getLocationPresetOptions,
   formatLocationDisplay,
   normalizeLocationValue,
 } from "../shared/location-suggestions.js";
@@ -33,7 +34,7 @@ function formatProviderRegions(regions = []) {
     .map((region) =>
       formatLocationDisplay(region, {
         scope: "region",
-        style: "compact",
+        style: "name",
       }),
     )
     .join(" / ");
@@ -163,7 +164,7 @@ export function createProvidersPageModule(dependencies) {
             .map((region) =>
               formatLocationDisplay(region, {
                 scope: region === "中国大陆" ? "entry" : "region",
-                style: "compact",
+                style: "name",
               }),
             ),
         };
@@ -341,6 +342,13 @@ export function createProvidersPageModule(dependencies) {
     ).length;
     const costSummary = appState.costs.summary || {};
     const budgetAlertCount = appState.costs.providers.filter((item) => item.budget_alert).length;
+    const selectedProviderNodeSummary = selectedProvider
+      ? nodeSummaryByName.get(String(selectedProvider.name || "").trim().toLowerCase()) || null
+      : null;
+    const selectedProviderCost = selectedProvider
+      ? findCostItemByProviderId(appState.costs.providers, selectedProvider.id)
+      : null;
+    const regionQuickOptions = getLocationPresetOptions("region").slice(0, 12);
     const providerRows = filteredProviders.length
       ? filteredProviders
           .map((provider) => {
@@ -434,6 +442,46 @@ export function createProvidersPageModule(dependencies) {
         `;
       })
       .join("");
+    const nodeOnlyProviderTags = nodeOnlySummaries.length
+      ? `
+        <div class="provider-ledger-callout">
+          <div>
+            <strong>还有 ${nodeOnlySummaries.length} 个节点厂商标签未建档</strong>
+            <p>先把这些厂商补成正式台账，节点资产、成本和后续自动化入口才会稳定对齐。</p>
+          </div>
+          <div class="provider-inline-tag-row">
+            ${nodeOnlySummaries
+              .slice(0, 8)
+              .map((summary) => `<span class="provider-inline-tag">${escapeHtml(summary.name)}</span>`)
+              .join("")}
+          </div>
+        </div>
+      `
+      : "";
+    const providerFormOverviewRows = selectedProvider
+      ? [
+          ["节点概况", selectedProviderNodeSummary ? `${selectedProviderNodeSummary.total} 台` : "尚未绑定节点"],
+          [
+            "覆盖国家",
+            selectedProviderNodeSummary?.regionList?.join(" / ") || formatProviderRegions(selectedProvider?.regions) || "待补充",
+          ],
+          [
+            "月成本",
+            formatCurrencyTotals(selectedProviderCost, "待补"),
+          ],
+          [
+            "预算使用",
+            selectedProviderCost && Number.isFinite(selectedProviderCost.budget_usage_percent)
+              ? `${selectedProviderCost.budget_usage_percent}%`
+              : "未设置预算",
+          ],
+        ]
+      : [
+          ["录入目标", "先建厂商主档"],
+          ["建议口径", "国家优先，不先录城市"],
+          ["自动化", "没有 API 也能先建档"],
+          ["成本台账", "后续节点会稳定对齐到 provider_id"],
+        ];
 
     return `
       <section class="metrics-grid fade-up">
@@ -449,16 +497,17 @@ export function createProvidersPageModule(dependencies) {
             <div class="panel-title">
               <div>
                 <h3>厂商台账</h3>
-                <p>先把厂商与账号信息录进来，后面再逐个接 API、区域和自动建机能力。</p>
+                <p>这里是正式的云厂商主数据，不只是标签汇总。先把账号和覆盖国家建好，后面再逐个接 API 与自动建机。</p>
               </div>
               <div class="provider-pill">共 ${filteredProviders.length} 条</div>
             </div>
             <div class="ops-toolbar">
               <label class="field ops-inline-field">
                 <span>搜索厂商</span>
-                <input id="provider-filter-input" type="search" value="${escapeHtml(state.filter)}" placeholder="按名称、账号、区域或备注筛选" />
+                <input id="provider-filter-input" type="search" value="${escapeHtml(state.filter)}" placeholder="按名称、账号、国家或备注筛选" />
               </label>
             </div>
+            ${nodeOnlyProviderTags}
             <div class="table-shell">
               <table>
                 <thead>
@@ -483,74 +532,129 @@ export function createProvidersPageModule(dependencies) {
             <div class="panel-title">
               <div>
                 <h3>${selectedProvider ? "编辑厂商" : "接入新厂商"}</h3>
-                <p>${selectedProvider ? "更新这个厂商的账号、区域、预算和成本默认值。" : "先录入厂商名称和账号信息，后续节点资产和成本台账就能逐步对齐。"}</p>
+                <p>${selectedProvider ? "更新这个厂商的身份、覆盖国家、自动化能力和预算默认值。" : "先录入厂商身份和覆盖国家，后续节点资产、成本台账和自动化入口就能逐步对齐。"}</p>
               </div>
               ${selectedProvider ? `<span class="provider-pill">编辑中</span>` : '<span class="provider-pill">新建</span>'}
             </div>
             ${state.message ? `<div class="message ${escapeHtml(state.message.type)}">${escapeHtml(state.message.text)}</div>` : ""}
-            <form id="provider-form" class="stack">
-              <div class="ops-form-grid">
-                <label class="field">
-                  <span>厂商名称</span>
-                  <input name="name" value="${escapeHtml(draft.name)}" placeholder="例如 DMIT / Vultr / Oracle" required />
-                </label>
-                <label class="field">
-                  <span>账号标识</span>
-                  <input name="account_name" value="${escapeHtml(draft.account_name)}" placeholder="例如 主账号 / 验收账号 / HK 资源池" />
-                </label>
-                <label class="field">
-                  <span>控制台地址</span>
-                  <input name="website" value="${escapeHtml(draft.website)}" placeholder="https://..." />
-                </label>
-                <label class="field">
-                  <span>API 入口</span>
-                  <input name="api_endpoint" value="${escapeHtml(draft.api_endpoint)}" placeholder="https://api.example.com" />
-                </label>
-                <label class="field">
-                  <span>区域标签</span>
-                  <input name="regions" value="${escapeHtml(draft.regions)}" placeholder="HKG, LAX, NRT" />
-                  <span class="field-note">支持输入香港、HK、HKG这类别名，保存后会自动统一成规范区域。</span>
-                </label>
-                <label class="field">
-                  <span>状态</span>
-                  <select name="status">
-                    <option value="active"${draft.status === "active" ? " selected" : ""}>可用</option>
-                    <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>默认币种</span>
-                  <input name="default_currency" value="${escapeHtml(draft.default_currency)}" placeholder="例如 USD" />
-                </label>
-                <label class="field">
-                  <span>月预算</span>
-                  <input name="monthly_budget" type="number" min="0" step="0.01" value="${escapeHtml(draft.monthly_budget)}" placeholder="例如 500" />
-                </label>
-                <label class="field">
-                  <span>预算告警阈值</span>
-                  <input name="budget_alert_threshold" type="number" min="0" step="0.01" value="${escapeHtml(draft.budget_alert_threshold)}" placeholder="例如 80 或 0.8" />
-                </label>
-                <label class="field">
-                  <span>默认超额单价 / GB</span>
-                  <input name="default_overage_price_per_gb" type="number" min="0" step="0.01" value="${escapeHtml(draft.default_overage_price_per_gb)}" placeholder="例如 0.8" />
-                </label>
-                <label class="field">
-                  <span>账单联系人</span>
-                  <input name="billing_contact" value="${escapeHtml(draft.billing_contact)}" placeholder="例如 ops@example.com" />
-                </label>
-                <label class="field" style="grid-column: 1 / -1;">
-                  <span>成本备注</span>
-                  <textarea name="cost_note" rows="3" placeholder="记录预算口径、折旧规则、超额流量结算方式。">${escapeHtml(draft.cost_note)}</textarea>
-                </label>
-                <label class="field" style="grid-column: 1 / -1;">
-                  <span>备注</span>
-                  <textarea name="note" rows="4" placeholder="记录账单方式、注意事项、后续是否接自动建机等。">${escapeHtml(draft.note)}</textarea>
-                </label>
-                <label class="checkbox" style="grid-column: 1 / -1;">
-                  <input type="checkbox" name="auto_provision_enabled"${draft.auto_provision_enabled ? " checked" : ""} />
-                  <span>后续要接自动建机 / 自动补货</span>
-                </label>
+            <form id="provider-form" class="stack provider-form-shell">
+              <div class="provider-form-overview">
+                ${providerFormOverviewRows
+                  .map(
+                    ([label, value]) => `
+                      <div class="provider-form-overview-card">
+                        <span>${escapeHtml(label)}</span>
+                        <strong>${escapeHtml(String(value || "-"))}</strong>
+                      </div>
+                    `,
+                  )
+                  .join("")}
               </div>
+              <section class="provider-form-section">
+                <div class="provider-form-section-head">
+                  <div>
+                    <h4>厂商身份</h4>
+                    <p>先建立厂商主档，后续节点、成本与自动化都围绕这组主数据对齐。</p>
+                  </div>
+                </div>
+                <div class="ops-form-grid">
+                  <label class="field">
+                    <span>厂商名称</span>
+                    <input name="name" value="${escapeHtml(draft.name)}" placeholder="例如 DMIT / Vultr / Oracle" required />
+                  </label>
+                  <label class="field">
+                    <span>账号标识</span>
+                    <input name="account_name" value="${escapeHtml(draft.account_name)}" placeholder="例如 主账号 / 验收账号 / 国际资源池" />
+                  </label>
+                  <label class="field">
+                    <span>控制台地址</span>
+                    <input name="website" value="${escapeHtml(draft.website)}" placeholder="https://..." />
+                  </label>
+                  <label class="field">
+                    <span>API 入口</span>
+                    <input name="api_endpoint" value="${escapeHtml(draft.api_endpoint)}" placeholder="https://api.example.com" />
+                  </label>
+                  <label class="field">
+                    <span>覆盖国家 / 市场</span>
+                    <input name="regions" value="${escapeHtml(draft.regions)}" placeholder="例如 香港, 越南, 马来西亚" />
+                    <span class="field-note">优先填写国家或市场名称；支持中文、英文或代码，保存时会统一成规范国家名。</span>
+                  </label>
+                  <label class="field">
+                    <span>状态</span>
+                    <select name="status">
+                      <option value="active"${draft.status === "active" ? " selected" : ""}>可用</option>
+                      <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="provider-region-chip-row" aria-label="常用覆盖国家">
+                  ${regionQuickOptions
+                    .map(
+                      (item) => `
+                        <button
+                          class="provider-region-chip"
+                          type="button"
+                          data-provider-region-suggestion="${escapeHtml(item.value)}"
+                        >
+                          ${escapeHtml(item.value)}
+                        </button>
+                      `,
+                    )
+                    .join("")}
+                </div>
+              </section>
+              <section class="provider-form-section">
+                <div class="provider-form-section-head">
+                  <div>
+                    <h4>预算与自动化</h4>
+                    <p>这部分先填默认口径，不做复杂财务系统，但要保证后续成本汇总和自动补货有依据。</p>
+                  </div>
+                </div>
+                <div class="ops-form-grid">
+                  <label class="field">
+                    <span>默认币种</span>
+                    <input name="default_currency" value="${escapeHtml(draft.default_currency)}" placeholder="例如 USD" />
+                  </label>
+                  <label class="field">
+                    <span>月预算</span>
+                    <input name="monthly_budget" type="number" min="0" step="0.01" value="${escapeHtml(draft.monthly_budget)}" placeholder="例如 500" />
+                  </label>
+                  <label class="field">
+                    <span>预算告警阈值</span>
+                    <input name="budget_alert_threshold" type="number" min="0" step="0.01" value="${escapeHtml(draft.budget_alert_threshold)}" placeholder="例如 80 或 0.8" />
+                  </label>
+                  <label class="field">
+                    <span>默认超额单价 / GB</span>
+                    <input name="default_overage_price_per_gb" type="number" min="0" step="0.01" value="${escapeHtml(draft.default_overage_price_per_gb)}" placeholder="例如 0.8" />
+                  </label>
+                  <label class="checkbox" style="grid-column: 1 / -1;">
+                    <input type="checkbox" name="auto_provision_enabled"${draft.auto_provision_enabled ? " checked" : ""} />
+                    <span>后续要接自动建机 / 自动补货</span>
+                  </label>
+                </div>
+              </section>
+              <section class="provider-form-section">
+                <div class="provider-form-section-head">
+                  <div>
+                    <h4>账单与备注</h4>
+                    <p>补齐联系人和说明，避免成本规则只存在于口头约定里。</p>
+                  </div>
+                </div>
+                <div class="ops-form-grid">
+                  <label class="field">
+                    <span>账单联系人</span>
+                    <input name="billing_contact" value="${escapeHtml(draft.billing_contact)}" placeholder="例如 ops@example.com" />
+                  </label>
+                  <label class="field">
+                    <span>成本备注</span>
+                    <textarea name="cost_note" rows="3" placeholder="记录预算口径、折旧规则、超额流量结算方式。">${escapeHtml(draft.cost_note)}</textarea>
+                  </label>
+                  <label class="field" style="grid-column: 1 / -1;">
+                    <span>备注</span>
+                    <textarea name="note" rows="4" placeholder="记录账单方式、注意事项、后续是否接自动建机等。">${escapeHtml(draft.note)}</textarea>
+                  </label>
+                </div>
+              </section>
               <div class="ops-action-row">
                 <button class="button primary" type="submit">${selectedProvider ? "保存更新" : "新增厂商"}</button>
                 <button class="button" type="button" id="provider-form-reset">${selectedProvider ? "取消编辑" : "清空表单"}</button>
@@ -635,6 +739,30 @@ export function createProvidersPageModule(dependencies) {
       state.message = null;
       renderCurrentContent();
       scrollToForm();
+    });
+
+    documentRef.querySelectorAll("[data-provider-region-suggestion]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const regionInput = documentRef.querySelector('#provider-form [name="regions"]');
+        if (!(regionInput instanceof HTMLInputElement)) {
+          return;
+        }
+
+        const nextRegion = normalizeLocationValue(
+          button.getAttribute("data-provider-region-suggestion"),
+          { scope: "region" },
+        );
+        if (!nextRegion) {
+          return;
+        }
+
+        const mergedRegions = normalizeProviderRegions([
+          ...splitCommaList(regionInput.value),
+          nextRegion,
+        ]);
+        regionInput.value = joinCommaList(mergedRegions);
+        regionInput.focus();
+      });
     });
 
     documentRef.getElementById("provider-form")?.addEventListener("submit", async (event) => {
