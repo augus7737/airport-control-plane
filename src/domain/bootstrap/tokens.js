@@ -1,15 +1,21 @@
+import {
+  atomicWriteJson,
+  createFileWriteQueue,
+  isMissingFileError,
+  readJsonWithBackup,
+} from "../../infrastructure/json-file-store.js";
+
 export function createBootstrapTokenDomain(dependencies) {
   const {
     store,
     index,
     bootstrapTokensFile,
     ensureDataDir,
-    readFile,
-    writeFile,
     randomUUID,
     nowIso,
     nowMs = () => Date.now(),
   } = dependencies;
+  const enqueueBootstrapTokenWrite = createFileWriteQueue();
 
   function normalizeBootstrapTimestamp(value) {
     if (value === undefined || value === null) {
@@ -35,13 +41,12 @@ export function createBootstrapTokenDomain(dependencies) {
     const payload = {
       items: [...store.values()],
     };
-    await writeFile(bootstrapTokensFile, JSON.stringify(payload, null, 2), "utf8");
+    await enqueueBootstrapTokenWrite(() => atomicWriteJson(bootstrapTokensFile, payload));
   }
 
   async function loadBootstrapTokens() {
     try {
-      const raw = await readFile(bootstrapTokensFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonWithBackup(bootstrapTokensFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
 
       store.clear();
@@ -66,7 +71,7 @@ export function createBootstrapTokenDomain(dependencies) {
         });
       }
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      if (isMissingFileError(error)) {
         await ensureDataDir();
         store.clear();
         index.clear();

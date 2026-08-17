@@ -1,3 +1,10 @@
+import {
+  atomicWriteJson,
+  createFileWriteQueue,
+  isMissingFileError,
+  readJsonWithBackup,
+} from "./json-file-store.js";
+
 export function createStorePersistenceInfrastructure(dependencies) {
   const {
     accessUserStore,
@@ -34,25 +41,39 @@ export function createStorePersistenceInfrastructure(dependencies) {
     systemUsersFile,
     taskStore,
     tasksFile,
-    writeFile,
   } = dependencies;
+  const writeQueues = new Map();
 
   async function ensureDataDir() {
     await mkdir(dataDir, { recursive: true });
   }
 
-  async function persistNodeStore() {
+  function writeQueueFor(filePath) {
+    if (!writeQueues.has(filePath)) {
+      writeQueues.set(filePath, createFileWriteQueue());
+    }
+    return writeQueues.get(filePath);
+  }
+
+  async function persistJsonFile(filePath, payload) {
     await ensureDataDir();
+    return writeQueueFor(filePath)(() => atomicWriteJson(filePath, payload));
+  }
+
+  async function readJsonFile(filePath) {
+    return readJsonWithBackup(filePath);
+  }
+
+  async function persistNodeStore() {
     const payload = {
       items: [...nodeStore.values()],
     };
-    await writeFile(nodesFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(nodesFile, payload);
   }
 
   async function loadNodeStore() {
     try {
-      const raw = await readFile(nodesFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(nodesFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       let mutated = false;
 
@@ -93,17 +114,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistOperationStore() {
-    await ensureDataDir();
     const payload = {
       items: operationStore,
     };
-    await writeFile(operationsFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(operationsFile, payload);
   }
 
   async function loadOperationStore() {
     try {
-      const raw = await readFile(operationsFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(operationsFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       operationStore.length = 0;
       operationStore.push(...items);
@@ -118,17 +137,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistProviderStore() {
-    await ensureDataDir();
     const payload = {
       items: providerStore,
     };
-    await writeFile(providersFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(providersFile, payload);
   }
 
   async function loadProviderStore() {
     try {
-      const raw = await readFile(providersFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(providersFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       providerStore.length = 0;
       providerStore.push(...items);
@@ -143,17 +160,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistTaskStore() {
-    await ensureDataDir();
     const payload = {
       items: taskStore,
     };
-    await writeFile(tasksFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(tasksFile, payload);
   }
 
   async function loadTaskStore() {
     try {
-      const raw = await readFile(tasksFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(tasksFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       let mutated = false;
       taskStore.length = 0;
@@ -193,17 +208,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistProbeStore() {
-    await ensureDataDir();
     const payload = {
       items: probeStore,
     };
-    await writeFile(probesFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(probesFile, payload);
   }
 
   async function loadProbeStore() {
     try {
-      const raw = await readFile(probesFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(probesFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       probeStore.length = 0;
       probeStore.push(...items);
@@ -218,17 +231,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistDiagnosticStore() {
-    await ensureDataDir();
     const payload = {
       items: diagnosticStore,
     };
-    await writeFile(diagnosticsFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(diagnosticsFile, payload);
   }
 
   async function loadDiagnosticStore() {
     try {
-      const raw = await readFile(diagnosticsFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(diagnosticsFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       let mutated = false;
       diagnosticStore.length = 0;
@@ -267,17 +278,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistAccessUserStore() {
-    await ensureDataDir();
     const payload = {
       items: accessUserStore,
     };
-    await writeFile(accessUsersFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(accessUsersFile, payload);
   }
 
   async function loadAccessUserStore() {
     try {
-      const raw = await readFile(accessUsersFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(accessUsersFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       accessUserStore.length = 0;
       accessUserStore.push(...items);
@@ -292,17 +301,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistProxyProfileStore() {
-    await ensureDataDir();
     const payload = {
       items: proxyProfileStore,
     };
-    await writeFile(proxyProfilesFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(proxyProfilesFile, payload);
   }
 
   async function loadProxyProfileStore() {
     try {
-      const raw = await readFile(proxyProfilesFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(proxyProfilesFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       proxyProfileStore.length = 0;
       proxyProfileStore.push(...items);
@@ -317,17 +324,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistSystemUserStore() {
-    await ensureDataDir();
     const payload = {
       items: systemUserStore,
     };
-    await writeFile(systemUsersFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(systemUsersFile, payload);
   }
 
   async function loadSystemUserStore() {
     try {
-      const raw = await readFile(systemUsersFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(systemUsersFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       systemUserStore.length = 0;
       systemUserStore.push(...items);
@@ -342,17 +347,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistSystemTemplateStore() {
-    await ensureDataDir();
     const payload = {
       items: systemTemplateStore,
     };
-    await writeFile(systemTemplatesFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(systemTemplatesFile, payload);
   }
 
   async function loadSystemTemplateStore() {
     try {
-      const raw = await readFile(systemTemplatesFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(systemTemplatesFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       systemTemplateStore.length = 0;
       systemTemplateStore.push(...items);
@@ -367,17 +370,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistNodeGroupStore() {
-    await ensureDataDir();
     const payload = {
       items: nodeGroupStore,
     };
-    await writeFile(nodeGroupsFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(nodeGroupsFile, payload);
   }
 
   async function loadNodeGroupStore() {
     try {
-      const raw = await readFile(nodeGroupsFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(nodeGroupsFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       nodeGroupStore.length = 0;
       nodeGroupStore.push(...items);
@@ -392,17 +393,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistConfigReleaseStore() {
-    await ensureDataDir();
     const payload = {
       items: configReleaseStore,
     };
-    await writeFile(configReleasesFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(configReleasesFile, payload);
   }
 
   async function loadConfigReleaseStore() {
     try {
-      const raw = await readFile(configReleasesFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(configReleasesFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       configReleaseStore.length = 0;
       configReleaseStore.push(...items);
@@ -417,17 +416,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistSystemUserReleaseStore() {
-    await ensureDataDir();
     const payload = {
       items: systemUserReleaseStore,
     };
-    await writeFile(systemUserReleasesFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(systemUserReleasesFile, payload);
   }
 
   async function loadSystemUserReleaseStore() {
     try {
-      const raw = await readFile(systemUserReleasesFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(systemUserReleasesFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       systemUserReleaseStore.length = 0;
       systemUserReleaseStore.push(...items);
@@ -442,17 +439,15 @@ export function createStorePersistenceInfrastructure(dependencies) {
   }
 
   async function persistSystemTemplateReleaseStore() {
-    await ensureDataDir();
     const payload = {
       items: systemTemplateReleaseStore,
     };
-    await writeFile(systemTemplateReleasesFile, JSON.stringify(payload, null, 2), "utf8");
+    await persistJsonFile(systemTemplateReleasesFile, payload);
   }
 
   async function loadSystemTemplateReleaseStore() {
     try {
-      const raw = await readFile(systemTemplateReleasesFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonFile(systemTemplateReleasesFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
       systemTemplateReleaseStore.length = 0;
       systemTemplateReleaseStore.push(...items);
@@ -497,8 +492,4 @@ export function createStorePersistenceInfrastructure(dependencies) {
     persistSystemUserStore,
     persistTaskStore,
   };
-}
-
-function isMissingFileError(error) {
-  return error && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }

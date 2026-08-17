@@ -1,8 +1,18 @@
 export function jsonResponse(reply, statusCode, payload) {
-  reply.writeHead(statusCode, {
+  const effectiveStatusCode =
+    statusCode === 400 && payload?.message === "request body too large" ? 413 : statusCode;
+  const effectivePayload =
+    effectiveStatusCode === 413
+      ? {
+          error: "payload_too_large",
+          message: payload.message,
+        }
+      : payload;
+
+  reply.writeHead(effectiveStatusCode, {
     "content-type": "application/json; charset=utf-8",
   });
-  reply.end(JSON.stringify(payload, null, 2));
+  reply.end(JSON.stringify(effectivePayload, null, 2));
 }
 
 export function textResponse(reply, statusCode, contentType, body) {
@@ -15,28 +25,60 @@ export function textResponse(reply, statusCode, contentType, body) {
 export function readJsonBody(request) {
   return new Promise((resolve, reject) => {
     let body = "";
+    let settled = false;
+
+    function fail(error) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(error);
+    }
+
+    function succeed(payload) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(payload);
+    }
 
     request.on("data", (chunk) => {
+      if (settled) {
+        return;
+      }
+
       body += chunk.toString();
       if (body.length > 1024 * 1024) {
-        reject(new Error("request body too large"));
+        const error = new Error("request body too large");
+        error.statusCode = 413;
+        fail(error);
       }
     });
 
     request.on("end", () => {
+      if (settled) {
+        return;
+      }
+
       if (!body) {
-        resolve({});
+        succeed({});
         return;
       }
 
       try {
-        resolve(JSON.parse(body));
+        succeed(JSON.parse(body));
       } catch {
-        reject(new Error("invalid json"));
+        fail(new Error("invalid json"));
       }
     });
 
-    request.on("error", reject);
+    request.on("error", (error) => {
+      if (settled && error?.code === "ECONNRESET") {
+        return;
+      }
+      fail(error);
+    });
   });
 }
 

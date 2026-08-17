@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
+import {
+  atomicWriteJson,
+  createFileWriteQueue,
+  isMissingFileError,
+  readJsonWithBackup,
+} from "../../infrastructure/json-file-store.js";
 
 const SUPPORTED_TARGETS = Object.freeze(["linux-amd64", "linux-arm64"]);
 const DEFAULT_INSTALL_PATH = "/usr/local/bin/sing-box";
@@ -167,10 +173,6 @@ function sha256Buffer(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
-function isMissingFileError(error) {
-  return Boolean(error) && typeof error === "object" && error.code === "ENOENT";
-}
-
 function buildEffectiveVariant(baseUrl, version, variant) {
   const artifactUrl =
     baseUrl && variant.mirror_available ? `${baseUrl}${artifactPublicPath(version, variant.target)}` : null;
@@ -193,13 +195,13 @@ export function createPlatformSingBoxDistributionDomain(dependencies = {}) {
     distributionFile,
     mkdir,
     nowIso,
-    readFile,
     spawn,
     stat,
     writeFile,
   } = dependencies;
 
   let distributionState = defaultDistribution(nowIso);
+  const enqueueDistributionWrite = createFileWriteQueue();
 
   async function ensureArtifactsDir() {
     await mkdir(artifactsDir, { recursive: true });
@@ -207,13 +209,12 @@ export function createPlatformSingBoxDistributionDomain(dependencies = {}) {
 
   async function persistDistribution() {
     await ensureArtifactsDir();
-    await writeFile(distributionFile, JSON.stringify(distributionState, null, 2), "utf8");
+    await enqueueDistributionWrite(() => atomicWriteJson(distributionFile, distributionState));
   }
 
   async function loadDistribution() {
     try {
-      const raw = await readFile(distributionFile, "utf8");
-      const payload = JSON.parse(raw);
+      const payload = await readJsonWithBackup(distributionFile);
       distributionState = normalizeDistributionRecord(payload, nowIso, distributionState);
 
       let mutated = false;
