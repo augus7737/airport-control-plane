@@ -40,6 +40,26 @@ function formatProviderRegions(regions = []) {
     .join(" / ");
 }
 
+const providerCurrencyOptions = [
+  ["CNY", "CNY · 人民币"],
+  ["USD", "USD · 美元"],
+  ["EUR", "EUR · 欧元"],
+  ["HKD", "HKD · 港币"],
+  ["SGD", "SGD · 新加坡元"],
+  ["JPY", "JPY · 日元"],
+  ["KRW", "KRW · 韩元"],
+  ["BRL", "BRL · 巴西雷亚尔"],
+  ["GBP", "GBP · 英镑"],
+  ["AUD", "AUD · 澳元"],
+  ["CAD", "CAD · 加元"],
+  ["MYR", "MYR · 马来西亚林吉特"],
+  ["THB", "THB · 泰铢"],
+  ["VND", "VND · 越南盾"],
+  ["IDR", "IDR · 印尼盾"],
+  ["PHP", "PHP · 菲律宾比索"],
+  ["INR", "INR · 印度卢比"],
+];
+
 export function createProvidersPageModule(dependencies) {
   const {
     appState,
@@ -189,7 +209,7 @@ export function createProvidersPageModule(dependencies) {
         regions: "",
         status: "active",
         auto_provision_enabled: false,
-        default_currency: "",
+        default_currency: "CNY",
         monthly_budget: "",
         budget_alert_threshold: "",
         default_overage_price_per_gb: "",
@@ -225,6 +245,29 @@ export function createProvidersPageModule(dependencies) {
       cost_note: String(provider.cost_note || ""),
       note: String(provider.note || ""),
     };
+  }
+
+  function renderCurrencySelect(name, value) {
+    const normalizedValue = String(value || "").trim().toUpperCase();
+    const knownValues = new Set(providerCurrencyOptions.map(([currency]) => currency));
+    const customOption =
+      normalizedValue && !knownValues.has(normalizedValue)
+        ? `<option value="${escapeHtml(normalizedValue)}" selected>${escapeHtml(normalizedValue)} · 当前值</option>`
+        : "";
+
+    return `
+      <select name="${escapeHtml(name)}">
+        <option value="">不设置</option>
+        ${providerCurrencyOptions
+          .map(
+            ([currency, label]) => `
+              <option value="${escapeHtml(currency)}"${normalizedValue === currency ? " selected" : ""}>${escapeHtml(label)}</option>
+            `,
+          )
+          .join("")}
+        ${customOption}
+      </select>
+    `;
   }
 
   function getNodeSummaryByProviderName() {
@@ -613,7 +656,7 @@ export function createProvidersPageModule(dependencies) {
                 <div class="ops-form-grid">
                   <label class="field">
                     <span>默认币种</span>
-                    <input name="default_currency" value="${escapeHtml(draft.default_currency)}" placeholder="例如 USD" />
+                    ${renderCurrencySelect("default_currency", draft.default_currency)}
                   </label>
                   <label class="field">
                     <span>月预算</span>
