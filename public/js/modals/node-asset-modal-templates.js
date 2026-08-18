@@ -1,3 +1,8 @@
+import {
+  DEFAULT_CURRENCY,
+  renderCurrencyOptions,
+} from "../shared/currency-options.js";
+
 export function createNodeAssetModalTemplatesModule() {
   function manualModalTemplate() {
     return `
@@ -103,14 +108,7 @@ export function createNodeAssetModalTemplatesModule() {
               <div class="field">
                 <label for="manual-billing-currency">币种</label>
                 <select id="manual-billing-currency" name="billing_currency">
-                  <option value="">未填写</option>
-                  <option value="USD">USD</option>
-                  <option value="CNY">CNY</option>
-                  <option value="EUR">EUR</option>
-                  <option value="HKD">HKD</option>
-                  <option value="JPY">JPY</option>
-                  <option value="GBP">GBP</option>
-                  <option value="SGD">SGD</option>
+                  ${renderCurrencyOptions(DEFAULT_CURRENCY)}
                 </select>
               </div>
               <div class="field">
@@ -336,14 +334,7 @@ export function createNodeAssetModalTemplatesModule() {
               <div class="field">
                 <label for="asset-billing-currency">币种</label>
                 <select id="asset-billing-currency" name="billing_currency">
-                  <option value="">未填写</option>
-                  <option value="USD">USD</option>
-                  <option value="CNY">CNY</option>
-                  <option value="EUR">EUR</option>
-                  <option value="HKD">HKD</option>
-                  <option value="JPY">JPY</option>
-                  <option value="GBP">GBP</option>
-                  <option value="SGD">SGD</option>
+                  ${renderCurrencyOptions()}
                 </select>
               </div>
               <div class="field">

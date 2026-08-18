@@ -6,6 +6,7 @@ import {
   formatLocationDisplay,
   normalizeLocationValue,
 } from "../shared/location-suggestions.js";
+import { ensureCurrencySelectValue } from "../shared/currency-options.js";
 
 export function createNodeAssetModalsModule(dependencies) {
   const {
@@ -399,8 +400,10 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-private-ip").value = node.facts?.private_ipv4 || "";
       documentRef.getElementById("asset-billing").value = node.commercial?.billing_cycle || "";
       documentRef.getElementById("asset-billing-amount").value = node.commercial?.billing_amount ?? "";
-      documentRef.getElementById("asset-billing-currency").value =
-        node.commercial?.billing_currency || "";
+      ensureCurrencySelectValue(
+        documentRef.getElementById("asset-billing-currency"),
+        node.commercial?.billing_currency || "",
+      );
       documentRef.getElementById("asset-amortization-months").value =
         node.commercial?.amortization_months ?? "";
       documentRef.getElementById("asset-overage-price").value =
