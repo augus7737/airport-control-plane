@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
 const DEFAULT_COOKIE_NAME = "airport_operator_session";
 const DEFAULT_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const DEFAULT_SESSION_REFRESH_PERSIST_INTERVAL_MS = 30 * 1000;
 const FALLBACK_USERNAME = "admin";
 const EXPIRED_COOKIE_DATE = "Thu, 01 Jan 1970 00:00:00 GMT";
 
@@ -98,6 +99,30 @@ function sanitizeNextPath(nextPath) {
   return trimmed;
 }
 
+function normalizePersistedSession(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const id = normalizeString(value.id);
+  const username = normalizeString(value.username);
+  const createdAt = normalizeString(value.created_at);
+  const lastSeenAt = normalizeString(value.last_seen_at);
+  const expiresAtMs = Number.parseInt(value.expires_at_ms ?? "", 10);
+
+  if (!id || !username || !createdAt || !lastSeenAt || !Number.isFinite(expiresAtMs)) {
+    return null;
+  }
+
+  return {
+    id,
+    username,
+    created_at: createdAt,
+    last_seen_at: lastSeenAt,
+    expires_at_ms: expiresAtMs,
+  };
+}
+
 export function createOperatorSessionAuth(options = {}) {
   const env = options.env ?? process.env;
   const logger = options.logger ?? console;
@@ -131,15 +156,92 @@ export function createOperatorSessionAuth(options = {}) {
       DEFAULT_SESSION_TTL_MS,
   );
   const forcedSecureCookie = parseBoolean(env.CONTROL_PLANE_SESSION_SECURE);
+  const configuredSessionRefreshPersistIntervalMs = Number.parseInt(
+    env.CONTROL_PLANE_SESSION_REFRESH_PERSIST_INTERVAL_MS ??
+      `${DEFAULT_SESSION_REFRESH_PERSIST_INTERVAL_MS}`,
+    10,
+  );
+  const sessionRefreshPersistIntervalMs = Math.max(
+    0,
+    Number.isFinite(configuredSessionRefreshPersistIntervalMs)
+      ? configuredSessionRefreshPersistIntervalMs
+      : DEFAULT_SESSION_REFRESH_PERSIST_INTERVAL_MS,
+  );
+  const onSessionStoreChanged =
+    typeof options.onSessionStoreChanged === "function" ? options.onSessionStoreChanged : null;
   const sessionStore = new Map();
+  let lastSessionStorePersistAtMs = 0;
+
+  function serializeSessionStore() {
+    return {
+      items: [...sessionStore.values()].map((session) => ({
+        id: session.id,
+        username: session.username,
+        created_at: session.created_at,
+        last_seen_at: session.last_seen_at,
+        expires_at_ms: session.expires_at_ms,
+      })),
+    };
+  }
+
+  function persistSessionStore({ force = false } = {}) {
+    if (!onSessionStoreChanged) {
+      return;
+    }
+
+    const currentTime = now();
+    if (
+      !force &&
+      sessionRefreshPersistIntervalMs > 0 &&
+      currentTime - lastSessionStorePersistAtMs < sessionRefreshPersistIntervalMs
+    ) {
+      return;
+    }
+
+    lastSessionStorePersistAtMs = currentTime;
+    Promise.resolve(onSessionStoreChanged(serializeSessionStore())).catch((error) => {
+      logger.warn(
+        `[auth] 控制面会话持久化失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }
+
+  function loadSessionStore(items = []) {
+    const currentTime = now();
+    let mutated = false;
+    sessionStore.clear();
+
+    for (const item of Array.isArray(items) ? items : []) {
+      const session = normalizePersistedSession(item);
+      if (!session) {
+        mutated = true;
+        continue;
+      }
+
+      if (session.expires_at_ms <= currentTime) {
+        mutated = true;
+        continue;
+      }
+
+      sessionStore.set(session.id, session);
+    }
+
+    return mutated;
+  }
 
   const cleanupIntervalMs = Math.min(sessionTtlMs, 30 * 60 * 1000);
   const cleanupTimer = setInterval(() => {
     const currentTime = now();
+    let mutated = false;
     for (const [sessionId, session] of sessionStore.entries()) {
       if (session.expires_at_ms <= currentTime) {
         sessionStore.delete(sessionId);
+        mutated = true;
       }
+    }
+
+    if (mutated) {
+      persistSessionStore({ force: true });
     }
   }, cleanupIntervalMs);
   cleanupTimer.unref?.();
@@ -219,12 +321,14 @@ export function createOperatorSessionAuth(options = {}) {
     const currentTime = now();
     if (session.expires_at_ms <= currentTime) {
       sessionStore.delete(sessionId);
+      persistSessionStore({ force: true });
       return null;
     }
 
     if (refresh) {
       session.last_seen_at = new Date(currentTime).toISOString();
       session.expires_at_ms = currentTime + sessionTtlMs;
+      persistSessionStore();
     }
 
     return serializeSession(session);
@@ -240,6 +344,7 @@ export function createOperatorSessionAuth(options = {}) {
       expires_at_ms: currentTime + sessionTtlMs,
     };
     sessionStore.set(session.id, session);
+    persistSessionStore({ force: true });
     return serializeSession(session);
   }
 
@@ -271,6 +376,7 @@ export function createOperatorSessionAuth(options = {}) {
     }
 
     appendSetCookie(reply, clearCookie(request));
+    persistSessionStore({ force: true });
   }
 
   function renderLoginPage({ nextPath = "/", errorMessage = "" } = {}) {
@@ -459,8 +565,10 @@ export function createOperatorSessionAuth(options = {}) {
     usesFallbackCredentials,
     sanitizeNextPath,
     currentSession,
+    loadSessionStore,
     login,
     logout,
     renderLoginPage,
+    serializeSessionStore,
   };
 }

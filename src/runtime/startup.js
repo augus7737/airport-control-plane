@@ -12,6 +12,7 @@ export function createServerStartupRuntime(dependencies) {
     loadNodeStore,
     loadNodeGroupStore,
     loadOperationStore,
+    loadOperatorSessionStore,
     loadPlatformSingBoxDistribution,
     loadProviderStore,
     loadProbeStore,
@@ -37,6 +38,7 @@ export function createServerStartupRuntime(dependencies) {
     await loadProbeStore();
     await loadDiagnosticStore?.();
     await loadBootstrapTokens();
+    await loadOperatorSessionStore?.();
     await loadAccessUserStore();
     await loadProxyProfileStore();
     await loadSystemUserStore?.();

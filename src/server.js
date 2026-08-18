@@ -105,6 +105,7 @@ const tasksFile = path.join(dataDir, "tasks.json");
 const probesFile = path.join(dataDir, "probes.json");
 const diagnosticsFile = path.join(dataDir, "diagnostics.json");
 const bootstrapTokensFile = path.join(dataDir, "bootstrap-tokens.json");
+const operatorSessionsFile = path.join(dataDir, "operator-sessions.json");
 const accessUsersFile = path.join(dataDir, "access-users.json");
 const systemTemplatesFile = path.join(dataDir, "system-templates.json");
 const systemUsersFile = path.join(dataDir, "system-users.json");
@@ -160,9 +161,11 @@ const autoProbeMinGapMs = Number.parseInt(
   10,
 );
 const autoProbeJitterMs = Number.parseInt(process.env.AUTO_PROBE_JITTER_MS ?? "10000", 10);
+let persistOperatorSessions = async () => {};
 const operatorAuth = createOperatorSessionAuth({
   env: process.env,
   logger: console,
+  onSessionStoreChanged: () => persistOperatorSessions(),
 });
 const nodeStore = new Map();
 const fingerprintIndex = new Map();
@@ -871,6 +874,7 @@ const {
   loadNodeStore,
   loadNodeGroupStore,
   loadOperationStore,
+  loadOperatorSessionStore,
   loadProviderStore,
   loadProbeStore,
   loadProxyProfileStore,
@@ -885,6 +889,7 @@ const {
   persistNodeStore,
   persistNodeGroupStore,
   persistOperationStore,
+  persistOperatorSessionStore,
   persistProviderStore,
   persistProbeStore,
   persistProxyProfileStore,
@@ -911,6 +916,8 @@ const {
   nowIso,
   operationStore,
   operationsFile,
+  operatorAuth,
+  operatorSessionsFile,
   providerStore,
   providersFile,
   probeStore,
@@ -930,6 +937,8 @@ const {
   tasksFile,
   writeFile,
 });
+
+persistOperatorSessions = persistOperatorSessionStore;
 
 const {
   normalizeBootstrapTimestamp,
@@ -5557,6 +5566,7 @@ const { start } = createServerStartupRuntime({
     await ensureAccessUserShareTokens();
   },
   loadBootstrapTokens,
+  loadOperatorSessionStore,
   loadConfigReleaseStore,
   loadDiagnosticStore,
   loadNodeStore,

@@ -24,6 +24,8 @@ export function createStorePersistenceInfrastructure(dependencies) {
     nowIso,
     operationStore,
     operationsFile,
+    operatorAuth,
+    operatorSessionsFile,
     providerStore,
     providersFile,
     probeStore,
@@ -461,6 +463,35 @@ export function createStorePersistenceInfrastructure(dependencies) {
     }
   }
 
+  async function persistOperatorSessionStore() {
+    if (!operatorAuth || !operatorSessionsFile) {
+      return;
+    }
+
+    await persistJsonFile(operatorSessionsFile, operatorAuth.serializeSessionStore());
+  }
+
+  async function loadOperatorSessionStore() {
+    if (!operatorAuth || !operatorSessionsFile) {
+      return;
+    }
+
+    try {
+      const payload = await readJsonFile(operatorSessionsFile);
+      const mutated = operatorAuth.loadSessionStore(payload.items);
+      if (mutated) {
+        await persistOperatorSessionStore();
+      }
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        await ensureDataDir();
+        return;
+      }
+
+      throw error;
+    }
+  }
+
   return {
     ensureDataDir,
     loadAccessUserStore,
@@ -469,6 +500,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     loadNodeStore,
     loadNodeGroupStore,
     loadOperationStore,
+    loadOperatorSessionStore,
     loadProviderStore,
     loadProbeStore,
     loadProxyProfileStore,
@@ -483,6 +515,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     persistNodeStore,
     persistNodeGroupStore,
     persistOperationStore,
+    persistOperatorSessionStore,
     persistProviderStore,
     persistProbeStore,
     persistProxyProfileStore,

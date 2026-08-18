@@ -14,6 +14,11 @@ Operator auth env vars:
 - `CONTROL_PLANE_AUTH_PASSWORD`
 - optional: `CONTROL_PLANE_SESSION_TTL_MS`
 - optional: `CONTROL_PLANE_SESSION_SECURE`
+- optional: `CONTROL_PLANE_SESSION_REFRESH_PERSIST_INTERVAL_MS`
+
+Operator sessions are persisted to `data/operator-sessions.json`. This prevents
+ordinary service restarts from forcing all operators to log in again, while still
+discarding expired sessions during startup.
 
 ## `GET /api/v1/auth/session`
 
