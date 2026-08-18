@@ -2,6 +2,8 @@ import {
   DEFAULT_CURRENCY,
   renderCurrencyOptions,
 } from "../shared/currency-options.js";
+import { renderBillingCycleOptions } from "../shared/billing-options.js";
+import { DEFAULT_NODE_SSH_PORT } from "../shared/management-defaults.js";
 
 export function createNodeAssetModalTemplatesModule() {
   function manualModalTemplate() {
@@ -91,14 +93,7 @@ export function createNodeAssetModalTemplatesModule() {
               <div class="field">
                 <label for="manual-billing">计费周期</label>
                 <select id="manual-billing" name="billing_cycle">
-                  <option value="">未填写</option>
-                  <option value="月付">月付</option>
-                  <option value="季付">季付</option>
-                  <option value="年付">年付</option>
-                  <option value="周付">周付</option>
-                  <option value="日付">日付</option>
-                  <option value="小时付">小时付</option>
-                  <option value="一次性">一次性</option>
+                  ${renderBillingCycleOptions()}
                 </select>
               </div>
               <div class="field">
@@ -186,7 +181,7 @@ export function createNodeAssetModalTemplatesModule() {
                     </div>
                     <div class="field">
                       <label for="manual-management-ssh-port">管理入口端口</label>
-                      <input id="manual-management-ssh-port" name="management_ssh_port" type="number" min="1" max="65535" value="19822" placeholder="平台对外连接入口，例如 19822" />
+                      <input id="manual-management-ssh-port" name="management_ssh_port" type="number" min="1" max="65535" value="${DEFAULT_NODE_SSH_PORT}" placeholder="普通 VPS 为 22；LXC/NAT 填外部映射端口" />
                       <div class="field-note">这里填控制面真正要连的外部端口，不是容器内 sshd 监听端口。</div>
                     </div>
                     <div class="field">
@@ -313,14 +308,7 @@ export function createNodeAssetModalTemplatesModule() {
               <div class="field">
                 <label for="asset-billing">计费周期</label>
                 <select id="asset-billing" name="billing_cycle">
-                  <option value="">未填写</option>
-                  <option value="月付">月付</option>
-                  <option value="季付">季付</option>
-                  <option value="年付">年付</option>
-                  <option value="周付">周付</option>
-                  <option value="日付">日付</option>
-                  <option value="小时付">小时付</option>
-                  <option value="一次性">一次性</option>
+                  ${renderBillingCycleOptions()}
                 </select>
               </div>
               <div class="field">
@@ -447,7 +435,7 @@ export function createNodeAssetModalTemplatesModule() {
                     </div>
                     <div class="field">
                       <label for="asset-management-ssh-port">管理入口端口</label>
-                      <input id="asset-management-ssh-port" name="management_ssh_port" type="number" min="1" max="65535" placeholder="平台对外连接入口，例如 19822" />
+                      <input id="asset-management-ssh-port" name="management_ssh_port" type="number" min="1" max="65535" placeholder="普通 VPS 为 22；LXC/NAT 填外部映射端口" />
                       <div class="field-note">这里填控制面真正要连的外部端口，不是容器内 sshd 监听端口。</div>
                     </div>
                     <div class="field">

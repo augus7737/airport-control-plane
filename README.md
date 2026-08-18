@@ -43,14 +43,15 @@ sh scripts/bootstrap.sh \
   --token demo-token
 ```
 
-The control plane uses `19822` as the default SSH connection port when a node has
+The control plane uses `22` as the default SSH connection port when a node has
 no explicit `ssh_port` recorded yet. `bootstrap.sh` itself will keep the current
 node `sshd` port unless you pass `--ssh-port`, so it does not force-change the
 host's default SSH port behavior.
 
 When the node's outbound public IP is not the same as its inbound SSH entrypoint
 (for example NAT, LXC/LXD, host port mapping, or relay-style providers), override
-the reported ingress endpoint explicitly:
+the reported ingress endpoint explicitly. In LXC, this usually means the internal
+`sshd` still listens on `22`, while `--ssh-port` must be the external mapped port:
 
 ```bash
 sh scripts/bootstrap.sh \

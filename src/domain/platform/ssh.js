@@ -2,6 +2,10 @@ import {
   normalizeManagementRelayStrategy,
   relayStrategyCandidates,
 } from "../routes/management-strategies.js";
+import {
+  DEFAULT_NODE_SSH_PORT,
+  DEFAULT_PROXY_SSH_PORT,
+} from "../nodes/management-defaults.js";
 
 const RELAY_CAPABILITY_CACHE_TTL_MS = 120000;
 const RELAY_SSH_TIMEOUT_MS = 8000;
@@ -279,10 +283,10 @@ export function createPlatformSshDomain(dependencies) {
     }
 
     if (host.includes(":")) {
-      return `${sshUser}@[${host}]${port === 19822 ? "" : `:${port}`}`;
+      return `${sshUser}@[${host}]${port === DEFAULT_NODE_SSH_PORT ? "" : `:${port}`}`;
     }
 
-    return `${sshUser}@${host}${port === 19822 ? "" : `:${port}`}`;
+    return `${sshUser}@${host}${port === DEFAULT_NODE_SSH_PORT ? "" : `:${port}`}`;
   }
 
   function formatSshLoginTarget(host, sshUser = defaultNodeSshUser) {
@@ -300,7 +304,7 @@ export function createPlatformSshDomain(dependencies) {
   function buildRelayEndpoint(route) {
     if (route?.proxy_target?.host) {
       const host = route.proxy_target.host;
-      const port = route.proxy_target.port ?? 22;
+      const port = route.proxy_target.port ?? DEFAULT_PROXY_SSH_PORT;
       const sshUser = route.proxy_target.ssh_user ?? defaultNodeSshUser;
       return {
         host,
@@ -320,7 +324,7 @@ export function createPlatformSshDomain(dependencies) {
         route.relay_target.port ??
         route.relay_node?.management?.ssh_port ??
         route.relay_node?.facts?.ssh_port ??
-        19822;
+        DEFAULT_NODE_SSH_PORT;
       const sshUser = route.relay_node?.management?.ssh_user ?? defaultNodeSshUser;
       return {
         host,

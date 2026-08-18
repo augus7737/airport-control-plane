@@ -1,4 +1,5 @@
 import { normalizeLocationValue } from "../shared/location-suggestions.js";
+import { DEFAULT_NODE_SSH_PORT } from "../shared/management-defaults.js";
 
 export function createNodeAssetModalPayloadsModule(dependencies = {}) {
   const {
@@ -105,7 +106,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       public_ipv4: String(formData.get("public_ipv4") || "").trim() || null,
       public_ipv6: String(formData.get("public_ipv6") || "").trim() || null,
       private_ipv4: String(formData.get("private_ipv4") || "").trim() || null,
-      ssh_port: toNumberOrNull(formData.get("management_ssh_port")) ?? 19822,
+      ssh_port: toNumberOrNull(formData.get("management_ssh_port")) ?? DEFAULT_NODE_SSH_PORT,
       memory_mb: toNumberOrNull(formData.get("memory_mb")),
       bandwidth_mbps: toNumberOrNull(formData.get("bandwidth_mbps")),
       traffic_quota_gb: toNumberOrNull(formData.get("traffic_quota_gb")),

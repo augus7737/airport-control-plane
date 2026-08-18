@@ -5,6 +5,10 @@ import {
   normalizeNullableNumber,
 } from "../costs/normalize.js";
 import { normalizeManagementRelayStrategy } from "../routes/management-strategies.js";
+import {
+  DEFAULT_NODE_SSH_PORT,
+  normalizeSshPort,
+} from "./management-defaults.js";
 
 function sourceValue(source, key, fallback = null) {
   return Object.prototype.hasOwnProperty.call(source, key) ? source[key] : fallback;
@@ -44,11 +48,6 @@ function normalizeNullableStringValue(value, fallback = null) {
 
   const normalized = String(value).trim();
   return normalized ? normalized : fallback;
-}
-
-function normalizePort(value) {
-  const port = Number(value);
-  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
 }
 
 function readRecordSource(source, key) {
@@ -218,18 +217,18 @@ function hasExplicitManagementSshPort(source = {}) {
 
 function resolveManagedSshPort(source = {}, existingNode = {}, management = {}, facts = {}) {
   const explicitManagementPort = hasExplicitManagementSshPort(source)
-    ? normalizePort(readRecordSource(source, "management")?.ssh_port)
+    ? normalizeSshPort(readRecordSource(source, "management")?.ssh_port)
     : null;
   if (explicitManagementPort) {
     return explicitManagementPort;
   }
 
   const inheritedPort =
-    normalizePort(sourceValue(source, "ssh_port", null)) ??
-    normalizePort(source?.facts?.ssh_port) ??
-    normalizePort(facts?.ssh_port);
-  const existingManagementPort = normalizePort(existingNode?.management?.ssh_port);
-  const existingFactsPort = normalizePort(existingNode?.facts?.ssh_port);
+    normalizeSshPort(sourceValue(source, "ssh_port", null)) ??
+    normalizeSshPort(source?.facts?.ssh_port) ??
+    normalizeSshPort(facts?.ssh_port);
+  const existingManagementPort = normalizeSshPort(existingNode?.management?.ssh_port);
+  const existingFactsPort = normalizeSshPort(existingNode?.facts?.ssh_port);
   const existingManagementIsInherited =
     existingManagementPort === null ||
     existingFactsPort === null ||
@@ -239,7 +238,7 @@ function resolveManagedSshPort(source = {}, existingNode = {}, management = {}, 
     return inheritedPort;
   }
 
-  return existingManagementPort ?? inheritedPort ?? existingFactsPort ?? 19822;
+  return existingManagementPort ?? inheritedPort ?? existingFactsPort ?? DEFAULT_NODE_SSH_PORT;
 }
 
 function buildCommercialRecord(source = {}, existingCommercial = {}) {
@@ -492,7 +491,7 @@ function buildMigratedManagementRecord(node = {}) {
     ssh_port: sourceValue(
       currentManagement,
       "ssh_port",
-      sourceValue(node, "ssh_port", sourceValue(node?.facts ?? {}, "ssh_port", 19822)),
+      sourceValue(node, "ssh_port", sourceValue(node?.facts ?? {}, "ssh_port", DEFAULT_NODE_SSH_PORT)),
     ),
     allow_ipv6: normalizeBooleanValue(
       sourceValue(currentManagement, "allow_ipv6", false),
@@ -615,7 +614,7 @@ export function createNodeRecordBuilders({
           public_ipv4: sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null),
           public_ipv6: sourceValue(payload, "public_ipv6", currentFacts.public_ipv6 ?? null),
           private_ipv4: sourceValue(payload, "private_ipv4", currentFacts.private_ipv4 ?? null),
-          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? 19822),
+          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? DEFAULT_NODE_SSH_PORT),
           public_ipv4_source:
             sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null) !==
             (currentFacts.public_ipv4 ?? null)
@@ -635,7 +634,7 @@ export function createNodeRecordBuilders({
         ...nextManagement,
         ssh_port: resolveManagedSshPort(payload, existingNode, nextManagement, {
           ...currentFacts,
-          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? 19822),
+          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? DEFAULT_NODE_SSH_PORT),
         }),
       },
     };

@@ -2,6 +2,11 @@ import {
   normalizeManagementRelayStrategy,
   relayStrategyCandidates,
 } from "./management-strategies.js";
+import {
+  DEFAULT_NODE_SSH_PORT,
+  DEFAULT_PROXY_SSH_PORT,
+  normalizeSshPort,
+} from "../nodes/management-defaults.js";
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -14,11 +19,6 @@ function normalizeString(value) {
 
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
-}
-
-function normalizePort(value) {
-  const port = Number(value);
-  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : null;
 }
 
 function normalizeBoolean(value, fallback = false) {
@@ -71,7 +71,7 @@ function buildProxyEndpoint(host, port, sshUser, label = null) {
 
   return {
     host: proxyHost,
-    port: normalizePort(port) ?? 22,
+    port: normalizeSshPort(port, DEFAULT_PROXY_SSH_PORT),
     family: inferHostFamily(proxyHost),
     source: "proxy_host",
     ssh_user: normalizeString(sshUser) ?? null,
@@ -122,9 +122,9 @@ function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
       requestedProxyHost,
     proxy_port:
       requestedProxyHost
-        ? normalizePort(management.proxy_port) ??
-          normalizePort(node?.ssh_proxy_port) ??
-          22
+        ? normalizeSshPort(management.proxy_port) ??
+          normalizeSshPort(node?.ssh_proxy_port) ??
+          DEFAULT_PROXY_SSH_PORT
         : null,
     proxy_user:
       requestedProxyHost
@@ -145,10 +145,10 @@ function resolveManagementConfig(node, defaultNodeSshUser, options = {}) {
       normalizeString(management.ssh_host) ??
       normalizeString(node?.ssh_host),
     ssh_port:
-      normalizePort(management.ssh_port) ??
-      normalizePort(node?.ssh_port) ??
-      normalizePort(node?.facts?.ssh_port) ??
-      19822,
+      normalizeSshPort(management.ssh_port) ??
+      normalizeSshPort(node?.ssh_port) ??
+      normalizeSshPort(node?.facts?.ssh_port) ??
+      DEFAULT_NODE_SSH_PORT,
     allow_ipv6: normalizeBoolean(management.allow_ipv6, false),
     ssh_user:
       normalizeString(management.ssh_user) ??
@@ -164,7 +164,7 @@ function buildEndpoint(node, options = {}) {
     relayNode = null,
     samePrivateIpv4Subnet,
     sshHost = null,
-    sshPort = 19822,
+    sshPort = DEFAULT_NODE_SSH_PORT,
     allowIpv6 = false,
   } = options;
 
@@ -269,7 +269,7 @@ export function createManagementRouteDomain(dependencies = {}) {
           relayNode: null,
           samePrivateIpv4Subnet,
           sshHost: relayConfig?.ssh_host,
-          sshPort: relayConfig?.ssh_port ?? 19822,
+          sshPort: relayConfig?.ssh_port ?? DEFAULT_NODE_SSH_PORT,
           allowIpv6: relayConfig?.allow_ipv6 ?? false,
         })
       : proxyTarget;

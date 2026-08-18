@@ -7,6 +7,7 @@ import {
   normalizeLocationValue,
 } from "../shared/location-suggestions.js";
 import { ensureCurrencySelectValue } from "../shared/currency-options.js";
+import { DEFAULT_NODE_SSH_PORT } from "../shared/management-defaults.js";
 
 export function createNodeAssetModalsModule(dependencies) {
   const {
@@ -418,7 +419,7 @@ export function createNodeAssetModalsModule(dependencies) {
       documentRef.getElementById("asset-management-ssh-host").value =
         node.management?.ssh_host || node.ssh_host || "";
       documentRef.getElementById("asset-management-ssh-port").value =
-        node.management?.ssh_port ?? node.ssh_port ?? node.facts?.ssh_port ?? 19822;
+        node.management?.ssh_port ?? node.ssh_port ?? node.facts?.ssh_port ?? DEFAULT_NODE_SSH_PORT;
       documentRef.getElementById("asset-management-access-mode").value =
         node.management?.access_mode || "direct";
       documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";

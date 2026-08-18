@@ -89,6 +89,10 @@ export function normalizeBillingCycle(value, fallback = null) {
   return BILLING_CYCLE_ALIASES.get(normalized.toLowerCase()) ?? fallback;
 }
 
+export function isSupportedBillingCycleInput(value) {
+  return normalizeBillingCycle(value) !== null;
+}
+
 export function normalizeBudgetThreshold(value, fallback = null) {
   const numericValue = normalizeNullableNumber(value, fallback);
   if (!Number.isFinite(numericValue) || numericValue < 0) {

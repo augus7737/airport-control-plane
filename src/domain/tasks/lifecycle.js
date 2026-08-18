@@ -1,4 +1,8 @@
 import { isRelayTransportKind } from "../routes/management-strategies.js";
+import {
+  DEFAULT_NODE_SSH_PORT,
+  normalizeSshPort,
+} from "../nodes/management-defaults.js";
 
 export function createTaskLifecycleDomain(dependencies) {
   const {
@@ -324,7 +328,9 @@ export function createTaskLifecycleDomain(dependencies) {
         target_host: target?.host ?? null,
         target_port:
           target?.port ??
-          (probeType === "ssh_auth" ? Number(node?.facts?.ssh_port ?? 19822) || 19822 : null),
+          (probeType === "ssh_auth"
+            ? normalizeSshPort(node?.facts?.ssh_port, DEFAULT_NODE_SSH_PORT)
+            : null),
         target_family: target?.family ?? null,
         access_mode:
           probeType === "ssh_auth"

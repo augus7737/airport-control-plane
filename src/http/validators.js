@@ -1,4 +1,7 @@
-import { SUPPORTED_BILLING_CYCLES } from "../domain/costs/normalize.js";
+import {
+  SUPPORTED_BILLING_CYCLES,
+  isSupportedBillingCycleInput,
+} from "../domain/costs/normalize.js";
 import { SUPPORTED_MANAGEMENT_RELAY_STRATEGIES } from "../domain/routes/management-strategies.js";
 
 function validateNullableIpField(errors, value, fieldName, options = {}) {
@@ -99,8 +102,7 @@ function validateNullableBillingCycleField(errors, value, fieldName) {
     return;
   }
 
-  const normalized = value.trim();
-  if (!SUPPORTED_BILLING_CYCLES.includes(normalized)) {
+  if (!isSupportedBillingCycleInput(value)) {
     errors.push(`${fieldName} must be one of ${SUPPORTED_BILLING_CYCLES.join(", ")}`);
   }
 }

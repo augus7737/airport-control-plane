@@ -1,3 +1,8 @@
+import {
+  DEFAULT_NODE_SSH_PORT,
+  normalizeSshPort,
+} from "./management-defaults.js";
+
 export function getAccessMode(node) {
   return node?.networking?.access_mode || "direct";
 }
@@ -97,8 +102,11 @@ export function formatNodeConfigMeta(node) {
 }
 
 export function formatNodeSshPort(node) {
-  const port = Number(node?.management?.ssh_port ?? node?.facts?.ssh_port ?? 19822);
-  return Number.isInteger(port) && port > 0 ? String(port) : "19822";
+  const port = normalizeSshPort(
+    node?.management?.ssh_port ?? node?.facts?.ssh_port,
+    DEFAULT_NODE_SSH_PORT,
+  );
+  return String(port);
 }
 
 export function formatIpSourceLabel(value) {
