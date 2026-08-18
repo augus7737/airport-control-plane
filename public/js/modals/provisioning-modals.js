@@ -113,8 +113,8 @@ export function createProvisioningModalsModule(dependencies) {
             <div class="guide-list">
               <section class="guide-card">
                 <span class="guide-step">命令区</span>
-                <h4>按顺序执行下面 3 条命令</h4>
-                <p>国内 Alpine LXC 建议先换源，再补齐依赖，最后执行接管脚本，这样初始化会稳定很多。</p>
+                <h4>复制下面 1 条命令到新设备执行</h4>
+                <p>脚本会自动换源、补齐依赖、启动 SSH，并把节点注册到控制面。</p>
                 <form class="form-grid" id="bootstrap-command-options">
                   <div class="field">
                     <label for="bootstrap-option-hostname">主机名</label>
@@ -138,6 +138,7 @@ export function createProvisioningModalsModule(dependencies) {
                   </div>
                 </form>
                 <div id="modal-bootstrap-commands">${renderBootstrapCommandPair(null, {
+                  singleScript: true,
                   mirrorId: "modal-command-mirror",
                   prepareId: "modal-command-prepare",
                   enrollId: "modal-command-enroll",
@@ -149,10 +150,10 @@ export function createProvisioningModalsModule(dependencies) {
                   enrollHint: "前两步完成后，再执行这一条。",
                 })}</div>
                 <div class="modal-actions">
-                  <button class="button primary" id="copy-full-bootstrap-command">复制完整三步</button>
-                  <button class="button primary" id="copy-mirror-command">复制步骤 1</button>
-                  <button class="button ghost" id="copy-prepare-command">复制步骤 2</button>
-                  <button class="button ghost" id="copy-enroll-command">复制一键接管脚本</button>
+                  <button class="button primary" id="copy-enroll-command">复制一键接管脚本</button>
+                  <button class="button ghost" id="copy-full-bootstrap-command">复制传统三步</button>
+                  <button class="button ghost" id="copy-mirror-command">复制换源</button>
+                  <button class="button ghost" id="copy-prepare-command">复制依赖安装</button>
                   <button class="button ghost" id="copy-script-url">复制脚本地址</button>
                 </div>
               </section>

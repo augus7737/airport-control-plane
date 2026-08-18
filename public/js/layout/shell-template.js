@@ -96,6 +96,7 @@ export function createShellTemplateModule(dependencies) {
               <span>默认纳管步骤</span>
             </div>
             <div id="bootstrap-command">${renderBootstrapCommandPair(null, {
+              singleScript: true,
               compact: true,
               mirrorId: "bootstrap-command-mirror",
               prepareId: "bootstrap-command-prepare",

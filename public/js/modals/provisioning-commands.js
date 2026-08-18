@@ -16,9 +16,19 @@ export function createProvisioningCommandModule(dependencies = {}) {
   }
 
   function getBootstrapEnrollCommand(tokenValue = null, options = {}) {
+    const scriptUrl = getBootstrapEnrollScriptUrl(tokenValue, options);
+    if (!scriptUrl) {
+      return "# 请先创建一个可用的注册令牌";
+    }
+
+    const quotedUrl = shellQuote(scriptUrl);
+    return `if command -v curl >/dev/null 2>&1; then curl -fsSL ${quotedUrl} | sh; elif command -v wget >/dev/null 2>&1; then wget -qO- ${quotedUrl} | sh; else echo "请先安装 curl 或 wget 后再执行接管" >&2; fi`;
+  }
+
+  function getBootstrapEnrollScriptUrl(tokenValue = null, options = {}) {
     const resolvedToken = tokenValue || getPrimaryBootstrapToken()?.token || "";
     if (!resolvedToken) {
-      return "# 请先创建一个可用的注册令牌";
+      return "";
     }
 
     const sshPort = options.sshPort || "19822";
@@ -26,18 +36,14 @@ export function createProvisioningCommandModule(dependencies = {}) {
     const publicIpv4 = String(options.publicIpv4 || "").trim();
     const provider = String(options.provider || "").trim();
     const region = String(options.region || "").trim();
-    const bootstrapUrl = shellQuote(getBootstrapScriptUrl());
-    const serverUrl = shellQuote(getPlatformBaseUrl());
-    const token = shellQuote(resolvedToken);
-    const extraArgs = [
-      `--ssh-port ${shellQuote(sshPort)}`,
-      hostname ? `--hostname ${shellQuote(hostname)}` : "",
-      publicIpv4 ? `--public-ipv4 ${shellQuote(publicIpv4)}` : "",
-      provider ? `--provider ${shellQuote(provider)}` : "",
-      region ? `--region ${shellQuote(region)}` : "",
-    ].filter(Boolean).join(" ");
-
-    return `if command -v curl >/dev/null 2>&1; then curl -fsSL ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} ${extraArgs}; elif command -v wget >/dev/null 2>&1; then wget -qO- ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} ${extraArgs}; else echo "请先执行步骤 2，安装 curl 后再执行接管" >&2; fi`;
+    const url = new URL("/bootstrap/enroll.sh", `${getPlatformBaseUrl()}/`);
+    url.searchParams.set("token", resolvedToken);
+    url.searchParams.set("ssh_port", sshPort);
+    if (hostname) url.searchParams.set("hostname", hostname);
+    if (publicIpv4) url.searchParams.set("public_ipv4", publicIpv4);
+    if (provider) url.searchParams.set("provider", provider);
+    if (region) url.searchParams.set("region", region);
+    return url.toString();
   }
 
   function getBootstrapCommand(tokenValue = null) {
@@ -57,6 +63,21 @@ export function createProvisioningCommandModule(dependencies = {}) {
     const mirrorId = options.mirrorId ? ` id="${options.mirrorId}"` : "";
     const prepareId = options.prepareId ? ` id="${options.prepareId}"` : "";
     const enrollId = options.enrollId ? ` id="${options.enrollId}"` : "";
+    if (options.singleScript) {
+      return `
+      <div class="${containerClass}">
+        <div class="bootstrap-command-step">
+          <div class="bootstrap-command-step-head">
+            <span class="bootstrap-command-step-index">${options.enrollLabel || "一键"}</span>
+            <strong>${options.enrollTitle || "执行纳管脚本"}</strong>
+            <span>${options.enrollHint || "复制到新设备 root shell 中执行即可。"}</span>
+          </div>
+          <div class="command-box"><code${enrollId}>${escapeHtml(enrollCommand)}</code></div>
+        </div>
+      </div>
+    `;
+    }
+
     const mirrorLabel = options.mirrorLabel || "步骤 1";
     const mirrorTitle = options.mirrorTitle || "切换国内镜像源";
     const mirrorHint = options.mirrorHint || "国内 Alpine 节点建议先切到阿里云镜像。";
@@ -100,6 +121,7 @@ export function createProvisioningCommandModule(dependencies = {}) {
   return {
     getBootstrapCommand,
     getBootstrapEnrollCommand,
+    getBootstrapEnrollScriptUrl,
     getBootstrapMirrorCommand,
     getBootstrapPrepareCommand,
     renderBootstrapCommandPair,

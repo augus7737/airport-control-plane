@@ -1144,6 +1144,77 @@ function safeDecodePathSegment(value) {
   }
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function buildBootstrapEnrollScript(url) {
+  const baseUrl = normalizeBaseUrl(platformPublicBaseUrl || resolveRequestOrigin(url));
+  const token = normalizeNullableString(url.searchParams.get("token"));
+  const args = [
+    ["--server", baseUrl],
+    ["--token", token],
+  ];
+  const optionalArgs = [
+    ["ssh_port", "--ssh-port"],
+    ["ssh_user", "--ssh-user"],
+    ["hostname", "--hostname"],
+    ["public_ipv4", "--public-ipv4"],
+    ["public_ipv6", "--public-ipv6"],
+    ["private_ipv4", "--private-ipv4"],
+    ["provider", "--provider"],
+    ["region", "--region"],
+    ["role", "--role"],
+    ["access_mode", "--access-mode"],
+    ["entry_region", "--entry-region"],
+    ["relay_node_id", "--relay-node-id"],
+    ["relay_label", "--relay-label"],
+    ["relay_region", "--relay-region"],
+    ["route_note", "--route-note"],
+  ];
+
+  for (const [queryName, argName] of optionalArgs) {
+    const value = normalizeNullableString(url.searchParams.get(queryName));
+    if (value) {
+      args.push([argName, value]);
+    }
+  }
+
+  const bootstrapArgs = args
+    .filter(([, value]) => value)
+    .map(([name, value]) => `${name} ${shellQuote(value)}`)
+    .join(" ");
+  const bootstrapUrl = `${baseUrl}/bootstrap.sh`;
+
+  return `#!/bin/sh
+set -eu
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\${PATH}"
+
+if [ -z ${shellQuote(token ?? "")} ]; then
+  echo "[airport-enroll] missing token in script URL" >&2
+  exit 1
+fi
+
+echo "[airport-enroll] preparing node"
+command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && [ ! -f /etc/apk/repositories.airport.bak ] && cp /etc/apk/repositories /etc/apk/repositories.airport.bak 2>/dev/null || true
+command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && sed -i 's#https\\?://[^ ]*alpinelinux\\.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories || true
+command -v apk >/dev/null 2>&1 && { apk update && apk add --no-cache curl wget openssh ca-certificates; } || echo "[airport-enroll] apk unavailable, skip package bootstrap" >&2
+ssh-keygen -A >/dev/null 2>&1 || true
+rc-update add sshd default >/dev/null 2>&1 || true
+rc-service sshd start >/dev/null 2>&1 || /usr/sbin/sshd >/dev/null 2>&1 || true
+
+echo "[airport-enroll] registering node"
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL ${shellQuote(bootstrapUrl)} | sh -s -- ${bootstrapArgs}
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO- ${shellQuote(bootstrapUrl)} | sh -s -- ${bootstrapArgs}
+else
+  echo "[airport-enroll] curl/wget missing" >&2
+  exit 1
+fi
+`;
+}
+
 function findAccessUserByShareToken(shareToken) {
   return accessUserStore.find((item) => item.share_token === shareToken) || null;
 }
@@ -2824,7 +2895,7 @@ function isPublicApiRequest(request, url) {
 function requestRequiresOperatorAuth(request, url) {
   if (
     (request.method === "GET" || request.method === "HEAD") &&
-    ["/healthz", "/bootstrap.sh", "/login", "/login.html"].includes(url.pathname)
+    ["/healthz", "/bootstrap.sh", "/bootstrap/enroll.sh", "/login", "/login.html"].includes(url.pathname)
   ) {
     return false;
   }
@@ -2961,6 +3032,25 @@ const server = createServer(async (request, reply) => {
         error: "bootstrap_script_missing",
       });
     }
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/bootstrap/enroll.sh") {
+    const tokenValue = normalizeNullableString(url.searchParams.get("token"));
+    const bootstrapToken = tokenValue ? findBootstrapTokenByValue(tokenValue) : null;
+    const tokenErrorInfo = bootstrapTokenError(bootstrapToken);
+
+    if (tokenErrorInfo) {
+      textResponse(
+        reply,
+        403,
+        "text/plain",
+        `#!/bin/sh\necho ${shellQuote(`[airport-enroll] ${tokenErrorInfo.message}`)} >&2\nexit 1\n`,
+      );
+      return;
+    }
+
+    textResponse(reply, 200, "text/plain", buildBootstrapEnrollScript(url));
     return;
   }
 
