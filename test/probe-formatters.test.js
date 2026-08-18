@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   formatPrimaryLatency,
+  formatNodeStatusProbeSummary,
   formatProbeLatencyBreakdown,
   formatProbeSummary,
 } from "../public/js/shared/probe-formatters.js";
@@ -28,5 +29,6 @@ test("probe latency formatters distinguish SSH end-to-end from TCP latency", () 
 
   assert.equal(formatPrimaryLatency(probe), "SSH 端到端 220ms");
   assert.equal(formatProbeSummary(probe), "可接管 · SSH 端到端 220ms");
+  assert.equal(formatNodeStatusProbeSummary(probe), "可接管 · 管理 TCP 32ms");
   assert.equal(formatProbeLatencyBreakdown(probe), "管理 TCP 32ms / SSH 端到端 220ms");
 });

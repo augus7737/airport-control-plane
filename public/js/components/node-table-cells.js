@@ -16,6 +16,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
     formatProbeLongSummary,
     formatProbeStageCompact,
     formatProbeSummary,
+    formatNodeStatusProbeSummary,
     formatProbeType,
     formatRelativeTime,
     formatRenewal,
@@ -40,7 +41,12 @@ export function createNodeTableCellsModule(dependencies = {}) {
   function renderNodeStatusCell(node) {
     const latestProbe = getLatestProbeForNode(node);
     const scheduler = typeof getProbeSchedulerState === "function" ? getProbeSchedulerState() : null;
-    const subline = latestProbe ? formatProbeSummary(latestProbe) : "待首检";
+    const subline =
+      latestProbe && typeof formatNodeStatusProbeSummary === "function"
+        ? formatNodeStatusProbeSummary(latestProbe)
+        : latestProbe
+          ? formatProbeSummary(latestProbe)
+          : "待首检";
     const latencyBreakdown =
       typeof formatProbeLatencyBreakdown === "function" ? formatProbeLatencyBreakdown(latestProbe) : "";
     const timeLabel = latestProbe?.observed_at

@@ -132,6 +132,25 @@ export function formatPrimaryLatency(probe) {
   return `${latencySourceLabel(primaryLatencySource(probe))} ${probe.latency_ms}ms`;
 }
 
+export function formatNodeStatusProbeSummary(probe) {
+  if (!probe) {
+    return "尚未探测";
+  }
+
+  const managementTcp = getManagementTcpStage(probe);
+  const ssh = getProbeSshStage(probe);
+  const managementLatency =
+    managementTcp?.latency_ms != null
+      ? { latency_ms: managementTcp.latency_ms, latency_source: "management_tcp" }
+      : ssh?.latency_ms != null
+        ? { latency_ms: ssh.latency_ms, latency_source: "management_ssh_e2e" }
+        : null;
+
+  return managementLatency
+    ? formatProbeSummary({ ...probe, ...managementLatency })
+    : formatProbeSummary(probe);
+}
+
 export function formatProbeLatencyBreakdown(probe) {
   if (!probe) {
     return "";
