@@ -5,6 +5,7 @@ export function createTaskLifecycleDomain(dependencies) {
     bootstrapProbeTaskForInitTask,
     buildOperationRecord,
     buildTaskRecord,
+    defaultInitTemplateForNode = () => "alpine-base",
     defaultNodeSshUser = "root",
     ensureNodeInitTask,
     executeProbeTask,
@@ -617,7 +618,7 @@ export function createTaskLifecycleDomain(dependencies) {
       }
 
       ensureNodeInitTask(node, {
-        template: "alpine-base",
+        template: defaultInitTemplateForNode(node),
         trigger: "bootstrap_register",
         note: "历史 bootstrap 节点待补执行初始化，可在节点详情页重新触发。",
       });

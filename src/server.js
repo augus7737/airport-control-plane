@@ -183,6 +183,121 @@ const configReleaseStore = [];
 const systemTemplateReleaseStore = [];
 const systemUserReleaseStore = [];
 
+const debianBaseInitScript = `#!/bin/sh
+set -eu
+
+# Debian / Ubuntu 轻量节点初始化（可重复执行，含 sing-box best-effort 预装）
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\${PATH}"
+export DEBIAN_FRONTEND=noninteractive
+
+retry_command() {
+  ATTEMPTS="$1"
+  DELAY_SECONDS="$2"
+  shift 2
+  COUNT=1
+
+  while [ "$COUNT" -le "$ATTEMPTS" ]; do
+    if "$@"; then
+      return 0
+    fi
+
+    if [ "$COUNT" -lt "$ATTEMPTS" ]; then
+      sleep "$DELAY_SECONDS"
+    fi
+
+    COUNT=$((COUNT + 1))
+  done
+
+  return 1
+}
+
+ensure_sshd_setting() {
+  KEY="$1"
+  VALUE="$2"
+  FILE=/etc/ssh/sshd_config
+
+  if [ ! -f "$FILE" ]; then
+    return 0
+  fi
+
+  if grep -Eq "^[#[:space:]]*$KEY[[:space:]]+" "$FILE"; then
+    sed -i "s|^[#[:space:]]*$KEY[[:space:]].*|$KEY $VALUE|" "$FILE" || true
+  else
+    printf '%s %s\\n' "$KEY" "$VALUE" >>"$FILE"
+  fi
+}
+
+install_sing_box() {
+  if command -v sing-box >/dev/null 2>&1; then
+    echo "[init] sing-box 已存在，跳过安装"
+    return 0
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get install -y sing-box >/dev/null 2>&1 && {
+      echo "[init] sing-box 已通过 apt 安装"
+      return 0
+    }
+  fi
+
+  echo "[init] sing-box 当前不可用，可后续通过平台发布时自动补装或手动安装" >&2
+  return 1
+}
+
+ensure_sing_box_layout() {
+  install -d -m 755 /etc/sing-box /var/lib/sing-box /var/log/sing-box
+
+  if [ ! -f /etc/sing-box/config.json ]; then
+    cat >/etc/sing-box/config.json <<'EOF_SINGBOX_CONFIG'
+{
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
+}
+EOF_SINGBOX_CONFIG
+  fi
+}
+
+echo "[init] 开始初始化 Debian / Ubuntu"
+if command -v apt-get >/dev/null 2>&1; then
+  retry_command 3 2 apt-get update
+  retry_command 3 2 apt-get install -y bash curl wget ca-certificates tzdata openssh-server iproute2 iputils-ping dnsutils
+else
+  echo "[init] 当前系统缺少 apt-get，无法使用 Debian / Ubuntu 模板。" >&2
+  exit 1
+fi
+
+ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime || true
+echo "Asia/Shanghai" >/etc/timezone || true
+
+mkdir -p /run/sshd /var/run/sshd
+ssh-keygen -A >/dev/null 2>&1 || true
+ensure_sshd_setting "AllowTcpForwarding" "yes"
+ensure_sshd_setting "PermitOpen" "any"
+systemctl enable ssh >/dev/null 2>&1 || systemctl enable sshd >/dev/null 2>&1 || true
+systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || service ssh restart >/dev/null 2>&1 || service sshd restart >/dev/null 2>&1 || /usr/sbin/sshd >/dev/null 2>&1 || true
+
+install -d -m 755 /opt/airport/bin /opt/airport/log /etc/airport
+ensure_sing_box_layout
+cat >/etc/airport/node.env <<'EOF'
+NODE_ROLE=edge
+PANEL_ENDPOINT=https://example.com
+PANEL_TOKEN=replace_me
+SING_BOX_CONFIG=/etc/sing-box/config.json
+EOF
+chmod 600 /etc/airport/node.env
+
+install_sing_box || true
+
+echo "[init] 初始化完成"
+`;
+
 const initTemplates = {
   "alpine-base": {
     task_type: "init_alpine",
@@ -385,7 +500,27 @@ fi
 echo "[init] 初始化完成"
 `,
   },
+  "debian-base": {
+    task_type: "init_alpine",
+    title: "初始化 Debian / Ubuntu",
+    script_name: "Debian / Ubuntu 节点基础初始化（含 sing-box 准备）",
+    script_body: debianBaseInitScript,
+  },
 };
+
+function defaultInitTemplateForNode(node) {
+  const osName = normalizeNullableString(node?.facts?.os_name)?.toLowerCase() ?? "";
+  const osId = normalizeNullableString(node?.facts?.os_id)?.toLowerCase() ?? "";
+  const osFamily = normalizeNullableString(node?.facts?.os_family)?.toLowerCase() ?? "";
+  const osVersion = normalizeNullableString(node?.facts?.os_version)?.toLowerCase() ?? "";
+  const osText = [osName, osId, osFamily, osVersion].filter(Boolean).join(" ");
+
+  if (/\b(ubuntu|debian)\b/.test(osText)) {
+    return "debian-base";
+  }
+
+  return "alpine-base";
+}
 
 const alpineBbrTuningScript = `#!/bin/sh
 set -eu
@@ -515,6 +650,7 @@ echo "[acme] webroot=$ACME_WEBROOT"
 
 function defaultSystemTemplateRecords() {
   const alpineBase = initTemplates["alpine-base"];
+  const debianBase = initTemplates["debian-base"];
   const timestamp = nowIso();
 
   return [
@@ -528,6 +664,19 @@ function defaultSystemTemplateRecords() {
       node_group_ids: [],
       tags: ["alpine", "baseline", "bootstrap"],
       note: "内置基线模板，可直接批量应用到低内存 Alpine 节点。",
+      created_at: timestamp,
+      updated_at: timestamp,
+    },
+    {
+      id: "system_template_debian_base",
+      name: "Debian / Ubuntu 基线初始化",
+      category: "baseline",
+      script_name: debianBase.script_name,
+      script_body: debianBase.script_body,
+      status: "active",
+      node_group_ids: [],
+      tags: ["debian", "ubuntu", "baseline", "bootstrap"],
+      note: "内置基线模板，可直接应用到 Debian / Ubuntu 节点，适合 LXC 小内存环境。",
       created_at: timestamp,
       updated_at: timestamp,
     },
@@ -863,6 +1012,7 @@ const {
   bootstrapProbeTaskForInitTask,
   buildOperationRecord,
   buildTaskRecord,
+  defaultInitTemplateForNode,
   defaultNodeSshUser,
   ensureNodeInitTask,
   executeProbeTask: async (task, options) => executeProbeTask(task, options),
@@ -4919,7 +5069,7 @@ const server = createServer(async (request, reply) => {
       const requestedTemplateName =
         typeof payload.template === "string" && payload.template.trim()
           ? payload.template.trim()
-          : "alpine-base";
+          : defaultInitTemplateForNode(node);
       const requestedSystemTemplateId =
         typeof payload.system_template_id === "string" && payload.system_template_id.trim()
           ? payload.system_template_id.trim()
@@ -5167,7 +5317,7 @@ const server = createServer(async (request, reply) => {
         nodeStatus === "active"
           ? latestNodeTask(node.id, "init_alpine")
           : ensureNodeInitTask(node, {
-              template: "alpine-base",
+              template: defaultInitTemplateForNode(node),
               trigger: existingNode ? "bootstrap_refresh" : "bootstrap_register",
               reason: existingNode ? "bootstrap_refresh" : "bootstrap_register",
             });
@@ -5202,7 +5352,7 @@ const server = createServer(async (request, reply) => {
                 {
                   type: "schedule_init",
                   id: scheduleInitTask.id,
-                  template: scheduleInitTask.template || "alpine-base",
+                  template: scheduleInitTask.template || defaultInitTemplateForNode(node),
                 },
               ]
             : []),
