@@ -298,6 +298,136 @@ install_sing_box || true
 echo "[init] 初始化完成"
 `;
 
+const rhelBaseInitScript = `#!/bin/sh
+set -eu
+
+# RHEL family 轻量节点初始化（CentOS / Rocky / Alma / Fedora）
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:\${PATH}"
+
+retry_command() {
+  ATTEMPTS="$1"
+  DELAY_SECONDS="$2"
+  shift 2
+  COUNT=1
+
+  while [ "$COUNT" -le "$ATTEMPTS" ]; do
+    if "$@"; then
+      return 0
+    fi
+
+    if [ "$COUNT" -lt "$ATTEMPTS" ]; then
+      sleep "$DELAY_SECONDS"
+    fi
+
+    COUNT=$((COUNT + 1))
+  done
+
+  return 1
+}
+
+pkg_install() {
+  if command -v dnf >/dev/null 2>&1; then
+    retry_command 3 2 dnf install -y "$@"
+    return
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    retry_command 3 2 yum install -y "$@"
+    return
+  fi
+
+  echo "[init] 当前系统缺少 dnf/yum，无法使用 RHEL family 模板。" >&2
+  exit 1
+}
+
+ensure_sshd_setting() {
+  KEY="$1"
+  VALUE="$2"
+  FILE=/etc/ssh/sshd_config
+
+  if [ ! -f "$FILE" ]; then
+    return 0
+  fi
+
+  if grep -Eq "^[#[:space:]]*$KEY[[:space:]]+" "$FILE"; then
+    sed -i "s|^[#[:space:]]*$KEY[[:space:]].*|$KEY $VALUE|" "$FILE" || true
+  else
+    printf '%s %s\\n' "$KEY" "$VALUE" >>"$FILE"
+  fi
+}
+
+install_sing_box() {
+  if command -v sing-box >/dev/null 2>&1; then
+    echo "[init] sing-box 已存在，跳过安装"
+    return 0
+  fi
+
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y sing-box >/dev/null 2>&1 && {
+      echo "[init] sing-box 已通过 dnf 安装"
+      return 0
+    }
+  fi
+
+  if command -v yum >/dev/null 2>&1; then
+    yum install -y sing-box >/dev/null 2>&1 && {
+      echo "[init] sing-box 已通过 yum 安装"
+      return 0
+    }
+  fi
+
+  echo "[init] sing-box 当前不可用，可后续通过平台发布时自动补装或手动安装" >&2
+  return 1
+}
+
+ensure_sing_box_layout() {
+  install -d -m 755 /etc/sing-box /var/lib/sing-box /var/log/sing-box
+
+  if [ ! -f /etc/sing-box/config.json ]; then
+    cat >/etc/sing-box/config.json <<'EOF_SINGBOX_CONFIG'
+{
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
+}
+EOF_SINGBOX_CONFIG
+  fi
+}
+
+echo "[init] 开始初始化 RHEL family"
+pkg_install bash curl wget ca-certificates tzdata openssh-server iproute iputils bind-utils
+
+ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime || true
+echo "Asia/Shanghai" >/etc/timezone || true
+
+mkdir -p /run/sshd /var/run/sshd
+ssh-keygen -A >/dev/null 2>&1 || true
+ensure_sshd_setting "AllowTcpForwarding" "yes"
+ensure_sshd_setting "PermitOpen" "any"
+systemctl enable sshd >/dev/null 2>&1 || true
+systemctl restart sshd >/dev/null 2>&1 || service sshd restart >/dev/null 2>&1 || /usr/sbin/sshd >/dev/null 2>&1 || true
+
+install -d -m 755 /opt/airport/bin /opt/airport/log /etc/airport
+ensure_sing_box_layout
+cat >/etc/airport/node.env <<'EOF'
+NODE_ROLE=edge
+PANEL_ENDPOINT=https://example.com
+PANEL_TOKEN=replace_me
+SING_BOX_CONFIG=/etc/sing-box/config.json
+EOF
+chmod 600 /etc/airport/node.env
+
+install_sing_box || true
+
+echo "[init] 初始化完成"
+`;
+
 const initTemplates = {
   "alpine-base": {
     task_type: "init_alpine",
@@ -506,6 +636,12 @@ echo "[init] 初始化完成"
     script_name: "Debian / Ubuntu 节点基础初始化（含 sing-box 准备）",
     script_body: debianBaseInitScript,
   },
+  "rhel-base": {
+    task_type: "init_alpine",
+    title: "初始化 RHEL family",
+    script_name: "RHEL family 节点基础初始化（CentOS / Rocky / Alma / Fedora）",
+    script_body: rhelBaseInitScript,
+  },
 };
 
 function defaultInitTemplateForNode(node) {
@@ -515,8 +651,12 @@ function defaultInitTemplateForNode(node) {
   const osVersion = normalizeNullableString(node?.facts?.os_version)?.toLowerCase() ?? "";
   const osText = [osName, osId, osFamily, osVersion].filter(Boolean).join(" ");
 
-  if (/\b(ubuntu|debian)\b/.test(osText)) {
+  if (/\b(ubuntu|debian|raspbian|linuxmint|pop)\b/.test(osText)) {
     return "debian-base";
+  }
+
+  if (/\b(rhel|centos|rocky|alma|almalinux|fedora|ol|oracle)\b/.test(osText)) {
+    return "rhel-base";
   }
 
   return "alpine-base";
@@ -651,6 +791,7 @@ echo "[acme] webroot=$ACME_WEBROOT"
 function defaultSystemTemplateRecords() {
   const alpineBase = initTemplates["alpine-base"];
   const debianBase = initTemplates["debian-base"];
+  const rhelBase = initTemplates["rhel-base"];
   const timestamp = nowIso();
 
   return [
@@ -677,6 +818,19 @@ function defaultSystemTemplateRecords() {
       node_group_ids: [],
       tags: ["debian", "ubuntu", "baseline", "bootstrap"],
       note: "内置基线模板，可直接应用到 Debian / Ubuntu 节点，适合 LXC 小内存环境。",
+      created_at: timestamp,
+      updated_at: timestamp,
+    },
+    {
+      id: "system_template_rhel_base",
+      name: "RHEL family 基线初始化",
+      category: "baseline",
+      script_name: rhelBase.script_name,
+      script_body: rhelBase.script_body,
+      status: "active",
+      node_group_ids: [],
+      tags: ["rhel", "centos", "rocky", "alma", "fedora", "baseline", "bootstrap"],
+      note: "内置基线模板，可直接应用到 CentOS / Rocky / Alma / Fedora 等 RHEL 系节点。",
       created_at: timestamp,
       updated_at: timestamp,
     },
@@ -1348,10 +1502,25 @@ fi
 echo "[airport-enroll] preparing node"
 command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && [ ! -f /etc/apk/repositories.airport.bak ] && cp /etc/apk/repositories /etc/apk/repositories.airport.bak 2>/dev/null || true
 command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && sed -i 's#https\\?://[^ ]*alpinelinux\\.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories || true
-command -v apk >/dev/null 2>&1 && { apk update && apk add --no-cache curl wget openssh ca-certificates; } || echo "[airport-enroll] apk unavailable, skip package bootstrap" >&2
+if command -v apk >/dev/null 2>&1; then
+  apk update >/dev/null 2>&1 || true
+  apk add --no-cache curl wget openssh ca-certificates >/dev/null 2>&1 || true
+elif command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update >/dev/null 2>&1 || true
+  apt-get install -y curl wget openssh-server ca-certificates >/dev/null 2>&1 || true
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y curl wget openssh-server ca-certificates >/dev/null 2>&1 || true
+elif command -v yum >/dev/null 2>&1; then
+  yum install -y curl wget openssh-server ca-certificates >/dev/null 2>&1 || true
+else
+  echo "[airport-enroll] no known package manager, continue with existing tools" >&2
+fi
 ssh-keygen -A >/dev/null 2>&1 || true
 rc-update add sshd default >/dev/null 2>&1 || true
 rc-service sshd start >/dev/null 2>&1 || /usr/sbin/sshd >/dev/null 2>&1 || true
+systemctl enable ssh >/dev/null 2>&1 || systemctl enable sshd >/dev/null 2>&1 || true
+systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || service ssh restart >/dev/null 2>&1 || service sshd restart >/dev/null 2>&1 || true
 
 echo "[airport-enroll] registering node"
 if command -v curl >/dev/null 2>&1; then

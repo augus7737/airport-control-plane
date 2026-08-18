@@ -142,6 +142,25 @@ ReadWritePaths=/opt/airport-control-plane/data
 
 ## P1：短期增强
 
+### 0. 多系统节点接入兼容
+
+当前进展：
+
+- bootstrap 已支持 Alpine、Debian / Ubuntu、RHEL family 的基础准备
+- 节点注册会上报 `os_id` / `os_family`，控制端按系统事实自动选择初始化模板
+- 内置模板已覆盖 `alpine-base`、`debian-base`、`rhel-base`
+
+继续改造：
+
+- 发布 sing-box 时按 `apk` / `apt` / `dnf` / `yum` 自动补装运行时
+- 增加 Arch / openSUSE 的轻量模板或明确提示为“未验证系统”
+- 在前端节点详情展示“系统识别结果”和“自动选择模板”
+
+验收标准：
+
+- 新设备只需复制网页的一行命令执行，不需要人工判断系统模板
+- 不支持的系统应保留节点记录并给出明确下一步，而不是静默失败
+
 ### 1. `/readyz` 就绪检查
 
 当前 `/healthz` 只能说明进程活着，不能说明数据已加载完成。

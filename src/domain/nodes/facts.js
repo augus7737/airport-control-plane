@@ -95,6 +95,8 @@ export function createNodeFactsDomain(dependencies = {}) {
     return {
       hostname: normalizeNullableString(facts.hostname),
       os_name: normalizeNullableString(facts.os_name),
+      os_id: normalizeNullableString(facts.os_id)?.toLowerCase() ?? null,
+      os_family: normalizeNullableString(facts.os_family)?.toLowerCase() ?? null,
       os_version: normalizeNullableString(facts.os_version),
       arch: normalizeNullableString(facts.arch),
       kernel_version: normalizeNullableString(facts.kernel_version),

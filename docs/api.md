@@ -134,6 +134,8 @@ Request body:
   "facts": {
     "hostname": "alpine-hkg-01",
     "os_name": "Alpine Linux",
+    "os_id": "alpine",
+    "os_family": "",
     "os_version": "3.21",
     "arch": "x86_64",
     "kernel_version": "6.12.0",
@@ -196,6 +198,7 @@ Validation rules:
 - numeric facts must be non-negative
 - `bootstrap_token` must exist and be active
 - expired / exhausted / disabled tokens are rejected
+- bootstrap initialization auto-selects `alpine-base`, `debian-base`, or `rhel-base` from node OS facts (`os_name`, `os_id`, `os_family`, `os_version`)
 
 ## `GET /api/v1/bootstrap-tokens`
 
@@ -660,9 +663,15 @@ Request body:
 
 ```json
 {
-  "template": "alpine-base"
+  "template": "debian-base"
 }
 ```
+
+If `template` is omitted, the server chooses a built-in baseline from node OS facts:
+
+- `alpine-base` for Alpine
+- `debian-base` for Debian / Ubuntu family
+- `rhel-base` for CentOS / Rocky / Alma / Fedora / RHEL family
 
 ## `POST /api/v1/nodes/:id/probe`
 

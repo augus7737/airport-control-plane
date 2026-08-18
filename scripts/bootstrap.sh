@@ -236,6 +236,13 @@ ensure_http_client() {
 
   if command -v apk >/dev/null 2>&1; then
     apk add --no-cache curl >/dev/null 2>&1 || true
+  elif command -v apt-get >/dev/null 2>&1; then
+    apt-get update >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates >/dev/null 2>&1 || true
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y curl ca-certificates >/dev/null 2>&1 || true
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y curl ca-certificates >/dev/null 2>&1 || true
   fi
 
   if command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
@@ -278,6 +285,13 @@ ensure_ssh_server_package() {
     apk update >/dev/null 2>&1 || true
     apk add --no-cache openssh >/dev/null 2>&1 || \
       apk add --no-cache openssh-server openssh-keygen >/dev/null 2>&1 || true
+  elif command -v apt-get >/dev/null 2>&1; then
+    apt-get update >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server >/dev/null 2>&1 || true
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y openssh-server >/dev/null 2>&1 || true
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y openssh-server >/dev/null 2>&1 || true
   fi
 
   command -v sshd >/dev/null 2>&1
@@ -451,6 +465,15 @@ ensure_ssh_server_ready() {
     rc-service sshd restart >/dev/null 2>&1 || rc-service sshd start >/dev/null 2>&1 || true
   fi
 
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable ssh >/dev/null 2>&1 || systemctl enable sshd >/dev/null 2>&1 || true
+    systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1 || true
+  fi
+
+  if command -v service >/dev/null 2>&1; then
+    service ssh restart >/dev/null 2>&1 || service sshd restart >/dev/null 2>&1 || true
+  fi
+
   if command -v sshd >/dev/null 2>&1; then
     sshd >/dev/null 2>&1 || /usr/sbin/sshd >/dev/null 2>&1 || true
   fi
@@ -525,11 +548,11 @@ sha256_hex() {
 read_os_release() {
   if [ -f /etc/os-release ]; then
     . /etc/os-release
-    echo "${NAME:-unknown}|${VERSION_ID:-unknown}"
+    echo "${NAME:-unknown}|${VERSION_ID:-unknown}|${ID:-unknown}|${ID_LIKE:-}"
     return
   fi
 
-  echo "unknown|unknown"
+  echo "unknown|unknown|unknown|"
 }
 
 read_cpu_cores() {
@@ -784,6 +807,8 @@ probe_public_ipv6() {
 OS_RELEASE="$(read_os_release)"
 OS_NAME="$(printf '%s' "$OS_RELEASE" | cut -d '|' -f 1)"
 OS_VERSION="$(printf '%s' "$OS_RELEASE" | cut -d '|' -f 2)"
+OS_ID="$(printf '%s' "$OS_RELEASE" | cut -d '|' -f 3)"
+OS_FAMILY="$(printf '%s' "$OS_RELEASE" | cut -d '|' -f 4)"
 NODE_HOSTNAME="${HOSTNAME_OVERRIDE:-$(hostname)}"
 ARCH="$(uname -m)"
 KERNEL_VERSION="$(uname -r)"
@@ -863,6 +888,8 @@ PAYLOAD="$(cat <<EOF
   "facts": {
     "hostname": "$(json_escape "$NODE_HOSTNAME")",
     "os_name": "$(json_escape "$OS_NAME")",
+    "os_id": "$(json_escape "$OS_ID")",
+    "os_family": "$(json_escape "$OS_FAMILY")",
     "os_version": "$(json_escape "$OS_VERSION")",
     "arch": "$(json_escape "$ARCH")",
     "kernel_version": "$(json_escape "$KERNEL_VERSION")",
