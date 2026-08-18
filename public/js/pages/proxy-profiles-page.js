@@ -28,6 +28,8 @@ function createEmptyProfileDraft() {
     transport_headers: "",
     http_method: "",
     grpc_service_name: "",
+    hysteria2_obfs_type: "",
+    hysteria2_obfs_password: "",
     transport_idle_timeout: "",
     transport_ping_timeout: "",
     early_data_header_name: "",
@@ -246,6 +248,12 @@ export function createProxyProfilesPageModule(dependencies) {
       transport_headers: transportHeaders ? stringifyJsonBody(withoutHostHeader(transportHeaders)) : "",
       http_method: String(transportTemplate.method || ""),
       grpc_service_name: String(transportTemplate.service_name || ""),
+      hysteria2_obfs_type: String(
+        pickEngineTemplate(profile.template).hysteria2?.obfs?.type || "",
+      ),
+      hysteria2_obfs_password: String(
+        pickEngineTemplate(profile.template).hysteria2?.obfs?.password || "",
+      ),
       transport_idle_timeout: String(transportTemplate.idle_timeout || ""),
       transport_ping_timeout: String(transportTemplate.ping_timeout || ""),
       early_data_header_name: String(transportTemplate.early_data_header_name || ""),
@@ -341,6 +349,26 @@ export function createProxyProfilesPageModule(dependencies) {
       nextEngineTemplate.reality = realityTemplate || {};
     } else {
       delete nextEngineTemplate.reality;
+    }
+
+    if (fields.protocol === "hysteria2") {
+      const previousHysteria2 = isPlainObject(existingEngineTemplate.hysteria2)
+        ? existingEngineTemplate.hysteria2
+        : {};
+      const obfsType = normalizeOptionalString(fields.hysteria2_obfs_type);
+      const obfsPassword = normalizeOptionalString(fields.hysteria2_obfs_password);
+      nextEngineTemplate.hysteria2 = cleanConfigValue({
+        ...previousHysteria2,
+        obfs:
+          obfsType || obfsPassword
+            ? {
+                type: obfsType,
+                password: obfsPassword,
+              }
+            : null,
+      });
+    } else {
+      delete nextEngineTemplate.hysteria2;
     }
 
     if (fields.transport !== "tcp") {
@@ -715,6 +743,7 @@ export function createProxyProfilesPageModule(dependencies) {
                     <select id="proxy-profile-protocol" name="protocol">
                       <option value="vless"${draft.protocol === "vless" ? " selected" : ""}>VLESS</option>
                       <option value="vmess"${draft.protocol === "vmess" ? " selected" : ""}>VMess</option>
+                      <option value="hysteria2"${draft.protocol === "hysteria2" ? " selected" : ""}>Hysteria2</option>
                     </select>
                   </div>
                   <div class="field">
@@ -748,6 +777,7 @@ export function createProxyProfilesPageModule(dependencies) {
                     <label for="proxy-profile-transport">传输层</label>
                     <select id="proxy-profile-transport" name="transport">
                       <option value="tcp"${draft.transport === "tcp" ? " selected" : ""}>TCP</option>
+                      <option value="udp"${draft.transport === "udp" ? " selected" : ""}>UDP / QUIC</option>
                       <option value="ws"${draft.transport === "ws" ? " selected" : ""}>WebSocket</option>
                       <option value="grpc"${draft.transport === "grpc" ? " selected" : ""}>gRPC</option>
                       <option value="http"${draft.transport === "http" ? " selected" : ""}>HTTP (H2)</option>
@@ -765,6 +795,14 @@ export function createProxyProfilesPageModule(dependencies) {
                   <div class="field">
                     <label for="proxy-profile-server-name">伪装域名 / SNI</label>
                     <input id="proxy-profile-server-name" name="server_name" value="${escapeHtml(draft.server_name)}" placeholder="cdn.example.com" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-hysteria2-obfs-type">HY2 混淆类型</label>
+                    <input id="proxy-profile-hysteria2-obfs-type" name="hysteria2_obfs_type" value="${escapeHtml(draft.hysteria2_obfs_type)}" placeholder="salamander" />
+                  </div>
+                  <div class="field">
+                    <label for="proxy-profile-hysteria2-obfs-password">HY2 混淆密码</label>
+                    <input id="proxy-profile-hysteria2-obfs-password" name="hysteria2_obfs_password" value="${escapeHtml(draft.hysteria2_obfs_password)}" type="password" placeholder="可选，仅启用 salamander 时填写" />
                   </div>
                   <div class="field">
                     <label for="proxy-profile-flow">Flow</label>
@@ -975,14 +1013,16 @@ export function createProxyProfilesPageModule(dependencies) {
       const security = String(formData.get("security") || "reality").trim() || "reality";
       const transport = String(formData.get("transport") || "tcp").trim() || "tcp";
       const protocol = String(formData.get("protocol") || "vless").trim() || "vless";
+      const effectiveSecurity = protocol === "hysteria2" ? "tls" : security;
+      const effectiveTransport = protocol === "hysteria2" ? "udp" : transport;
       const payload = {
         name: String(formData.get("name") || "").trim(),
         protocol,
         listen_port: Number(formData.get("listen_port")) || Number(formData.get("listen_port") || 0) || null,
-        transport,
-        security,
-        tls_enabled: security !== "none",
-        reality_enabled: protocol === "vless" && security === "reality",
+        transport: effectiveTransport,
+        security: effectiveSecurity,
+        tls_enabled: effectiveSecurity !== "none",
+        reality_enabled: protocol === "vless" && effectiveSecurity === "reality",
         mux_enabled: formData.get("mux_enabled") === "on",
         server_name: String(formData.get("server_name") || "").trim() || null,
         flow:
@@ -1005,15 +1045,16 @@ export function createProxyProfilesPageModule(dependencies) {
         return;
       }
 
-      if (protocol === "vmess" && security === "reality") {
+      if (protocol === "vmess" && effectiveSecurity === "reality") {
         windowRef.alert("VMess 当前仅支持 TLS 或无加密，不支持 Reality。");
         return;
       }
 
       try {
         payload.template = buildTemplatePayload(formData.get("template"), {
-          security,
-          transport,
+          security: effectiveSecurity,
+          protocol,
+          transport: effectiveTransport,
           tls_certificate_path: formData.get("tls_certificate_path"),
           tls_key_path: formData.get("tls_key_path"),
           tls_alpn: formData.get("tls_alpn"),
@@ -1031,6 +1072,8 @@ export function createProxyProfilesPageModule(dependencies) {
           transport_headers: formData.get("transport_headers"),
           http_method: formData.get("http_method"),
           grpc_service_name: formData.get("grpc_service_name"),
+          hysteria2_obfs_type: formData.get("hysteria2_obfs_type"),
+          hysteria2_obfs_password: formData.get("hysteria2_obfs_password"),
           transport_idle_timeout: formData.get("transport_idle_timeout"),
           transport_ping_timeout: formData.get("transport_ping_timeout"),
           early_data_header_name: formData.get("early_data_header_name"),

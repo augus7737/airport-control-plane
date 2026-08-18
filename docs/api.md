@@ -511,11 +511,13 @@ Success response:
 Notes:
 
 - when no target nodes can be resolved from `node_group_ids` or `node_ids`, the endpoint rejects the request
-- current version renders a real `sing-box` config for `VLESS` / `VMess` profiles and reuses the existing task / operation pipeline
+- current version renders a real `sing-box` config for `VLESS` / `VMess` / `Hysteria2` profiles and reuses the existing task / operation pipeline
 - inactive or expired access users are skipped before rendering; if no publishable users remain, the request is rejected
 - when `security` is `tls`, the template JSON should provide `template.tls.certificate_path` and `template.tls.key_path`
 - when `security` is `reality`, the template JSON should provide `template.reality.private_key_path` and `template.reality.short_id`; private key content should stay on the node and is not accepted inline
 - `vmess` currently supports `tls` or `none`, not `reality`
+- `hysteria2` requires `tls`, uses `udp`/QUIC semantics, and authenticates each access user with `credential.password`
+- Hysteria2 share results use `hysteria2://password@host:port` and include SNI, ALPN and optional `obfs=salamander` parameters
 - built-in system template `Alpine ACME 证书申请` can generate files under `/etc/ssl/airport/<cert_name>/fullchain.pem` and `/etc/ssl/airport/<cert_name>/privkey.pem`
 - node-side publish now attempts: write manifest -> render sing-box config -> `sing-box check` -> replace config -> restart service -> rollback on failure
 

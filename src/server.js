@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
@@ -1438,6 +1438,10 @@ function buildAccessUserRecord(payload, existing = null) {
     normalizeNullableString(payload.protocol ?? existing?.protocol)?.toLowerCase() ?? "vless";
   const credentialSource = hasOwn(payload, "credential") ? payload.credential : existing?.credential;
   const uuid = normalizeNullableString(credentialSource?.uuid) ?? existing?.credential?.uuid ?? randomUUID();
+  const password =
+    normalizeNullableString(credentialSource?.password) ??
+    existing?.credential?.password ??
+    randomBytes(18).toString("base64url");
   const alterId =
     credentialSource?.alter_id !== undefined &&
     credentialSource?.alter_id !== null &&
@@ -1459,6 +1463,10 @@ function buildAccessUserRecord(payload, existing = null) {
             uuid,
             alter_id: alterId,
           }
+        : protocol === "hysteria2"
+          ? {
+              password,
+            }
         : {
             uuid,
           },
@@ -1579,7 +1587,7 @@ function buildProxyProfileRecord(payload, existing = null) {
     normalizeNullableString(payload.protocol ?? existing?.protocol)?.toLowerCase() ?? "vless";
   const security =
     normalizeNullableString(payload.security ?? existing?.security)?.toLowerCase() ??
-    (protocol === "vmess" ? "tls" : "reality");
+    (protocol === "vmess" || protocol === "hysteria2" ? "tls" : "reality");
   const tlsEnabled = hasOwn(payload, "tls_enabled")
     ? Boolean(payload.tls_enabled)
     : existing?.tls_enabled ?? security === "tls";
@@ -1595,7 +1603,8 @@ function buildProxyProfileRecord(payload, existing = null) {
       ? Number(payload.listen_port)
       : existing?.listen_port ?? 443,
     transport:
-      normalizeNullableString(payload.transport ?? existing?.transport)?.toLowerCase() ?? "tcp",
+      normalizeNullableString(payload.transport ?? existing?.transport)?.toLowerCase() ??
+      (protocol === "hysteria2" ? "udp" : "tcp"),
     security,
     tls_enabled: tlsEnabled,
     reality_enabled: realityEnabled,

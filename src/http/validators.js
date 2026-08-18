@@ -432,9 +432,9 @@ export function validateAccessUserCreate(payload) {
   if (
     payload.protocol !== undefined &&
     payload.protocol !== null &&
-    !["vless", "vmess"].includes(String(payload.protocol).trim().toLowerCase())
+    !["vless", "vmess", "hysteria2"].includes(String(payload.protocol).trim().toLowerCase())
   ) {
-    errors.push("protocol must be vless or vmess");
+    errors.push("protocol must be vless, vmess or hysteria2");
   }
 
   if (
@@ -483,6 +483,14 @@ export function validateAccessUserCreate(payload) {
 
   if (
     isPlainObject(payload.credential) &&
+    payload.credential.password !== undefined &&
+    (typeof payload.credential.password !== "string" || !payload.credential.password.trim())
+  ) {
+    errors.push("credential.password must be a non-empty string");
+  }
+
+  if (
+    isPlainObject(payload.credential) &&
     payload.credential.alter_id !== undefined &&
     payload.credential.alter_id !== null &&
     (!Number.isInteger(payload.credential.alter_id) || payload.credential.alter_id < 0)
@@ -520,9 +528,9 @@ export function validateProxyProfileCreate(payload) {
   if (
     payload.protocol !== undefined &&
     payload.protocol !== null &&
-    !["vless", "vmess"].includes(String(payload.protocol).trim().toLowerCase())
+    !["vless", "vmess", "hysteria2"].includes(String(payload.protocol).trim().toLowerCase())
   ) {
-    errors.push("protocol must be vless or vmess");
+    errors.push("protocol must be vless, vmess or hysteria2");
   }
 
   const protocol =
@@ -538,14 +546,18 @@ export function validateProxyProfileCreate(payload) {
     errors.push("vmess does not support reality");
   }
 
+  if (protocol === "hysteria2" && security !== null && security !== "tls") {
+    errors.push("hysteria2 requires tls security");
+  }
+
   if (
     payload.transport !== undefined &&
     payload.transport !== null &&
-    !["tcp", "ws", "grpc", "http", "httpupgrade"].includes(
+    !["tcp", "udp", "ws", "grpc", "http", "httpupgrade"].includes(
       String(payload.transport).trim().toLowerCase(),
     )
   ) {
-    errors.push("transport must be tcp, ws, grpc, http or httpupgrade");
+    errors.push("transport must be tcp, udp, ws, grpc, http or httpupgrade");
   }
 
   if (

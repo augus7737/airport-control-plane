@@ -145,6 +145,16 @@ function inferTransportBlock(inbound) {
 
 function inferRenderedUser(inbound, manifestUser, protocol) {
   const users = Array.isArray(inbound?.users) ? inbound.users.filter(isPlainObject) : [];
+  if (protocol === "hysteria2") {
+    const expectedPassword = normalizeString(manifestUser?.credential?.password);
+    if (!expectedPassword) {
+      return null;
+    }
+    return (
+      users.find((user) => normalizeString(user?.password) === expectedPassword) || null
+    );
+  }
+
   const expectedUuid = normalizeString(manifestUser?.credential?.uuid);
   if (!expectedUuid) {
     return null;
@@ -519,6 +529,43 @@ export function createSharesDomain(dependencies = {}) {
     return `vmess://${Buffer.from(JSON.stringify(payload)).toString("base64")}`;
   }
 
+  function buildHysteria2ShareUrl(target) {
+    const endpointHost = formatUriHost(target.endpoint_host);
+    const endpointPort =
+      Number.isInteger(Number(target.endpoint_port)) && Number(target.endpoint_port) > 0
+        ? Number(target.endpoint_port)
+        : null;
+    const password = normalizeString(
+      target.rendered_user?.password ?? target.manifest_user?.credential?.password,
+    );
+    if (!endpointHost || !endpointPort || !password) {
+      return null;
+    }
+
+    const params = new URLSearchParams();
+    const serverName = inferTlsServerName(target.inbound, target.profile);
+    if (serverName) {
+      params.set("sni", serverName);
+    }
+
+    const alpn = inferAlpn(target.inbound);
+    if (alpn.length > 0) {
+      params.set("alpn", alpn.join(","));
+    }
+
+    const obfs = isPlainObject(target.inbound?.obfs) ? target.inbound.obfs : null;
+    if (normalizeString(obfs?.type)) {
+      params.set("obfs", normalizeString(obfs.type));
+    }
+    if (normalizeString(obfs?.password)) {
+      params.set("obfs-password", normalizeString(obfs.password));
+    }
+
+    const query = params.toString();
+    const label = encodeURIComponent(target.label);
+    return `hysteria2://${encodeURIComponent(password)}@${endpointHost}:${endpointPort}${query ? `?${query}` : ""}#${label}`;
+  }
+
   async function buildQrSvg(value) {
     const normalized = normalizeString(value);
     if (!normalized) {
@@ -704,7 +751,11 @@ export function createSharesDomain(dependencies = {}) {
         });
         const subscriptionQrSvg = includeQr ? await buildQrSvg(nodeSubscriptionUrl) : null;
         const shareUrl =
-          target.protocol === "vmess" ? buildVmessShareUrl(target) : buildVlessShareUrl(target);
+          target.protocol === "vmess"
+            ? buildVmessShareUrl(target)
+            : target.protocol === "hysteria2"
+              ? buildHysteria2ShareUrl(target)
+              : buildVlessShareUrl(target);
         const shareQrSvg = includeQr ? await buildQrSvg(shareUrl) : null;
 
         return {
@@ -751,6 +802,7 @@ export function createSharesDomain(dependencies = {}) {
     buildSubscriptionContent,
     buildVlessShareUrl,
     buildVmessShareUrl,
+    buildHysteria2ShareUrl,
     findEffectiveUserTargets,
     findLatestSuccessfulReleaseForNode,
     resolvePublicBaseUrl,

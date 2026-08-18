@@ -8,6 +8,7 @@ function createEmptyDraft() {
     name: "",
     protocol: "vless",
     uuid: "",
+    password: "",
     alter_id: "0",
     status: "active",
     expires_at: "",
@@ -36,6 +37,13 @@ function resolveUserUuid(user) {
     return user.credential;
   }
   return String(user?.credential?.uuid || user?.uuid || "");
+}
+
+function resolveUserPassword(user) {
+  if (typeof user?.credential === "string") {
+    return "";
+  }
+  return String(user?.credential?.password || user?.password || "");
 }
 
 function resolveUserAlterId(user) {
@@ -120,6 +128,7 @@ export function createAccessUsersPageModule(dependencies) {
       name: String(user.name || ""),
       protocol: String(user.protocol || "vless"),
       uuid: resolveUserUuid(user),
+      password: resolveUserPassword(user),
       alter_id: resolveUserAlterId(user) || "0",
       status: String(user.status || "active"),
       expires_at: toDateInputValue(user.expires_at),
@@ -871,6 +880,7 @@ export function createAccessUsersPageModule(dependencies) {
       ? filteredUsers
           .map((user) => {
             const uuid = resolveUserUuid(user);
+            const password = resolveUserPassword(user);
             const alterId = resolveUserAlterId(user);
             const displayName = user.name || user.id;
             const userCost = findCostItemByAccessUserId(appState.costs.accessUsers, user.id);
@@ -905,11 +915,21 @@ export function createAccessUsersPageModule(dependencies) {
                     <span class="tiny">${user.updated_at ? `更新于 ${formatRelativeTime(user.updated_at)}` : "未设置到期"}</span>
                   </div>
                 </td>
-                <td title="${escapeHtml(uuid || "未填写 UUID")}">
+                <td title="${escapeHtml(password || uuid || "未填写凭证")}">
                   <div class="ops-inline-meta">
-                    <span class="mono">${escapeHtml(uuid ? `${uuid.slice(0, 8)}...${uuid.slice(-6)}` : "-")}</span>
+                    <span class="mono">${escapeHtml(
+                      String(user.protocol || "vless").toLowerCase() === "hysteria2"
+                        ? password
+                          ? `${password.slice(0, 8)}...${password.slice(-6)}`
+                          : "-"
+                        : uuid
+                          ? `${uuid.slice(0, 8)}...${uuid.slice(-6)}`
+                          : "-",
+                    )}</span>
                     ${
-                      String(user.protocol || "vless").toLowerCase() === "vmess"
+                      String(user.protocol || "vless").toLowerCase() === "hysteria2"
+                        ? `<span class="tiny">Password</span>`
+                        : String(user.protocol || "vless").toLowerCase() === "vmess"
                         ? `<span class="tiny">alterId ${escapeHtml(alterId || "0")}</span>`
                         : `<span class="tiny">UUID</span>`
                     }
@@ -1022,15 +1042,20 @@ export function createAccessUsersPageModule(dependencies) {
                   <select id="access-user-protocol" name="protocol">
                     <option value="vless"${draft.protocol === "vless" ? " selected" : ""}>VLESS</option>
                     <option value="vmess"${draft.protocol === "vmess" ? " selected" : ""}>VMess</option>
+                    <option value="hysteria2"${draft.protocol === "hysteria2" ? " selected" : ""}>Hysteria2</option>
                   </select>
                 </div>
                 <div class="field">
                   <label for="access-user-expires-at">到期时间</label>
                   <input id="access-user-expires-at" name="expires_at" type="date" value="${escapeHtml(draft.expires_at)}" />
                 </div>
-                <div class="field full">
+                <div class="field full" id="access-user-uuid-field">
                   <label for="access-user-uuid">UUID</label>
                   <input id="access-user-uuid" name="uuid" value="${escapeHtml(draft.uuid)}" placeholder="例如：c8c4516d-bf1b-4aa0-bfd9-..." />
+                </div>
+                <div class="field full" id="access-user-password-field">
+                  <label for="access-user-password">Hysteria2 密码</label>
+                  <input id="access-user-password" name="password" value="${escapeHtml(draft.password)}" type="password" placeholder="留空则由服务端生成" />
                 </div>
                 <div class="field">
                   <label for="access-user-alter-id">alterId</label>
@@ -1127,6 +1152,22 @@ export function createAccessUsersPageModule(dependencies) {
     if (page !== "access-users") {
       return;
     }
+
+    const syncCredentialFields = () => {
+      const protocol = String(
+        documentRef.getElementById("access-user-protocol")?.value || "vless",
+      ).toLowerCase();
+      const uuidField = documentRef.getElementById("access-user-uuid-field");
+      const passwordField = documentRef.getElementById("access-user-password-field");
+      if (uuidField) {
+        uuidField.style.display = protocol === "hysteria2" ? "none" : "";
+      }
+      if (passwordField) {
+        passwordField.style.display = protocol === "hysteria2" ? "" : "none";
+      }
+    };
+    documentRef.getElementById("access-user-protocol")?.addEventListener("change", syncCredentialFields);
+    syncCredentialFields();
 
     documentRef.getElementById("focus-access-user-form")?.addEventListener("click", () => {
       state.selectedId = null;
@@ -1257,6 +1298,7 @@ export function createAccessUsersPageModule(dependencies) {
         note: String(formData.get("note") || "").trim() || null,
         credential: {
           uuid: String(formData.get("uuid") || "").trim(),
+          password: String(formData.get("password") || "").trim(),
           alter_id: Number.parseInt(String(formData.get("alter_id") || "0").trim() || "0", 10),
         },
       };
@@ -1266,12 +1308,17 @@ export function createAccessUsersPageModule(dependencies) {
         return;
       }
 
-      if (!payload.credential.uuid) {
+      if (payload.protocol !== "hysteria2" && !payload.credential.uuid) {
         windowRef.alert("请先填写 UUID。");
         return;
       }
 
-      if (!Number.isInteger(payload.credential.alter_id) || payload.credential.alter_id < 0) {
+      if (payload.protocol === "hysteria2" && !payload.credential.password) {
+        delete payload.credential.password;
+      }
+
+      if (payload.protocol !== "hysteria2" &&
+          (!Number.isInteger(payload.credential.alter_id) || payload.credential.alter_id < 0)) {
         windowRef.alert("alterId 必须是大于等于 0 的整数。");
         return;
       }

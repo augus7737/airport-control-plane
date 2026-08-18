@@ -93,6 +93,7 @@ Core fields:
 - `name`
 - `protocol`
 - `credential.uuid`
+- `credential.password` (for `hysteria2`)
 - `credential.alter_id` (for `vmess`)
 - `status`
 - `expires_at`
@@ -104,7 +105,8 @@ Core fields:
 
 Notes:
 
-- current version supports internal `vless` / `vmess` access identities
+- current version supports internal `vless` / `vmess` / `hysteria2` access identities
+- Hysteria2 uses a generated or operator-supplied password; it does not use a UUID
 - `profile_id` points to one `ProxyProfile`
 - `node_group_ids` describes the default release scope for this user
 
@@ -134,7 +136,8 @@ Core fields:
 
 Notes:
 
-- current version supports `vless` and `vmess`
+- current version supports `vless`, `vmess` and `hysteria2`
+- Hysteria2 is rendered as TLS + UDP/QUIC and may carry `template.hysteria2.obfs` for `salamander`
 - `template` stores the managed profile payload that later renders into node-side config
 
 ## NodeGroup

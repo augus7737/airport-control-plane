@@ -58,6 +58,11 @@ function pickTlsTemplate(profile) {
   return isPlainObject(template.tls) ? template.tls : {};
 }
 
+function pickHysteria2Template(profile) {
+  const template = pickEngineTemplate(profile.template);
+  return isPlainObject(template.hysteria2) ? template.hysteria2 : {};
+}
+
 function pickTransportTemplate(profile) {
   const template = pickEngineTemplate(profile.template);
   return isPlainObject(template.transport) ? template.transport : null;
@@ -143,15 +148,15 @@ export function validateSingBoxProfileTemplate(profile) {
   const handshake = isPlainObject(realityTemplate.handshake) ? realityTemplate.handshake : {};
   const handshakeServer = normalizeString(handshake.server) ?? normalizeString(profile?.server_name);
 
-  if (!["vless", "vmess"].includes(protocol)) {
-    errors.push("当前真实发布仅支持 VLESS / VMess 模板");
+  if (!["vless", "vmess", "hysteria2"].includes(protocol)) {
+    errors.push("当前真实发布仅支持 VLESS / VMess / Hysteria2 模板");
   }
 
   if (!Number.isInteger(Number(profile?.listen_port)) || Number(profile?.listen_port) < 1) {
     errors.push("listen_port 必须是有效端口");
   }
 
-  if (!["tcp", "ws", "grpc", "http", "httpupgrade"].includes(transport)) {
+  if (!["tcp", "udp", "ws", "grpc", "http", "httpupgrade"].includes(transport)) {
     errors.push(`暂不支持的 transport: ${transport}`);
   }
 
@@ -163,7 +168,24 @@ export function validateSingBoxProfileTemplate(profile) {
     errors.push("VMess 模板暂不支持 Reality，请改用 TLS 或无加密");
   }
 
-  if (transport !== "tcp" && !isPlainObject(transportTemplate)) {
+  if (protocol === "hysteria2") {
+    if (security !== "tls") {
+      errors.push("Hysteria2 仅支持 TLS 安全层");
+    }
+    if (!["udp", "quic", "tcp"].includes(transport)) {
+      errors.push("Hysteria2 transport 应为 udp");
+    }
+    const hysteria2Template = pickHysteria2Template(profile);
+    const obfs = isPlainObject(hysteria2Template.obfs) ? hysteria2Template.obfs : null;
+    if (obfs && normalizeString(obfs.type) !== "salamander") {
+      errors.push("Hysteria2 obfs 当前仅支持 salamander");
+    }
+    if (obfs && normalizeString(obfs.type) === "salamander" && !normalizeString(obfs.password)) {
+      errors.push("Hysteria2 salamander obfs 需要 password");
+    }
+  }
+
+  if (protocol !== "hysteria2" && transport !== "tcp" && !isPlainObject(transportTemplate)) {
     errors.push(`${transport} 模式下需要在模板 JSON 中提供 transport 对象`);
   }
 
@@ -334,6 +356,11 @@ function buildInboundConfig(release, profile, eligibleUsers) {
                 ? Number(user.credential.alter_id)
                 : 0,
           }
+        : protocol === "hysteria2"
+          ? {
+              name: normalizeString(user?.name) ?? user?.id ?? "unknown",
+              password: normalizeString(user?.credential?.password),
+            }
         : {
             name: normalizeString(user?.name) ?? user?.id ?? "unknown",
             uuid: normalizeString(user?.credential?.uuid),
@@ -347,7 +374,7 @@ function buildInboundConfig(release, profile, eligibleUsers) {
     Object.assign(inbound, listenFields);
   }
 
-  const transport = buildTransportConfig(profile);
+  const transport = protocol === "hysteria2" ? null : buildTransportConfig(profile);
   if (transport) {
     inbound.transport = transport;
   }
@@ -355,6 +382,18 @@ function buildInboundConfig(release, profile, eligibleUsers) {
   const multiplex = buildMultiplexConfig(profile);
   if (multiplex) {
     inbound.multiplex = multiplex;
+  }
+
+  if (protocol === "hysteria2") {
+    const template = pickHysteria2Template(profile);
+    const obfs = isPlainObject(template.obfs) ? { ...template.obfs } : null;
+    if (obfs) {
+      delete obfs.password;
+      inbound.obfs = {
+        ...obfs,
+        password: normalizeString(template.obfs.password),
+      };
+    }
   }
 
   const tls = buildTlsConfig(profile);
@@ -403,8 +442,12 @@ export function buildSingBoxConfig(release, resolved) {
     config.endpoints = engineTemplate.endpoints;
   }
 
-  const security = String(profile?.security || "reality").toLowerCase();
   const protocol = String(profile?.protocol || "vless").toUpperCase();
+  const security = String(profile?.security || "reality").toLowerCase();
+  const normalizedTransport =
+    protocol === "HYSTERIA2"
+      ? "udp"
+      : String(profile?.transport || "tcp").toLowerCase();
   const digest = buildConfigDigest(config);
   const changeSummary =
     security === "reality"
@@ -425,7 +468,7 @@ export function buildSingBoxConfig(release, resolved) {
       config_path: pickConfigPath(profile),
       change_summary: changeSummary,
       security,
-      transport: String(profile?.transport || "tcp").toLowerCase(),
+      transport: normalizedTransport,
       reality_private_key_path:
         security === "reality"
           ? normalizeString(pickRealityTemplate(profile).private_key_path)
