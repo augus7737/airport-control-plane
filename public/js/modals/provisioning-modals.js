@@ -91,11 +91,11 @@ export function createProvisioningModalsModule(dependencies) {
   }
 
   function shouldShowBootstrapHero(targetPage = page) {
-    return false;
+    return targetPage === "nodes";
   }
 
   function shouldShowProvisioningChips(targetPage = page) {
-    return false;
+    return ["overview", "nodes", "tokens"].includes(targetPage);
   }
 
   function enrollModalTemplate() {
@@ -115,6 +115,28 @@ export function createProvisioningModalsModule(dependencies) {
                 <span class="guide-step">命令区</span>
                 <h4>按顺序执行下面 3 条命令</h4>
                 <p>国内 Alpine LXC 建议先换源，再补齐依赖，最后执行接管脚本，这样初始化会稳定很多。</p>
+                <form class="form-grid" id="bootstrap-command-options">
+                  <div class="field">
+                    <label for="bootstrap-option-hostname">主机名</label>
+                    <input id="bootstrap-option-hostname" name="hostname" placeholder="例如 br1" />
+                  </div>
+                  <div class="field">
+                    <label for="bootstrap-option-public-ipv4">公网 IPv4</label>
+                    <input id="bootstrap-option-public-ipv4" name="public_ipv4" placeholder="例如 163.176.224.226" />
+                  </div>
+                  <div class="field">
+                    <label for="bootstrap-option-ssh-port">外部 SSH 端口</label>
+                    <input id="bootstrap-option-ssh-port" name="ssh_port" value="19822" placeholder="LXC 映射端口，例如 38022" />
+                  </div>
+                  <div class="field">
+                    <label for="bootstrap-option-provider">厂商</label>
+                    <input id="bootstrap-option-provider" name="provider" placeholder="例如 deeprush" />
+                  </div>
+                  <div class="field">
+                    <label for="bootstrap-option-region">地区</label>
+                    <input id="bootstrap-option-region" name="region" placeholder="例如 BR" />
+                  </div>
+                </form>
                 <div id="modal-bootstrap-commands">${renderBootstrapCommandPair(null, {
                   mirrorId: "modal-command-mirror",
                   prepareId: "modal-command-prepare",
@@ -127,9 +149,10 @@ export function createProvisioningModalsModule(dependencies) {
                   enrollHint: "前两步完成后，再执行这一条。",
                 })}</div>
                 <div class="modal-actions">
+                  <button class="button primary" id="copy-full-bootstrap-command">复制完整三步</button>
                   <button class="button primary" id="copy-mirror-command">复制步骤 1</button>
                   <button class="button ghost" id="copy-prepare-command">复制步骤 2</button>
-                  <button class="button ghost" id="copy-enroll-command">复制步骤 3</button>
+                  <button class="button ghost" id="copy-enroll-command">复制一键接管脚本</button>
                   <button class="button ghost" id="copy-script-url">复制脚本地址</button>
                 </div>
               </section>
@@ -221,6 +244,19 @@ export function createProvisioningModalsModule(dependencies) {
 
     const open = () => modal.classList.add("open");
     const close = () => modal.classList.remove("open");
+    const buildEnrollOptions = () => ({
+      hostname: documentRef.getElementById("bootstrap-option-hostname")?.value || "",
+      publicIpv4: documentRef.getElementById("bootstrap-option-public-ipv4")?.value || "",
+      sshPort: documentRef.getElementById("bootstrap-option-ssh-port")?.value || "19822",
+      provider: documentRef.getElementById("bootstrap-option-provider")?.value || "",
+      region: documentRef.getElementById("bootstrap-option-region")?.value || "",
+    });
+    const syncEnrollCommand = () => {
+      const element = documentRef.getElementById("modal-command-enroll");
+      if (element) {
+        element.textContent = getBootstrapEnrollCommand(null, buildEnrollOptions());
+      }
+    };
 
     openButton?.addEventListener("click", open);
     closeButton.addEventListener("click", close);
@@ -239,8 +275,25 @@ export function createProvisioningModalsModule(dependencies) {
     });
 
     documentRef.getElementById("copy-enroll-command")?.addEventListener("click", async (event) => {
-      const ok = await writeClipboard(getBootstrapEnrollCommand());
-      event.currentTarget.textContent = ok ? "已复制步骤 3" : "复制失败";
+      syncEnrollCommand();
+      const ok = await writeClipboard(getBootstrapEnrollCommand(null, buildEnrollOptions()));
+      event.currentTarget.textContent = ok ? "已复制一键脚本" : "复制失败";
+    });
+
+    documentRef.getElementById("copy-full-bootstrap-command")?.addEventListener("click", async (event) => {
+      syncEnrollCommand();
+      const command = [
+        "# 步骤 1：切换国内镜像源",
+        getBootstrapMirrorCommand(),
+        "",
+        "# 步骤 2：更新并安装必要软件",
+        getBootstrapPrepareCommand(),
+        "",
+        "# 步骤 3：执行一键接管",
+        getBootstrapEnrollCommand(null, buildEnrollOptions()),
+      ].join("\n");
+      const ok = await writeClipboard(command);
+      event.currentTarget.textContent = ok ? "已复制完整三步" : "复制失败";
     });
 
     documentRef.getElementById("copy-script-url")?.addEventListener("click", async (event) => {
@@ -249,6 +302,10 @@ export function createProvisioningModalsModule(dependencies) {
     });
 
     bindEscapeClose(modal, close);
+    documentRef
+      .querySelectorAll("#bootstrap-command-options input")
+      .forEach((input) => input.addEventListener("input", syncEnrollCommand));
+    syncEnrollCommand();
   }
 
   function setupTokenModal() {

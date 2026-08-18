@@ -15,17 +15,29 @@ export function createProvisioningCommandModule(dependencies = {}) {
     return "command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && [ ! -f /etc/apk/repositories.airport.bak ] && cp /etc/apk/repositories /etc/apk/repositories.airport.bak 2>/dev/null || true; command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && sed -i 's#https\\?://[^ ]*alpinelinux\\.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories || true";
   }
 
-  function getBootstrapEnrollCommand(tokenValue = null) {
+  function getBootstrapEnrollCommand(tokenValue = null, options = {}) {
     const resolvedToken = tokenValue || getPrimaryBootstrapToken()?.token || "";
     if (!resolvedToken) {
       return "# 请先创建一个可用的注册令牌";
     }
 
+    const sshPort = options.sshPort || "19822";
+    const hostname = String(options.hostname || "").trim();
+    const publicIpv4 = String(options.publicIpv4 || "").trim();
+    const provider = String(options.provider || "").trim();
+    const region = String(options.region || "").trim();
     const bootstrapUrl = shellQuote(getBootstrapScriptUrl());
     const serverUrl = shellQuote(getPlatformBaseUrl());
     const token = shellQuote(resolvedToken);
+    const extraArgs = [
+      `--ssh-port ${shellQuote(sshPort)}`,
+      hostname ? `--hostname ${shellQuote(hostname)}` : "",
+      publicIpv4 ? `--public-ipv4 ${shellQuote(publicIpv4)}` : "",
+      provider ? `--provider ${shellQuote(provider)}` : "",
+      region ? `--region ${shellQuote(region)}` : "",
+    ].filter(Boolean).join(" ");
 
-    return `if command -v curl >/dev/null 2>&1; then curl -fsSL ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} --ssh-port 19822; elif command -v wget >/dev/null 2>&1; then wget -qO- ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} --ssh-port 19822; else echo "请先执行步骤 2，安装 curl 后再执行接管" >&2; fi`;
+    return `if command -v curl >/dev/null 2>&1; then curl -fsSL ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} ${extraArgs}; elif command -v wget >/dev/null 2>&1; then wget -qO- ${bootstrapUrl} | sh -s -- --server ${serverUrl} --token ${token} ${extraArgs}; else echo "请先执行步骤 2，安装 curl 后再执行接管" >&2; fi`;
   }
 
   function getBootstrapCommand(tokenValue = null) {
