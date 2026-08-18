@@ -278,6 +278,7 @@ export function buildNodeDetailViewModel({
   formatNodeIpOwnershipSummary,
   formatNodeSshPort,
   formatProbeCapability,
+  formatProbeLatencyBreakdown,
   formatProbeLongSummary,
   formatProbeStageCompact,
   formatProbeSummary,
@@ -368,6 +369,8 @@ export function buildNodeDetailViewModel({
   const probeCapabilityText = formatProbeCapability(latestProbe);
   const probeSummaryText = latestProbe ? formatProbeSummary(latestProbe) : "尚未探测";
   const probeLongSummary = formatProbeLongSummary(latestProbe);
+  const probeLatencyBreakdown =
+    typeof formatProbeLatencyBreakdown === "function" ? formatProbeLatencyBreakdown(latestProbe) : "";
   const managementRelayStrategyText =
     managementAccessMode === "relay"
       ? formatManagementRelayStrategyLabel(node.management?.relay_strategy || "auto")
@@ -661,6 +664,7 @@ export function buildNodeDetailViewModel({
       : `${formatCostStatus(nodeCost?.cost_status, "待补成本字段")} · ${expiryNote}`;
   const healthOverviewRows = [
     ["探测阶段", probeStageText],
+    ["延迟拆分", probeLatencyBreakdown || "-"],
     ["公网入口", primaryPublicIp?.address || "未探测"],
     ["入口归属", primaryPublicIp?.location || primaryPublicIp?.owner || "待识别"],
     ["最近探测", lastProbeText],

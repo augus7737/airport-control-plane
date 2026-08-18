@@ -74,7 +74,8 @@ function isExplicitFalse(value) {
 }
 
 function formatLatencySuffix(probe) {
-  return probe?.latency_ms != null ? ` · ${probe.latency_ms}ms` : "";
+  const label = formatPrimaryLatency(probe);
+  return label ? ` · ${label}` : "";
 }
 
 function getManagementTcpStage(probe) {
@@ -95,6 +96,67 @@ export function getProbeTcpStage(probe) {
 
 export function getProbeSshStage(probe) {
   return probe?.stages?.ssh || null;
+}
+
+function latencySourceLabel(source) {
+  const value = normalizeProbeCode(source);
+  if (value === "management_tcp") return "管理 TCP";
+  if (value === "management_ssh_e2e") return "SSH 端到端";
+  if (value === "business_entry_tcp") return "业务入口";
+  if (value === "relay_upstream_tcp") return "入口上游";
+  return "探测";
+}
+
+function primaryLatencySource(probe) {
+  if (probe?.latency_source) {
+    return probe.latency_source;
+  }
+
+  if (probe?.probe_type === "business_entry_tcp") return "business_entry_tcp";
+  if (probe?.probe_type === "relay_upstream_tcp") return "relay_upstream_tcp";
+  if (probe?.probe_type === "ssh_auth" && getProbeSshStage(probe)?.latency_ms != null) {
+    return "management_ssh_e2e";
+  }
+  if (getBusinessEntryStage(probe)?.latency_ms != null) return "business_entry_tcp";
+  if (getRelayUpstreamStage(probe)?.latency_ms != null) return "relay_upstream_tcp";
+  if (getProbeSshStage(probe)?.latency_ms != null) return "management_ssh_e2e";
+  if (getManagementTcpStage(probe)?.latency_ms != null) return "management_tcp";
+  return null;
+}
+
+export function formatPrimaryLatency(probe) {
+  if (probe?.latency_ms == null) {
+    return "";
+  }
+
+  return `${latencySourceLabel(primaryLatencySource(probe))} ${probe.latency_ms}ms`;
+}
+
+export function formatProbeLatencyBreakdown(probe) {
+  if (!probe) {
+    return "";
+  }
+
+  const parts = [];
+  const managementTcp = getManagementTcpStage(probe);
+  const ssh = getProbeSshStage(probe);
+  const business = getBusinessEntryStage(probe);
+  const relay = getRelayUpstreamStage(probe);
+
+  if (managementTcp?.latency_ms != null) {
+    parts.push(`管理 TCP ${managementTcp.latency_ms}ms`);
+  }
+  if (ssh?.latency_ms != null) {
+    parts.push(`SSH 端到端 ${ssh.latency_ms}ms`);
+  }
+  if (business?.latency_ms != null) {
+    parts.push(`业务入口 ${business.latency_ms}ms`);
+  }
+  if (relay?.latency_ms != null) {
+    parts.push(`入口上游 ${relay.latency_ms}ms`);
+  }
+
+  return parts.join(" / ");
 }
 
 function formatManagementStageCompact(probe) {
@@ -163,13 +225,15 @@ export function formatProbeSummary(probe) {
   }
 
   if (probe.control_ready) {
-    return probe.latency_ms != null ? `可接管 · ${probe.latency_ms}ms` : "可接管";
+    const latencyLabel = formatPrimaryLatency(probe);
+    return latencyLabel ? `可接管 · ${latencyLabel}` : "可接管";
   }
 
   const reasonCode = normalizeProbeCode(probe.reason_code || probe.error_message);
   if (!probe.success) {
-    return probe.latency_ms != null
-      ? `${probeReasonLabel(reasonCode)} · ${probe.latency_ms}ms`
+    const latencyLabel = formatPrimaryLatency(probe);
+    return latencyLabel
+      ? `${probeReasonLabel(reasonCode)} · ${latencyLabel}`
       : probeReasonLabel(reasonCode);
   }
 
@@ -178,10 +242,12 @@ export function formatProbeSummary(probe) {
       reasonCode,
     )
   ) {
-    return probe.latency_ms != null ? `TCP 已通 · ${probe.latency_ms}ms` : "TCP 已通";
+    const latencyLabel = formatPrimaryLatency(probe);
+    return latencyLabel ? `TCP 已通 · ${latencyLabel}` : "TCP 已通";
   }
 
-  return probe.latency_ms != null ? `已连通 · ${probe.latency_ms}ms` : "已连通";
+  const latencyLabel = formatPrimaryLatency(probe);
+  return latencyLabel ? `已连通 · ${latencyLabel}` : "已连通";
 }
 
 export function formatProbeLongSummary(probe) {
@@ -190,7 +256,8 @@ export function formatProbeLongSummary(probe) {
   }
 
   if (probe.summary) {
-    return probe.summary;
+    const latencyBreakdown = formatProbeLatencyBreakdown(probe);
+    return latencyBreakdown ? `${probe.summary} 分段延迟：${latencyBreakdown}。` : probe.summary;
   }
 
   if (!probe.success) {

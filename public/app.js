@@ -47,6 +47,7 @@ import {
 import { createHoverPanelsModule } from "./js/shared/hover-panels.js";
 import {
   formatProbeCapability,
+  formatProbeLatencyBreakdown,
   formatProbeLongSummary,
   formatProbeStageCompact,
   formatProbeSummary,
@@ -383,6 +384,7 @@ const { buildNodeRecommendations, nodeTable } = createNodeTableRenderer({
   formatDate,
   formatExpiryCountdown,
   formatProbeCapability,
+  formatProbeLatencyBreakdown,
   formatProbeLongSummary,
   formatProbeStageCompact,
   formatProbeSummary,
@@ -705,6 +707,7 @@ const { renderNodeDetail } = createNodeDetailPageRenderer({
   formatNodeIpOwnershipSummary,
   formatNodeSshPort,
   formatProbeCapability,
+  formatProbeLatencyBreakdown,
   formatProbeLongSummary,
   formatProbeStageCompact,
   formatProbeSummary,

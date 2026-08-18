@@ -582,6 +582,7 @@ Example response:
       "transport_kind": "ssh-direct",
       "transport_label": "SSH 直连",
       "latency_ms": 42,
+      "latency_source": "management_ssh_e2e",
       "packet_loss_ratio": null,
       "success": true,
       "control_ready": true,
@@ -674,6 +675,10 @@ Request body:
   "template": "debian-base"
 }
 ```
+
+Top-level `latency_ms` is the primary latency for the probe type. Check
+`latency_source` and `stages.*.latency_ms` to distinguish raw TCP connect latency
+from SSH end-to-end validation, business-entry TCP, or relay-upstream checks.
 
 If `template` is omitted, the server chooses a built-in baseline from node OS facts:
 

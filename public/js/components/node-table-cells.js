@@ -12,6 +12,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
     formatDate,
     formatExpiryCountdown,
     formatProbeCapability,
+    formatProbeLatencyBreakdown,
     formatProbeLongSummary,
     formatProbeStageCompact,
     formatProbeSummary,
@@ -40,6 +41,8 @@ export function createNodeTableCellsModule(dependencies = {}) {
     const latestProbe = getLatestProbeForNode(node);
     const scheduler = typeof getProbeSchedulerState === "function" ? getProbeSchedulerState() : null;
     const subline = latestProbe ? formatProbeSummary(latestProbe) : "待首检";
+    const latencyBreakdown =
+      typeof formatProbeLatencyBreakdown === "function" ? formatProbeLatencyBreakdown(latestProbe) : "";
     const timeLabel = latestProbe?.observed_at
       ? formatRelativeTime(latestProbe.observed_at)
       : node.last_probe_at
@@ -79,6 +82,16 @@ export function createNodeTableCellsModule(dependencies = {}) {
               <span>阶段摘要</span>
               <strong>${escapeHtml(formatProbeStageCompact(latestProbe))}</strong>
             </div>
+            ${
+              latencyBreakdown
+                ? `
+                  <div class="cell-hover-row">
+                    <span>延迟拆分</span>
+                    <strong>${escapeHtml(latencyBreakdown)}</strong>
+                  </div>
+                `
+                : ""
+            }
             <div class="cell-hover-row">
               <span>详细说明</span>
               <strong>${escapeHtml(formatProbeLongSummary(latestProbe))}</strong>

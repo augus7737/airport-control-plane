@@ -314,6 +314,7 @@ Core fields:
 - `transport_kind`
 - `transport_label`
 - `latency_ms`
+- `latency_source`
 - `packet_loss_ratio`
 - `success`
 - `control_ready`
@@ -325,6 +326,9 @@ Core fields:
 - `stages.tcp`
 - `stages.ssh`
 - `observed_at`
+
+`latency_source` identifies which stage supplied top-level `latency_ms`; stage-level
+latencies remain available under `stages`.
 
 Examples:
 

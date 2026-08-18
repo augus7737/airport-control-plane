@@ -80,6 +80,33 @@ function buildTcpStage(result, target, extra = {}) {
   };
 }
 
+function latencyDescriptor(source, latencyMs) {
+  return {
+    latency_ms: latencyMs ?? null,
+    latency_source: latencyMs == null ? null : source,
+  };
+}
+
+function pickFullStackLatency({ management, business, relay }) {
+  if (business.tcp?.latency_ms != null) {
+    return latencyDescriptor("business_entry_tcp", business.tcp.latency_ms);
+  }
+
+  if (relay.stage?.latency_ms != null) {
+    return latencyDescriptor("relay_upstream_tcp", relay.stage.latency_ms);
+  }
+
+  if (management.ssh?.latency_ms != null) {
+    return latencyDescriptor("management_ssh_e2e", management.ssh.latency_ms);
+  }
+
+  if (management.tcp?.latency_ms != null) {
+    return latencyDescriptor("management_tcp", management.tcp.latency_ms);
+  }
+
+  return latencyDescriptor(null, null);
+}
+
 function skipDirectManagementTcpPrecheck(target) {
   return target?.mode === "relay";
 }
@@ -989,6 +1016,7 @@ exit 127
 
   function buildCompositeProbe(node, task, outcomes) {
     const { management, business, relay } = outcomes;
+    const latency = pickFullStackLatency(outcomes);
     const businessFailure = business.applicable && !business.success;
     const relayFailure = relay.applicable && !relay.success;
     const managementFailure = !management.control_ready;
@@ -1082,12 +1110,8 @@ exit 127
           management.relay_capabilities ??
           null,
         auth_method: "publickey",
-        latency_ms:
-          business.tcp?.latency_ms ??
-          relay.stage?.latency_ms ??
-          management.ssh?.latency_ms ??
-          management.tcp?.latency_ms ??
-          null,
+        latency_ms: latency.latency_ms,
+        latency_source: latency.latency_source,
         packet_loss_ratio: null,
         success,
         control_ready: Boolean(management.control_ready),
@@ -1123,6 +1147,7 @@ exit 127
     let errorMessage = null;
     let stderrExcerpt = null;
     let latencyMs = null;
+    let latencySource = null;
     let controlReady = false;
     let businessReady = null;
     let relayUpstreamReady = null;
@@ -1152,6 +1177,12 @@ exit 127
         outcome.ssh?.latency_ms ??
         (skipDirectManagementTcpPrecheck(outcome.target) ? null : outcome.tcp?.latency_ms) ??
         null;
+      latencySource =
+        outcome.ssh?.latency_ms != null
+          ? "management_ssh_e2e"
+          : latencyMs != null
+            ? "management_tcp"
+            : null;
       transportKind = outcome.ssh?.transport_kind ?? null;
       transportLabel = outcome.ssh?.transport_label ?? null;
       stages = {
@@ -1169,6 +1200,7 @@ exit 127
       errorStage = !success ? "business_entry_tcp" : null;
       errorMessage = !success ? outcome.reason_code || outcome.tcp?.error_message : null;
       latencyMs = outcome.tcp?.latency_ms ?? null;
+      latencySource = latencyMs != null ? "business_entry_tcp" : null;
       stages = {
         tcp: outcome.tcp,
         business_entry_tcp: outcome.tcp,
@@ -1184,6 +1216,7 @@ exit 127
       errorMessage = !success ? outcome.stage?.error_message || outcome.reason_code : null;
       stderrExcerpt = outcome.stage?.output_excerpt ?? null;
       latencyMs = outcome.stage?.latency_ms ?? null;
+      latencySource = latencyMs != null ? "relay_upstream_tcp" : null;
       transportKind = outcome.stage?.transport_kind ?? null;
       transportLabel = outcome.stage?.transport_label ?? null;
       stages = {
@@ -1240,6 +1273,7 @@ exit 127
             : null,
         auth_method: probeType === "ssh_auth" ? "publickey" : null,
         latency_ms: latencyMs,
+        latency_source: latencySource,
         packet_loss_ratio: null,
         success,
         control_ready: controlReady,
