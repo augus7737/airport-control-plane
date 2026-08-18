@@ -31,7 +31,7 @@ export function createProvisioningCommandModule(dependencies = {}) {
       return "";
     }
 
-    const sshPort = options.sshPort || "19822";
+    const sshPort = options.sshPort || "22";
     const hostname = String(options.hostname || "").trim();
     const publicIpv4 = String(options.publicIpv4 || "").trim();
     const provider = String(options.provider || "").trim();

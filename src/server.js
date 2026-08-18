@@ -1215,6 +1215,18 @@ fi
 `;
 }
 
+function isBootstrapTokenExhaustedError(errorInfo) {
+  return errorInfo?.code === "bootstrap_token_exhausted";
+}
+
+function exhaustedTokenBelongsToNode(token, node) {
+  if (!token?.id || !node?.id) {
+    return false;
+  }
+
+  return token.last_used_node_id === node.id || node.bootstrap_token_id === token.id;
+}
+
 function findAccessUserByShareToken(shareToken) {
   return accessUserStore.find((item) => item.share_token === shareToken) || null;
 }
@@ -3040,7 +3052,7 @@ const server = createServer(async (request, reply) => {
     const bootstrapToken = tokenValue ? findBootstrapTokenByValue(tokenValue) : null;
     const tokenErrorInfo = bootstrapTokenError(bootstrapToken);
 
-    if (tokenErrorInfo) {
+    if (tokenErrorInfo && !isBootstrapTokenExhaustedError(tokenErrorInfo)) {
       textResponse(
         reply,
         403,
@@ -4638,7 +4650,10 @@ const server = createServer(async (request, reply) => {
       const bootstrapToken = findBootstrapTokenByValue(tokenValue);
       const tokenErrorInfo = bootstrapTokenError(bootstrapToken);
 
-      if (tokenErrorInfo) {
+      if (tokenErrorInfo && !(
+        isBootstrapTokenExhaustedError(tokenErrorInfo) &&
+        exhaustedTokenBelongsToNode(bootstrapToken, node)
+      )) {
         jsonResponse(reply, 403, {
           error: tokenErrorInfo.code,
           message: tokenErrorInfo.message,
@@ -5122,8 +5137,13 @@ const server = createServer(async (request, reply) => {
           ? payload.bootstrap_token.trim()
           : String(payload.bootstrap_token ?? "");
       const bootstrapToken = findBootstrapTokenByValue(tokenValue);
+      const existingNode = findExistingBootstrapNode(payload);
       const tokenErrorInfo = bootstrapTokenError(bootstrapToken);
-      if (tokenErrorInfo) {
+      const allowExhaustedRefresh =
+        isBootstrapTokenExhaustedError(tokenErrorInfo) &&
+        exhaustedTokenBelongsToNode(bootstrapToken, existingNode);
+
+      if (tokenErrorInfo && !allowExhaustedRefresh) {
         jsonResponse(reply, 403, {
           error: tokenErrorInfo.code,
           message: tokenErrorInfo.message,
@@ -5131,7 +5151,6 @@ const server = createServer(async (request, reply) => {
         return;
       }
 
-      const existingNode = findExistingBootstrapNode(payload);
       const node = buildNodeRecord(payload, existingNode);
       node.bootstrap_token_id = bootstrapToken?.id ?? node.bootstrap_token_id ?? null;
       nodeStore.set(node.id, node);
@@ -5139,7 +5158,9 @@ const server = createServer(async (request, reply) => {
         fingerprintIndex.delete(existingNode.fingerprint);
       }
       fingerprintIndex.set(payload.fingerprint, node.id);
-      recordBootstrapTokenUsage(bootstrapToken, node.id);
+      if (!allowExhaustedRefresh) {
+        recordBootstrapTokenUsage(bootstrapToken, node.id);
+      }
 
       const nodeStatus = String(node.status || "new").toLowerCase();
       const initTask =

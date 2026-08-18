@@ -126,7 +126,7 @@ export function createProvisioningModalsModule(dependencies) {
                   </div>
                   <div class="field">
                     <label for="bootstrap-option-ssh-port">外部 SSH 端口</label>
-                    <input id="bootstrap-option-ssh-port" name="ssh_port" value="19822" placeholder="LXC 映射端口，例如 38022" />
+                    <input id="bootstrap-option-ssh-port" name="ssh_port" value="22" placeholder="LXC 映射端口，例如 38022" />
                   </div>
                   <div class="field">
                     <label for="bootstrap-option-provider">厂商</label>
@@ -248,7 +248,7 @@ export function createProvisioningModalsModule(dependencies) {
     const buildEnrollOptions = () => ({
       hostname: documentRef.getElementById("bootstrap-option-hostname")?.value || "",
       publicIpv4: documentRef.getElementById("bootstrap-option-public-ipv4")?.value || "",
-      sshPort: documentRef.getElementById("bootstrap-option-ssh-port")?.value || "19822",
+      sshPort: documentRef.getElementById("bootstrap-option-ssh-port")?.value || "22",
       provider: documentRef.getElementById("bootstrap-option-provider")?.value || "",
       region: documentRef.getElementById("bootstrap-option-region")?.value || "",
     });
