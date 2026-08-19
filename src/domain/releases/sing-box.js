@@ -677,7 +677,9 @@ compute_sha256() {
 rollback_previous_config() {
   if [ "$BACKUP_READY" -eq 1 ]; then
     cp "$BACKUP_CONFIG_FILE" "$SINGBOX_CONFIG_FILE"
-    if [ -x /etc/init.d/sing-box ]; then
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+      systemctl restart sing-box >/dev/null 2>&1 || true
+    elif [ -x /etc/init.d/sing-box ]; then
       rc-service sing-box restart >/dev/null 2>&1 || true
     fi
     RESULT_MARKER=rolled_back
@@ -691,6 +693,29 @@ ensure_singbox_service() {
   fi
 
   SINGBOX_BIN_RESOLVED="$(command -v sing-box)"
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    cat >/etc/systemd/system/sing-box.service <<EOF_SYSTEMD
+[Unit]
+Description=sing-box service
+Documentation=https://sing-box.sagernet.org/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$SINGBOX_BIN_RESOLVED run -c $SINGBOX_CONFIG_FILE
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF_SYSTEMD
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl enable sing-box >/dev/null 2>&1 || true
+    return 0
+  fi
+
   {
     printf '%s\n' '#!/sbin/openrc-run'
     printf '%s\n' '# airport-managed: sing-box'
@@ -778,6 +803,28 @@ else
 fi
 
 cp "$STAGED_CONFIG_FILE" "$SINGBOX_CONFIG_FILE"
+
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  if systemctl restart sing-box >/dev/null 2>&1; then
+    sleep 1
+    if systemctl is-active --quiet sing-box; then
+      echo "[publish] activation=running"
+      RESULT_MARKER=applied
+      echo "[publish] result=$RESULT_MARKER"
+      exit 0
+    fi
+
+    echo "[publish] error=service_not_running" >&2
+    systemctl status sing-box --no-pager -l >&2 || true
+    rollback_previous_config
+    exit 1
+  fi
+
+  echo "[publish] error=restart_failed" >&2
+  systemctl status sing-box --no-pager -l >&2 || true
+  rollback_previous_config
+  exit 1
+fi
 
 if [ -x /etc/init.d/sing-box ]; then
   if rc-service sing-box restart >/dev/null 2>&1; then
