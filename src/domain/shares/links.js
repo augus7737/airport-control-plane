@@ -135,8 +135,27 @@ function inferAlpn(inbound) {
   return uniqueStrings(values.map((item) => normalizeString(item)).filter(Boolean));
 }
 
-function inferRealityBlock(inbound) {
-  return isPlainObject(inbound?.tls?.reality) ? inbound.tls.reality : {};
+function inferProfileRealityBlock(profile) {
+  const template = isPlainObject(profile?.template) ? profile.template : {};
+  return isPlainObject(template.reality) ? template.reality : {};
+}
+
+function inferRealityBlock(inbound, profile = null) {
+  const inboundReality = isPlainObject(inbound?.tls?.reality) ? inbound.tls.reality : {};
+  const profileReality = inferProfileRealityBlock(profile);
+
+  return {
+    ...profileReality,
+    ...inboundReality,
+    public_key:
+      normalizeString(inboundReality.public_key) ??
+      normalizeString(profileReality.public_key) ??
+      null,
+    client_fingerprint:
+      normalizeString(inboundReality.client_fingerprint) ??
+      normalizeString(profileReality.client_fingerprint) ??
+      null,
+  };
 }
 
 function inferTransportBlock(inbound) {
@@ -457,7 +476,7 @@ export function createSharesDomain(dependencies = {}) {
     }
 
     if (target.security === "reality") {
-      const reality = inferRealityBlock(target.inbound);
+      const reality = inferRealityBlock(target.inbound, target.profile);
       const publicKey = normalizeString(reality?.public_key);
       if (!publicKey) {
         return null;
@@ -702,7 +721,10 @@ export function createSharesDomain(dependencies = {}) {
         inbound: snapshot.inbound,
       };
 
-      if (security === "reality" && !normalizeString(inferRealityBlock(snapshot.inbound)?.public_key)) {
+      if (
+        security === "reality" &&
+        !normalizeString(inferRealityBlock(snapshot.inbound, snapshot.manifest?.profile)?.public_key)
+      ) {
         warnings.push(`${nodeName} 的 Reality 模板缺少 public_key，暂无法生成客户端分享链接。`);
       }
 

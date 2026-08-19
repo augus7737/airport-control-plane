@@ -315,6 +315,8 @@ function buildTlsConfig(profile) {
     delete realityTemplate.enabled;
     delete realityTemplate.private_key;
     delete realityTemplate.private_key_path;
+    delete realityTemplate.public_key;
+    delete realityTemplate.client_fingerprint;
     delete realityTemplate.short_id;
     delete realityTemplate.short_ids;
     delete realityTemplate.handshake;
