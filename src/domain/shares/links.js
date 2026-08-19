@@ -158,6 +158,19 @@ function inferRealityBlock(inbound, profile = null) {
   };
 }
 
+function findProfileById(profiles, profileId) {
+  const normalizedProfileId = normalizeString(profileId);
+  if (!normalizedProfileId) {
+    return null;
+  }
+
+  return (
+    (Array.isArray(profiles) ? profiles : []).find(
+      (profile) => normalizeString(profile?.id) === normalizedProfileId,
+    ) ?? null
+  );
+}
+
 function inferTransportBlock(inbound) {
   return isPlainObject(inbound?.transport) ? inbound.transport : {};
 }
@@ -605,6 +618,7 @@ export function createSharesDomain(dependencies = {}) {
       nodes = [],
       releases = [],
       operations = [],
+      profiles = [],
       requestOrigin = "",
     } = input;
 
@@ -648,6 +662,10 @@ export function createSharesDomain(dependencies = {}) {
 
       const protocol =
         normalizeString(snapshot.manifest?.profile?.protocol)?.toLowerCase() ?? "vless";
+      const profile =
+        findProfileById(profiles, snapshot.manifest?.profile?.id) ??
+        snapshot.manifest?.profile ??
+        {};
       const renderedUser = inferRenderedUser(snapshot.inbound, manifestUser, protocol);
       if (!renderedUser) {
         continue;
@@ -658,7 +676,7 @@ export function createSharesDomain(dependencies = {}) {
       const routeRecord = findReleaseRoute(latest.release, snapshot, node.id);
       const route =
         typeof resolveTrafficRoute === "function"
-          ? resolveTrafficRoute(node, nodes, snapshot.manifest?.profile ?? {})
+          ? resolveTrafficRoute(node, nodes, profile)
           : null;
       const effectiveAccessMode = route?.access_mode ?? routeRecord?.access_mode ?? "direct";
       const endpointHost =
@@ -717,13 +735,13 @@ export function createSharesDomain(dependencies = {}) {
         latest_release_created_at: latest.release.created_at ?? null,
         manifest_user: manifestUser,
         rendered_user: renderedUser,
-        profile: snapshot.manifest?.profile ?? {},
+        profile,
         inbound: snapshot.inbound,
       };
 
       if (
         security === "reality" &&
-        !normalizeString(inferRealityBlock(snapshot.inbound, snapshot.manifest?.profile)?.public_key)
+        !normalizeString(inferRealityBlock(snapshot.inbound, profile)?.public_key)
       ) {
         warnings.push(`${nodeName} 的 Reality 模板缺少 public_key，暂无法生成客户端分享链接。`);
       }
@@ -750,6 +768,7 @@ export function createSharesDomain(dependencies = {}) {
       nodes = [],
       releases = [],
       operations = [],
+      profiles = [],
       requestOrigin = "",
     } = input;
     const includeQr = options.includeQr !== false;
@@ -759,6 +778,7 @@ export function createSharesDomain(dependencies = {}) {
       nodes,
       releases,
       operations,
+      profiles,
       requestOrigin,
     });
     const aggregateSubscriptionUrl = buildAggregateSubscriptionUrl(accessUser?.share_token, {

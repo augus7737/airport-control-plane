@@ -3418,6 +3418,7 @@ const server = createServer(async (request, reply) => {
       accessUser,
       nodes: [...nodeStore.values()],
       operations: operationStore,
+      profiles: proxyProfileStore,
       releases: configReleaseStore,
       requestOrigin: resolveRequestOrigin(url),
       options: {
@@ -3874,6 +3875,7 @@ const server = createServer(async (request, reply) => {
       accessUser: existingAccessUser,
       nodes: [...nodeStore.values()],
       operations: operationStore,
+      profiles: proxyProfileStore,
       releases: configReleaseStore,
       requestOrigin: resolveRequestOrigin(url),
     });

@@ -9,7 +9,7 @@ import {
 
 const SUPPORTED_TARGETS = Object.freeze(["linux-amd64", "linux-arm64"]);
 const DEFAULT_INSTALL_PATH = "/usr/local/bin/sing-box";
-const DEFAULT_VERSION = "1.12.22";
+const DEFAULT_VERSION = "1.13.19";
 
 function hasOwn(object, key) {
   return Boolean(object) && Object.prototype.hasOwnProperty.call(object, key);
