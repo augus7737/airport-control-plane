@@ -7,10 +7,18 @@ export function createOperationsExecutorDomain(dependencies) {
     getNodeById,
     nowIso,
     operationExecutionTimeoutMs,
+    operationOutputLimitBytes,
+    operationTargetConcurrency,
     randomUUID,
     resolveExecutionTransport,
     spawn,
   } = dependencies;
+  const defaultOperationOutputLimitBytes = 128000;
+  const defaultOperationTargetConcurrency = 3;
+
+  function normalizePositiveInteger(value, fallback) {
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+  }
 
   function resolveNodePayload(node, payload) {
     const nodePayloads =
@@ -74,6 +82,68 @@ export function createOperationsExecutorDomain(dependencies) {
     return lines;
   }
 
+  function createLimitedOutputBuffer(limitBytes) {
+    let output = "";
+    let outputBytes = 0;
+    let truncated = false;
+
+    return {
+      append(chunk) {
+        if (truncated) {
+          return;
+        }
+
+        const text = chunk.toString();
+        const availableBytes = limitBytes - outputBytes;
+        const chunkBytes = Buffer.byteLength(text);
+
+        if (chunkBytes <= availableBytes) {
+          output += text;
+          outputBytes += chunkBytes;
+          return;
+        }
+
+        let usedBytes = 0;
+        let clippedText = "";
+        for (const char of text) {
+          const charBytes = Buffer.byteLength(char);
+          if (usedBytes + charBytes > availableBytes) {
+            break;
+          }
+          clippedText += char;
+          usedBytes += charBytes;
+        }
+
+        output += clippedText;
+        outputBytes += usedBytes;
+        truncated = true;
+      },
+      text() {
+        return output;
+      },
+      isTruncated() {
+        return truncated;
+      },
+    };
+  }
+
+  async function mapWithConcurrency(items, concurrency, mapper) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+
+    async function worker() {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+      }
+    }
+
+    const workerCount = Math.min(concurrency, items.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    return results;
+  }
+
   function buildOperationSpawnSpec(transport) {
     if (transport.kind === "local-demo") {
       return {
@@ -106,9 +176,9 @@ export function createOperationsExecutorDomain(dependencies) {
     }, 1000).unref?.();
   }
 
-  function executeSpawnedScript(spawnSpec, scriptBody, timeoutMs) {
+  function executeSpawnedScript(spawnSpec, scriptBody, timeoutMs, outputLimitBytes) {
     return new Promise((resolve) => {
-      let output = "";
+      const outputBuffer = createLimitedOutputBuffer(outputLimitBytes);
       let settled = false;
       let timedOut = false;
       let timer = null;
@@ -131,7 +201,7 @@ export function createOperationsExecutorDomain(dependencies) {
       });
 
       const append = (chunk) => {
-        output += chunk.toString();
+        outputBuffer.append(chunk);
       };
 
       child.stdout.on("data", append);
@@ -139,8 +209,10 @@ export function createOperationsExecutorDomain(dependencies) {
       child.stdin.on("error", () => {});
 
       child.on("error", (error) => {
+        outputBuffer.append(`\n[control-plane] 执行器启动失败: ${error.message}\n`);
         finish({
-          output: `${output}\n[control-plane] 执行器启动失败: ${error.message}\n`,
+          output: outputBuffer.text(),
+          output_truncated: outputBuffer.isTruncated(),
           exit_code: null,
           signal: null,
           timed_out: false,
@@ -149,7 +221,8 @@ export function createOperationsExecutorDomain(dependencies) {
 
       child.on("close", (code, signal) => {
         finish({
-          output,
+          output: outputBuffer.text(),
+          output_truncated: outputBuffer.isTruncated(),
           exit_code: timedOut ? 124 : code,
           signal,
           timed_out: timedOut,
@@ -161,15 +234,19 @@ export function createOperationsExecutorDomain(dependencies) {
 
       timer = setTimeout(() => {
         timedOut = true;
-        output += `\n[control-plane] 执行超时，已在 ${timeoutMs}ms 后终止进程。\n`;
+        outputBuffer.append(`\n[control-plane] 执行超时，已在 ${timeoutMs}ms 后终止进程。\n`);
         terminateChildProcess(child);
       }, timeoutMs);
       timer.unref?.();
     });
   }
 
-  async function executeOperationTarget(node, payload, timeoutMs) {
+  async function executeOperationTarget(node, payload, timeoutMs, outputLimitBytes = null) {
     const startedAt = nowIso();
+    const targetOutputLimitBytes = normalizePositiveInteger(
+      outputLimitBytes,
+      normalizePositiveInteger(operationOutputLimitBytes, defaultOperationOutputLimitBytes),
+    );
     const effectivePayload = resolveNodePayload(node, payload);
     const transport = await resolveExecutionTransport(node);
     if (!transport) {
@@ -207,7 +284,12 @@ export function createOperationsExecutorDomain(dependencies) {
       );
     }
 
-    const execution = await executeSpawnedScript(spawnSpec, scriptBody, timeoutMs);
+    const execution = await executeSpawnedScript(
+      spawnSpec,
+      scriptBody,
+      timeoutMs,
+      targetOutputLimitBytes,
+    );
     const finishedAt = nowIso();
     const durationMs = Math.max(
       0,
@@ -218,6 +300,14 @@ export function createOperationsExecutorDomain(dependencies) {
     const output = [
       ...banner,
       ...outputLinesFromText(execution.output),
+      ...(execution.output_truncated
+        ? [
+            operationLogLine(
+              finishedAt,
+              `输出已截断，单目标 stdout+stderr 上限 ${targetOutputLimitBytes} bytes`,
+            ),
+          ]
+        : []),
       operationLogLine(
         finishedAt,
         `执行结束 exit=${execution.exit_code ?? "-"} signal=${execution.signal ?? "-"} duration=${durationMs}ms`,
@@ -238,6 +328,8 @@ export function createOperationsExecutorDomain(dependencies) {
       exit_code: execution.exit_code,
       signal: execution.signal,
       timed_out: execution.timed_out,
+      output_truncated: execution.output_truncated,
+      output_limit_bytes: targetOutputLimitBytes,
       mode: effectivePayload.mode ?? payload.mode ?? "command",
       command: effectivePayload.command ?? null,
       script_name: effectivePayload.script_name ?? null,
@@ -256,11 +348,21 @@ export function createOperationsExecutorDomain(dependencies) {
     const timeoutMs = Number.isFinite(operationExecutionTimeoutMs) && operationExecutionTimeoutMs > 0
       ? operationExecutionTimeoutMs
       : 120000;
+    const outputLimitBytes = normalizePositiveInteger(
+      operationOutputLimitBytes,
+      defaultOperationOutputLimitBytes,
+    );
+    const targetConcurrency = normalizePositiveInteger(
+      operationTargetConcurrency,
+      defaultOperationTargetConcurrency,
+    );
     const nodes = payload.node_ids
       .map((nodeId) => getNodeById(nodeId))
       .filter(Boolean);
-    const targets = await Promise.all(
-      nodes.map((node) => executeOperationTarget(node, payload, timeoutMs)),
+    const targets = await mapWithConcurrency(
+      nodes,
+      targetConcurrency,
+      (node) => executeOperationTarget(node, payload, timeoutMs, outputLimitBytes),
     );
 
     const successCount = targets.filter((item) => item.status === "success").length;
@@ -309,6 +411,7 @@ export function createOperationsExecutorDomain(dependencies) {
   return {
     buildOperationRecord,
     executeOperationTarget,
+    mapWithConcurrency,
     terminateChildProcess,
   };
 }

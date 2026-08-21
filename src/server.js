@@ -93,6 +93,7 @@ import {
 import { createStorePersistenceInfrastructure } from "./infrastructure/store-persistence.js";
 import { createProbeSchedulerRuntime } from "./runtime/probe-scheduler.js";
 import { createServerStartupRuntime } from "./runtime/startup.js";
+import { createSafeRequestHandler, resolveRequestUrl } from "./utils/request-handler.js";
 
 const port = Number.parseInt(process.env.PORT ?? "8080", 10);
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -136,6 +137,14 @@ const shellSessionClosedRetentionMs = 5 * 60 * 1000;
 const shellSessionOutputLimit = 120000;
 const operationExecutionTimeoutMs = Number.parseInt(
   process.env.OPERATION_EXECUTION_TIMEOUT_MS ?? "300000",
+  10,
+);
+const operationOutputLimitBytes = Number.parseInt(
+  process.env.OPERATION_OUTPUT_LIMIT_BYTES ?? "128000",
+  10,
+);
+const operationTargetConcurrency = Number.parseInt(
+  process.env.OPERATION_TARGET_CONCURRENCY ?? "3",
   10,
 );
 const sshConnectTimeoutSeconds = Number.parseInt(
@@ -1112,6 +1121,8 @@ const {
   getNodeById: (nodeId) => nodeStore.get(nodeId),
   nowIso,
   operationExecutionTimeoutMs,
+  operationOutputLimitBytes,
+  operationTargetConcurrency,
   randomUUID,
   resolveExecutionTransport,
   spawn,
@@ -3262,8 +3273,8 @@ function requestRequiresOperatorAuth(request, url) {
   return false;
 }
 
-const server = createServer(async (request, reply) => {
-  const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
+const server = createServer(createSafeRequestHandler(async (request, reply) => {
+  const url = resolveRequestUrl(request);
   const operatorSession = operatorAuth.currentSession(request, { reply });
 
   if ((request.method === "GET" || request.method === "HEAD") && ["/login", "/login.html"].includes(url.pathname)) {
@@ -5550,7 +5561,7 @@ const server = createServer(async (request, reply) => {
   jsonResponse(reply, 404, {
     error: "not_found",
   });
-});
+}));
 
 const { start } = createServerStartupRuntime({
   ensureNodeManagementMigration,

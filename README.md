@@ -18,6 +18,7 @@ The first milestone focuses on:
 - `docs/mvp.md`: milestone planning and scope
 - `docs/project-progress.md`: current delivery status and next priorities
 - `docs/project-assessment-and-roadmap.md`: product positioning, full-project assessment, and long-term route roadmap
+- `docs/deployment-systemd.md`: canonical bare-metal systemd deployment for low-memory Ubuntu/Debian hosts
 - `docs/data-model.md`: core entities and relationships
 - `docs/api.md`: initial API contract
 - `src/server.js`: minimal control plane API skeleton
@@ -88,32 +89,31 @@ curl -X POST http://localhost:8080/api/v1/nodes/register \
 
 ## Production Deployment
 
-Recommended current production form:
+The recommended production form for the current low-memory, single-host architecture is bare-metal systemd:
 
-- single host
-- Docker container for the control plane
-- bind-mounted `data-prod/` for persistent JSON data and SSH material
+- dedicated `airport` system user
+- `/opt/airport-control-plane` application and data directory
+- systemd restart and resource limits
 - HTTPS terminated by a reverse proxy
 
-One-command deployment on a clean server:
+On Ubuntu or Debian:
 
 ```bash
-bash install.sh
+sudo bash scripts/deploy-systemd.sh install
 ```
 
-The deployment script will:
+For upgrades:
 
-- generate `.env.production`
-- generate a random admin password if needed
-- create `data-prod/`
-- build an image that already includes Node runtime and production npm dependencies
-- prefer Compose when available
-- automatically fall back to plain `docker build + docker run` when Compose is unavailable
-- wait for the container health check to pass before treating the deployment as successful
+```bash
+git pull
+sudo bash scripts/deploy-systemd.sh update
+```
 
-The production host only needs Docker and OpenSSL. It does not need host-level Node.js or npm.
+The script installs production dependencies in a staging directory, runs the test suite before activation, restarts the service, waits for `/healthz`, and rolls back the code if the new service does not become healthy. Existing bare-metal `.env.production` credentials are migrated on first use.
 
-See `docs/deployment.md` for the full production guide.
+See `docs/deployment-systemd.md` for the canonical production guide.
+
+The Docker/Compose path in `docs/deployment.md` remains available as an optional compatibility deployment, but it is not the primary path for low-memory hosts.
 
 ## Product direction
 

@@ -1,8 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { isRelayTransportKind } from "../routes/management-strategies.js";
 import {
   DEFAULT_NODE_SSH_PORT,
   normalizeSshPort,
 } from "../nodes/management-defaults.js";
+
+const INIT_EXECUTION_CLAIM_KEY = "init_execution_claim";
 
 export function createTaskLifecycleDomain(dependencies) {
   const {
@@ -99,6 +103,91 @@ export function createTaskLifecycleDomain(dependencies) {
     return taskStatus === "success"
       ? "初始化脚本已执行完成，节点进入可运维状态。"
       : "初始化脚本执行失败，请查看任务回显并决定是否重试。";
+  }
+
+  function findTaskRecord(taskId) {
+    return taskStore.find((item) => item.id === taskId) || null;
+  }
+
+  function taskOperation(task) {
+    return task?.operation_id
+      ? operationStore.find((item) => item.id === task.operation_id) || null
+      : null;
+  }
+
+  function clearInitExecutionClaim(task) {
+    if (!task?.payload || typeof task.payload !== "object") {
+      return false;
+    }
+
+    if (!Object.hasOwn(task.payload, INIT_EXECUTION_CLAIM_KEY)) {
+      return false;
+    }
+
+    const nextPayload = { ...task.payload };
+    delete nextPayload[INIT_EXECUTION_CLAIM_KEY];
+    task.payload = nextPayload;
+    return true;
+  }
+
+  function initExecutionClaimOwner(task) {
+    return typeof task?.payload?.[INIT_EXECUTION_CLAIM_KEY]?.owner === "string"
+      ? task.payload[INIT_EXECUTION_CLAIM_KEY].owner
+      : null;
+  }
+
+  function initTaskClaimStatus(task) {
+    const status = String(task?.status || "new").toLowerCase();
+    if (status === "success" || status === "running") {
+      return "idempotent";
+    }
+
+    return "claimable";
+  }
+
+  function claimInitTask(task, options = {}) {
+    const freshTask = findTaskRecord(task.id) || task;
+    if (initTaskClaimStatus(freshTask) === "idempotent") {
+      return {
+        claimed: false,
+        task: freshTask,
+        owner: null,
+      };
+    }
+
+    const claimedAt = nowIso();
+    const owner = `init:${randomUUID()}`;
+    freshTask.status = "running";
+    freshTask.started_at = claimedAt;
+    freshTask.finished_at = null;
+    freshTask.operation_id = null;
+    freshTask.log_excerpt = [];
+    freshTask.note =
+      options.note ??
+      "节点已完成平台注册回报，控制面开始通过 SSH 下发初始化模板。";
+    freshTask.payload = {
+      ...(freshTask.payload && typeof freshTask.payload === "object" ? freshTask.payload : {}),
+      [INIT_EXECUTION_CLAIM_KEY]: {
+        owner,
+        claimed_at: claimedAt,
+      },
+    };
+    upsertTaskRecord(freshTask);
+
+    return {
+      claimed: true,
+      task: freshTask,
+      owner,
+    };
+  }
+
+  function claimedInitTask(taskId, owner) {
+    const freshTask = findTaskRecord(taskId);
+    if (!freshTask || !owner || initExecutionClaimOwner(freshTask) !== owner) {
+      return null;
+    }
+
+    return freshTask;
   }
 
   function operationTargetOutputText(target) {
@@ -199,6 +288,10 @@ export function createTaskLifecycleDomain(dependencies) {
 
     if (JSON.stringify(task.log_excerpt || []) !== JSON.stringify(nextExcerpt)) {
       task.log_excerpt = nextExcerpt;
+      taskChanged = true;
+    }
+
+    if (nextStatus && clearInitExecutionClaim(task)) {
       taskChanged = true;
     }
 
@@ -470,29 +563,66 @@ export function createTaskLifecycleDomain(dependencies) {
   }
 
   async function executeInitTask(task, options = {}) {
+    const claim = claimInitTask(task, options);
+    const currentNode = getNodeById(claim.task.node_id);
+    if (!claim.claimed) {
+      return {
+        task: claim.task,
+        node: currentNode,
+        operation: taskOperation(claim.task),
+        idempotent: true,
+      };
+    }
+
+    await persistTaskStore();
+
+    const taskId = claim.task.id;
     const node = getNodeById(task.node_id);
     if (!node) {
-      task.status = "failed";
-      task.finished_at = nowIso();
-      task.note = "节点不存在，无法继续执行初始化任务。";
-      task.log_excerpt = [task.note];
-      upsertTaskRecord(task);
+      const claimedTask = claimedInitTask(taskId, claim.owner);
+      if (!claimedTask) {
+        return {
+          task: findTaskRecord(taskId) || claim.task,
+          node: null,
+          operation: null,
+          idempotent: true,
+        };
+      }
+
+      claimedTask.status = "failed";
+      claimedTask.finished_at = nowIso();
+      claimedTask.note = "节点不存在，无法继续执行初始化任务。";
+      claimedTask.log_excerpt = [claimedTask.note];
+      clearInitExecutionClaim(claimedTask);
+      upsertTaskRecord(claimedTask);
       await persistTaskStore();
       return {
-        task,
+        task: claimedTask,
         node: null,
         operation: null,
       };
     }
 
     if (!(await hasUsablePlatformSshKey())) {
-      task.status = "new";
-      task.note = "平台尚未配置可用 SSH 私钥，初始化任务已保留，可稍后在节点详情页重试。";
-      task.log_excerpt = [task.note];
-      upsertTaskRecord(task);
+      const claimedTask = claimedInitTask(taskId, claim.owner);
+      if (!claimedTask) {
+        return {
+          task: findTaskRecord(taskId) || claim.task,
+          node,
+          operation: null,
+          idempotent: true,
+        };
+      }
+
+      claimedTask.status = "new";
+      claimedTask.note = "平台尚未配置可用 SSH 私钥，初始化任务已保留，可稍后在节点详情页重试。";
+      claimedTask.log_excerpt = [claimedTask.note];
+      claimedTask.finished_at = null;
+      clearInitExecutionClaim(claimedTask);
+      upsertTaskRecord(claimedTask);
       await persistTaskStore();
       return {
-        task,
+        task: claimedTask,
         node,
         operation: null,
         skipped: true,
@@ -500,13 +630,25 @@ export function createTaskLifecycleDomain(dependencies) {
     }
 
     if (!node.facts?.public_ipv4 && !node.facts?.public_ipv6 && !node.facts?.private_ipv4) {
-      task.status = "new";
-      task.note = "节点还没有可用的公网或内网地址，暂时无法执行初始化。";
-      task.log_excerpt = [task.note];
-      upsertTaskRecord(task);
+      const claimedTask = claimedInitTask(taskId, claim.owner);
+      if (!claimedTask) {
+        return {
+          task: findTaskRecord(taskId) || claim.task,
+          node,
+          operation: null,
+          idempotent: true,
+        };
+      }
+
+      claimedTask.status = "new";
+      claimedTask.note = "节点还没有可用的公网或内网地址，暂时无法执行初始化。";
+      claimedTask.log_excerpt = [claimedTask.note];
+      claimedTask.finished_at = null;
+      clearInitExecutionClaim(claimedTask);
+      upsertTaskRecord(claimedTask);
       await persistTaskStore();
       return {
-        task,
+        task: claimedTask,
         node,
         operation: null,
         skipped: true,
@@ -518,16 +660,18 @@ export function createTaskLifecycleDomain(dependencies) {
       system_template_id: task.payload?.system_template_id,
       template_snapshot: task.payload?.template_snapshot,
     });
-    task.status = "running";
-    task.started_at = nowIso();
-    task.finished_at = null;
-    task.operation_id = null;
-    task.log_excerpt = [];
-    task.note =
-      options.note ??
-      "节点已完成平台注册回报，控制面开始通过 SSH 下发初始化模板。";
-    task.attempt = Number(task.attempt ?? 0) + 1;
-    upsertTaskRecord(task);
+    const executionTask = claimedInitTask(taskId, claim.owner);
+    if (!executionTask) {
+      return {
+        task: findTaskRecord(taskId) || claim.task,
+        node: getNodeById(node.id) || node,
+        operation: null,
+        idempotent: true,
+      };
+    }
+
+    executionTask.attempt = Number(executionTask.attempt ?? 0) + 1;
+    upsertTaskRecord(executionTask);
     await persistTaskStore();
 
     try {
@@ -539,16 +683,27 @@ export function createTaskLifecycleDomain(dependencies) {
         script_body: template.script_body,
       });
 
+      const claimedTask = claimedInitTask(taskId, claim.owner);
+      if (!claimedTask) {
+        return {
+          task: findTaskRecord(taskId) || claim.task,
+          node: getNodeById(node.id) || node,
+          operation: null,
+          idempotent: true,
+        };
+      }
+
       pushOperationRecord(operation);
       const target = operationTargetForNode(operation, node.id);
       const taskStatus = target?.status || operation.status || "failed";
 
-      task.status = taskStatus;
-      task.operation_id = operation.id;
-      task.finished_at = nowIso();
-      task.note = initTaskNote(taskStatus);
-      task.log_excerpt = taskLogExcerpt(target?.output || []);
-      upsertTaskRecord(task);
+      claimedTask.status = taskStatus;
+      claimedTask.operation_id = operation.id;
+      claimedTask.finished_at = nowIso();
+      claimedTask.note = initTaskNote(taskStatus);
+      claimedTask.log_excerpt = taskLogExcerpt(target?.output || []);
+      clearInitExecutionClaim(claimedTask);
+      upsertTaskRecord(claimedTask);
 
       const updatedNode = applyNodeInitStatus(node, taskStatus);
       setNodeRecord(updatedNode);
@@ -556,17 +711,28 @@ export function createTaskLifecycleDomain(dependencies) {
       await Promise.all([persistOperationStore(), persistTaskStore(), persistNodeStore()]);
 
       return {
-        task,
+        task: claimedTask,
         node: updatedNode,
         operation,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
-      task.status = "failed";
-      task.finished_at = nowIso();
-      task.note = `初始化执行器启动失败: ${message}`;
-      task.log_excerpt = [task.note];
-      upsertTaskRecord(task);
+      const claimedTask = claimedInitTask(taskId, claim.owner);
+      if (!claimedTask) {
+        return {
+          task: findTaskRecord(taskId) || claim.task,
+          node: getNodeById(node.id) || node,
+          operation: null,
+          idempotent: true,
+        };
+      }
+
+      claimedTask.status = "failed";
+      claimedTask.finished_at = nowIso();
+      claimedTask.note = `初始化执行器启动失败: ${message}`;
+      claimedTask.log_excerpt = [claimedTask.note];
+      clearInitExecutionClaim(claimedTask);
+      upsertTaskRecord(claimedTask);
       await persistTaskStore();
 
       const updatedNode = applyNodeInitStatus(node, "failed");
@@ -574,7 +740,7 @@ export function createTaskLifecycleDomain(dependencies) {
       await persistNodeStore();
 
       return {
-        task,
+        task: claimedTask,
         node: updatedNode,
         operation: null,
       };
@@ -596,12 +762,12 @@ export function createTaskLifecycleDomain(dependencies) {
         break;
       }
 
-      if (!isRetryableBootstrapInitFailure(result.operation, task.node_id)) {
+      if (!isRetryableBootstrapInitFailure(result.operation, result.task?.node_id || task.node_id)) {
         break;
       }
 
       await sleep(retryDelaysMs[index]);
-      result = await executeInitTask(task, {
+      result = await executeInitTask(result.task || task, {
         note: `节点已完成 bootstrap 回报，SSH 服务仍在热启动，控制面正在发起第 ${index + 2} 次初始化尝试。`,
       });
     }
