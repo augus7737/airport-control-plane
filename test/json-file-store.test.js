@@ -36,6 +36,7 @@ test("readJsonWithBackup restores from backup when the primary file is corrupt",
 
     assert.deepEqual(await readJsonWithBackup(filePath), backupPayload);
     assert.deepEqual(JSON.parse(await readFile(filePath, "utf8")), backupPayload);
+    assert.deepEqual(JSON.parse(await readFile(`${filePath}.bak`, "utf8")), backupPayload);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

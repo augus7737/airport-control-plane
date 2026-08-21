@@ -11,7 +11,7 @@ export function createFileWriteQueue() {
   };
 }
 
-export async function atomicWriteJson(filePath, payload) {
+export async function atomicWriteJson(filePath, payload, options = {}) {
   const directory = path.dirname(filePath);
   const baseName = path.basename(filePath);
   const tmpPath = path.join(
@@ -30,11 +30,13 @@ export async function atomicWriteJson(filePath, payload) {
     await handle.close();
   }
 
-  try {
-    await copyFile(filePath, backupPath);
-  } catch (error) {
-    if (!isMissingFileError(error)) {
-      throw error;
+  if (options.createBackup !== false) {
+    try {
+      await copyFile(filePath, backupPath);
+    } catch (error) {
+      if (!isMissingFileError(error)) {
+        throw error;
+      }
     }
   }
 
@@ -64,7 +66,7 @@ export async function readJsonWithBackup(filePath, options = {}) {
     const backupPath = `${filePath}.bak`;
     const backupPayload = JSON.parse(await readFile(backupPath, "utf8"));
     if (options.restore !== false) {
-      await atomicWriteJson(filePath, backupPayload);
+      await atomicWriteJson(filePath, backupPayload, { createBackup: false });
     }
     return backupPayload;
   }

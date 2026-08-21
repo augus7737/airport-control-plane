@@ -24,9 +24,10 @@ RELAY_NODE_ID=""
 RELAY_LABEL=""
 RELAY_REGION=""
 ROUTE_NOTE=""
+HARDEN_SSH=false
 
 usage() {
-  echo "Usage: sh scripts/bootstrap.sh --server <url> --token <bootstrap-token> [--hostname <name>] [--ssh-port <management-port>] [--ssh-user <name>] [--public-ipv4 <ip>] [--public-ipv6 <ip>] [--private-ipv4 <ip>] [--provider <name>] [--region <code>] [--role <name>] [--access-mode <direct|relay>] [--entry-region <name>] [--relay-node-id <node_id>] [--relay-label <name>] [--relay-region <code>] [--route-note <text>]"
+  echo "Usage: sh scripts/bootstrap.sh --server <url> --token <bootstrap-token> [--hostname <name>] [--ssh-port <management-port>] [--ssh-user <name>] [--public-ipv4 <ip>] [--public-ipv6 <ip>] [--private-ipv4 <ip>] [--provider <name>] [--region <code>] [--role <name>] [--access-mode <direct|relay>] [--entry-region <name>] [--relay-node-id <node_id>] [--relay-label <name>] [--relay-region <code>] [--route-note <text>] [--harden-ssh]"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -98,6 +99,10 @@ while [ "$#" -gt 0 ]; do
     --route-note)
       ROUTE_NOTE="$2"
       shift 2
+      ;;
+    --harden-ssh)
+      HARDEN_SSH=true
+      shift
       ;;
     *)
       usage
@@ -354,6 +359,93 @@ write_sshd_dropin_config() {
   } >"$DROPIN_FILE"
 }
 
+backup_file_if_present() {
+  FILE_PATH="$1"
+  BACKUP_PATH="${FILE_PATH}.airport-bootstrap.bak"
+
+  if [ ! -f "$FILE_PATH" ]; then
+    printf '%s' ""
+    return 0
+  fi
+
+  if cp -p "$FILE_PATH" "$BACKUP_PATH" 2>/dev/null || cp "$FILE_PATH" "$BACKUP_PATH"; then
+    printf '%s' "$BACKUP_PATH"
+    return 0
+  fi
+
+  echo "[bootstrap] 无法备份 ${FILE_PATH}，跳过 SSH 加固。" >&2
+  return 1
+}
+
+restore_file_from_backup() {
+  FILE_PATH="$1"
+  BACKUP_PATH="$2"
+
+  if [ -n "$BACKUP_PATH" ] && [ -f "$BACKUP_PATH" ]; then
+    if cp -p "$BACKUP_PATH" "$FILE_PATH" 2>/dev/null || cp "$BACKUP_PATH" "$FILE_PATH"; then
+      return 0
+    fi
+
+    echo "[bootstrap] 无法从 ${BACKUP_PATH} 恢复 ${FILE_PATH}。" >&2
+    return 1
+  fi
+
+  rm -f "$FILE_PATH" 2>/dev/null || true
+}
+
+validate_sshd_config() {
+  if command -v sshd >/dev/null 2>&1; then
+    sshd -t >/dev/null 2>&1
+    return $?
+  fi
+
+  if [ -x /usr/sbin/sshd ]; then
+    /usr/sbin/sshd -t >/dev/null 2>&1
+    return $?
+  fi
+
+  return 1
+}
+
+harden_ssh_server_config() {
+  MAIN_CONFIG="/etc/ssh/sshd_config"
+  DROPIN_DIR="/etc/ssh/sshd_config.d"
+  DROPIN_FILE="$DROPIN_DIR/99-airport-bootstrap.conf"
+
+  if ! MAIN_BACKUP="$(backup_file_if_present "$MAIN_CONFIG")"; then
+    return 1
+  fi
+  if ! DROPIN_BACKUP="$(backup_file_if_present "$DROPIN_FILE")"; then
+    return 1
+  fi
+
+  if ! validate_sshd_config; then
+    echo "[bootstrap] sshd 配置当前无法通过 sshd -t，跳过 SSH 加固以避免扩大故障。" >&2
+    return 1
+  fi
+
+  if [ -f "$MAIN_CONFIG" ]; then
+    ensure_sshd_config_line "$MAIN_CONFIG" PermitRootLogin prohibit-password
+    ensure_sshd_config_line "$MAIN_CONFIG" PubkeyAuthentication yes
+    ensure_sshd_config_line "$MAIN_CONFIG" PasswordAuthentication no
+  else
+    write_sshd_dropin_config
+  fi
+
+  if validate_sshd_config; then
+    echo "[bootstrap] SSH 加固已启用，原配置备份位于 ${MAIN_BACKUP:-未生成} ${DROPIN_BACKUP:-}" >&2
+    return 0
+  fi
+
+  restore_file_from_backup "$MAIN_CONFIG" "$MAIN_BACKUP" || true
+  if [ -d "$DROPIN_DIR" ]; then
+    restore_file_from_backup "$DROPIN_FILE" "$DROPIN_BACKUP" || true
+  fi
+
+  echo "[bootstrap] SSH 加固后的配置未通过 sshd -t，已恢复加固前配置。" >&2
+  return 1
+}
+
 detect_configured_ssh_port() {
   DETECTED_PORT=""
 
@@ -445,13 +537,10 @@ ensure_ssh_server_ready() {
     ssh-keygen -A >/dev/null 2>&1 || true
   fi
 
-  if [ -f /etc/ssh/sshd_config ]; then
-    ensure_sshd_config_line /etc/ssh/sshd_config PermitRootLogin prohibit-password
-    ensure_sshd_config_line /etc/ssh/sshd_config PubkeyAuthentication yes
-    ensure_sshd_config_line /etc/ssh/sshd_config PasswordAuthentication no
+  if [ "$HARDEN_SSH" = true ]; then
+    harden_ssh_server_config || echo "[bootstrap] SSH 加固失败，继续保持现有 sshd 策略并尝试启动服务。" >&2
   fi
 
-  write_sshd_dropin_config
   DETECTED_LOCAL_SSH_PORT="$(detect_configured_ssh_port)"
   if [ -n "$DETECTED_LOCAL_SSH_PORT" ] && is_valid_port "$DETECTED_LOCAL_SSH_PORT"; then
     LOCAL_SSH_PORT="$DETECTED_LOCAL_SSH_PORT"

@@ -45,7 +45,15 @@ function parseCookies(headerValue) {
       continue;
     }
 
-    cookies[name] = decodeURIComponent(rawValue.join("=").trim());
+    try {
+      cookies[name] = decodeURIComponent(rawValue.join("=").trim());
+    } catch (error) {
+      if (error instanceof URIError) {
+        continue;
+      }
+
+      throw error;
+    }
   }
 
   return cookies;
@@ -84,6 +92,36 @@ function appendSetCookie(reply, cookieValue) {
   }
 
   reply.setHeader("Set-Cookie", [existing, cookieValue]);
+}
+
+function isReplyLike(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof value.getHeader === "function" &&
+      typeof value.setHeader === "function",
+  );
+}
+
+function normalizeCurrentSessionOptions(options) {
+  if (isReplyLike(options)) {
+    return {
+      refresh: true,
+      reply: options,
+    };
+  }
+
+  if (!options || typeof options !== "object") {
+    return {
+      refresh: true,
+      reply: null,
+    };
+  }
+
+  return {
+    refresh: options.refresh !== false,
+    reply: isReplyLike(options.reply) ? options.reply : null,
+  };
 }
 
 function sanitizeNextPath(nextPath) {
@@ -306,7 +344,8 @@ export function createOperatorSessionAuth(options = {}) {
     };
   }
 
-  function currentSession(request, { refresh = true } = {}) {
+  function currentSession(request, options = {}) {
+    const { refresh, reply } = normalizeCurrentSessionOptions(options);
     const cookies = parseCookies(request.headers.cookie);
     const sessionId = cookies[cookieName];
     if (!sessionId) {
@@ -328,6 +367,9 @@ export function createOperatorSessionAuth(options = {}) {
     if (refresh) {
       session.last_seen_at = new Date(currentTime).toISOString();
       session.expires_at_ms = currentTime + sessionTtlMs;
+      if (reply) {
+        appendSetCookie(reply, sessionCookie(session.id, request));
+      }
       persistSessionStore();
     }
 

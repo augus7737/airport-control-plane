@@ -459,6 +459,17 @@ export function createPlatformSshDomain(dependencies) {
     };
   }
 
+  function isLocalDemoTransportEnabled(options = {}) {
+    if (options.allowDemoFallback !== true) {
+      return false;
+    }
+
+    const flag = String(baseEnv.AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT || "")
+      .trim()
+      .toLowerCase();
+    return ["1", "true", "yes", "on"].includes(flag);
+  }
+
   function executeSshScript(sshArgs, scriptBody, args = [], timeoutMs = RELAY_SSH_TIMEOUT_MS) {
     return new Promise((resolve) => {
       let output = "";
@@ -939,7 +950,7 @@ exit 127`;
   }
 
   async function resolveNodeSshTransport(node, options = {}) {
-    const allowDemoFallback = options.allowDemoFallback !== false;
+    const allowDemoFallback = isLocalDemoTransportEnabled(options);
     const route = resolveManagementRoute(node, options);
     const target = route?.target ?? null;
     const accessMode = route?.access_mode ?? "direct";

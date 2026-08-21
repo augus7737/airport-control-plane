@@ -81,3 +81,95 @@ test("expired persisted operator sessions are discarded on load", () => {
   assert.equal(mutated, true);
   assert.deepEqual(auth.serializeSessionStore(), { items: [] });
 });
+
+test("malformed percent-encoded operator cookies do not crash session lookup", () => {
+  const auth = createAuth();
+  const loginReply = createReply();
+
+  const result = auth.login({
+    username: "admin",
+    password: "secret",
+    request: { headers: {} },
+    reply: loginReply,
+  });
+  assert.equal(result.ok, true);
+
+  assert.doesNotThrow(() => {
+    const session = auth.currentSession(
+      {
+        headers: {
+          cookie: `broken=%; ${cookieHeaderFromReply(loginReply)}`,
+        },
+      },
+      { refresh: false },
+    );
+    assert.equal(session.username, "admin");
+  });
+
+  assert.doesNotThrow(() => {
+    const session = auth.currentSession(
+      {
+        headers: {
+          cookie: `${auth.cookieName}=%`,
+        },
+      },
+      { refresh: false },
+    );
+    assert.equal(session, null);
+  });
+});
+
+test("refreshing an operator session also renews the browser cookie when reply is provided", () => {
+  let currentTime = Date.parse("2026-08-18T08:00:00.000Z");
+  let persistedPayload = null;
+  const now = () => currentTime;
+  const auth = createAuth({
+    now,
+    onSessionStoreChanged: (payload) => {
+      persistedPayload = payload;
+    },
+  });
+  const loginReply = createReply();
+
+  const result = auth.login({
+    username: "admin",
+    password: "secret",
+    request: { headers: { "x-forwarded-proto": "https" } },
+    reply: loginReply,
+  });
+  assert.equal(result.ok, true);
+  const cookieHeader = cookieHeaderFromReply(loginReply);
+  const originalExpiresAtMs = persistedPayload.items[0].expires_at_ms;
+
+  currentTime += 120_000;
+  const refreshReply = createReply();
+  const refreshedSession = auth.currentSession(
+    {
+      headers: {
+        cookie: cookieHeader,
+        "x-forwarded-proto": "https",
+      },
+    },
+    { reply: refreshReply },
+  );
+
+  assert.equal(refreshedSession.username, "admin");
+  assert.equal(persistedPayload.items[0].expires_at_ms, currentTime + 600_000);
+  assert.notEqual(persistedPayload.items[0].expires_at_ms, originalExpiresAtMs);
+  assert.match(String(refreshReply.getHeader("Set-Cookie")), new RegExp(`^${auth.cookieName}=`));
+  assert.match(String(refreshReply.getHeader("Set-Cookie")), /Max-Age=600/);
+  assert.match(String(refreshReply.getHeader("Set-Cookie")), /Secure/);
+
+  const noRefreshReply = createReply();
+  const unrefreshedSession = auth.currentSession(
+    {
+      headers: {
+        cookie: cookieHeader,
+      },
+    },
+    { refresh: false, reply: noRefreshReply },
+  );
+
+  assert.equal(unrefreshedSession.username, "admin");
+  assert.equal(noRefreshReply.getHeader("Set-Cookie"), undefined);
+});

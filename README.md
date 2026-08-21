@@ -17,6 +17,7 @@ The first milestone focuses on:
 - `docs/architecture.md`: system design and component boundaries
 - `docs/mvp.md`: milestone planning and scope
 - `docs/project-progress.md`: current delivery status and next priorities
+- `docs/project-assessment-and-roadmap.md`: product positioning, full-project assessment, and long-term route roadmap
 - `docs/data-model.md`: core entities and relationships
 - `docs/api.md`: initial API contract
 - `src/server.js`: minimal control plane API skeleton

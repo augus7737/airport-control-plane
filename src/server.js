@@ -3264,7 +3264,7 @@ function requestRequiresOperatorAuth(request, url) {
 
 const server = createServer(async (request, reply) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
-  const operatorSession = operatorAuth.currentSession(request);
+  const operatorSession = operatorAuth.currentSession(request, { reply });
 
   if ((request.method === "GET" || request.method === "HEAD") && ["/login", "/login.html"].includes(url.pathname)) {
     if (operatorSession) {
