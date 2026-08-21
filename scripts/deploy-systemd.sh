@@ -17,15 +17,21 @@ HEALTH_ATTEMPTS="${AIRPORT_HEALTH_ATTEMPTS:-40}"
 HEALTH_DELAY_SECONDS="${AIRPORT_HEALTH_DELAY_SECONDS:-3}"
 ROLLBACK_DIR=""
 STAGING_DIR=""
+SERVICE_ROLLBACK_FILE=""
+SERVICE_FILE_EXISTED=false
+ACTION="install"
+MIGRATE_DATA_PROD_DIR="${AIRPORT_MIGRATE_DATA_PROD:-}"
+MIGRATE_ENV_FILE="${AIRPORT_MIGRATE_ENV_FILE:-}"
+RUN_FULL_TESTS="${AIRPORT_RUN_FULL_TESTS:-false}"
 
 usage() {
   cat <<'EOF'
 Usage:
-  sudo bash scripts/deploy-systemd.sh install
-  sudo bash scripts/deploy-systemd.sh update
+  sudo bash scripts/deploy-systemd.sh install [--migrate-data-prod PATH] [--migrate-env PATH] [--full-test]
+  sudo bash scripts/deploy-systemd.sh update [--migrate-data-prod PATH] [--migrate-env PATH] [--full-test]
 
 Canonical bare-metal systemd deployment for Ubuntu/Debian low-memory hosts.
-Docker is intentionally not used by this script.
+Containers are intentionally not used by this script.
 EOF
 }
 
@@ -42,8 +48,67 @@ cleanup() {
   if [ -n "$STAGING_DIR" ] && [ -d "$STAGING_DIR" ]; then
     rm -rf "$STAGING_DIR"
   fi
+  if [ -n "$SERVICE_ROLLBACK_FILE" ] && [ -f "$SERVICE_ROLLBACK_FILE" ]; then
+    rm -f "$SERVICE_ROLLBACK_FILE"
+  fi
 }
 trap cleanup EXIT
+
+is_truthy() {
+  case "${1:-}" in
+    true|TRUE|yes|YES|1|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+parse_args() {
+  ACTION="${1:-install}"
+  case "$ACTION" in
+    install|update)
+      shift || true
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      fail "未知动作：$ACTION"
+      ;;
+  esac
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --migrate-data-prod)
+        shift
+        if [ "$#" -eq 0 ]; then
+          fail "--migrate-data-prod 需要一个路径。"
+        fi
+        MIGRATE_DATA_PROD_DIR="$1"
+        ;;
+      --migrate-data-prod=*)
+        MIGRATE_DATA_PROD_DIR="${1#*=}"
+        ;;
+      --migrate-env)
+        shift
+        if [ "$#" -eq 0 ]; then
+          fail "--migrate-env 需要一个路径。"
+        fi
+        MIGRATE_ENV_FILE="$1"
+        ;;
+      --migrate-env=*)
+        MIGRATE_ENV_FILE="${1#*=}"
+        ;;
+      --full-test)
+        RUN_FULL_TESTS=true
+        ;;
+      *)
+        fail "未知参数：$1"
+        ;;
+    esac
+    shift
+  done
+}
 
 random_password() {
   if command -v openssl >/dev/null 2>&1; then
@@ -133,8 +198,66 @@ ensure_directories() {
   install -d -m 0750 -o root -g "$APP_GROUP" "$ENV_DIR"
 }
 
+resolve_existing_path() {
+  local input="$1"
+  if [ -z "$input" ]; then
+    return 1
+  fi
+
+  if ! readlink -f "$input"; then
+    return 1
+  fi
+}
+
+data_dir_has_content() {
+  [ -n "$(find "$DATA_DIR" -mindepth 1 -print -quit)" ]
+}
+
+migrate_data_prod_if_requested() {
+  if [ -z "$MIGRATE_DATA_PROD_DIR" ]; then
+    return
+  fi
+
+  local source_dir
+  source_dir="$(resolve_existing_path "$MIGRATE_DATA_PROD_DIR")" || fail "迁移源不存在：$MIGRATE_DATA_PROD_DIR"
+
+  if [ ! -d "$source_dir" ]; then
+    fail "迁移源不是目录：$source_dir"
+  fi
+
+  if [ "$source_dir" = "$DATA_DIR" ]; then
+    fail "迁移源不能等于目标 data 目录：$DATA_DIR"
+  fi
+
+  if data_dir_has_content; then
+    fail "目标 data 目录非空，拒绝覆盖迁移：$DATA_DIR"
+  fi
+
+  log "显式迁移旧 data-prod 数据：$source_dir -> $DATA_DIR"
+  (
+    cd "$source_dir"
+    tar -cf - .
+  ) | tar -xf - -C "$DATA_DIR"
+  chown -R "$APP_USER:$APP_GROUP" "$DATA_DIR"
+  chmod 0750 "$DATA_DIR"
+}
+
 write_env_file_if_missing() {
   if [ -f "$ENV_FILE" ]; then
+    if [ -n "$MIGRATE_ENV_FILE" ]; then
+      fail "目标环境文件已存在，拒绝覆盖显式迁移：$ENV_FILE"
+    fi
+    return
+  fi
+
+  if [ -n "$MIGRATE_ENV_FILE" ]; then
+    local source_env
+    source_env="$(resolve_existing_path "$MIGRATE_ENV_FILE")" || fail "迁移环境文件不存在：$MIGRATE_ENV_FILE"
+    if [ ! -f "$source_env" ]; then
+      fail "迁移环境源不是文件：$source_env"
+    fi
+    install -m 0640 -o root -g "$APP_GROUP" "$source_env" "$ENV_FILE"
+    log "已显式迁移环境文件：$source_env -> $ENV_FILE"
     return
   fi
 
@@ -208,7 +331,9 @@ read_env_value() {
 }
 
 write_service_file() {
-  cat >"$SERVICE_FILE" <<EOF
+  local service_tmp
+  service_tmp="$(mktemp /tmp/airport-control-plane.service.XXXXXX)"
+  cat >"$service_tmp" <<EOF
 [Unit]
 Description=Airport Control Plane
 Documentation=https://github.com/augus7737/airport-control-plane
@@ -245,9 +370,43 @@ UMask=0077
 [Install]
 WantedBy=multi-user.target
 EOF
+  install -m 0644 "$service_tmp" "$SERVICE_FILE"
+  rm -f "$service_tmp"
   chmod 0644 "$SERVICE_FILE"
   systemctl daemon-reload
   systemctl enable "$SERVICE_NAME" >/dev/null
+}
+
+backup_service_file() {
+  SERVICE_FILE_EXISTED=false
+  SERVICE_ROLLBACK_FILE="$(mktemp /tmp/airport-control-plane.service.rollback.XXXXXX)"
+
+  if [ -f "$SERVICE_FILE" ]; then
+    cp -a "$SERVICE_FILE" "$SERVICE_ROLLBACK_FILE"
+    SERVICE_FILE_EXISTED=true
+    log "保存当前 systemd unit 用于失败回滚：$SERVICE_ROLLBACK_FILE"
+    return
+  fi
+
+  rm -f "$SERVICE_ROLLBACK_FILE"
+  SERVICE_ROLLBACK_FILE=""
+}
+
+restore_service_file() {
+  if [ "$SERVICE_FILE_EXISTED" = true ] && [ -n "$SERVICE_ROLLBACK_FILE" ] && [ -f "$SERVICE_ROLLBACK_FILE" ]; then
+    log "恢复上一版 systemd unit：$SERVICE_FILE"
+    cp -a "$SERVICE_ROLLBACK_FILE" "$SERVICE_FILE"
+    systemctl daemon-reload || true
+    systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+    return
+  fi
+
+  if [ -f "$SERVICE_FILE" ]; then
+    log "移除失败部署创建的 systemd unit：$SERVICE_FILE"
+    systemctl disable "$SERVICE_NAME" >/dev/null 2>&1 || true
+    rm -f "$SERVICE_FILE"
+    systemctl daemon-reload || true
+  fi
 }
 
 repo_root() {
@@ -286,12 +445,22 @@ install_candidate_dependencies() {
   )
 }
 
-test_candidate() {
-  log "执行候选版本测试：npm test"
+verify_candidate() {
+  log "执行候选版本最低语法检查：npm run check"
   (
     cd "$STAGING_DIR"
-    run_as_app_user npm test
+    run_as_app_user npm run check
   )
+
+  if is_truthy "$RUN_FULL_TESTS"; then
+    log "执行候选版本完整测试：npm test"
+    (
+      cd "$STAGING_DIR"
+      run_as_app_user npm test
+    )
+  else
+    log "跳过完整 npm test；如需启用请设置 AIRPORT_RUN_FULL_TESTS=true 或传入 --full-test。"
+  fi
 }
 
 safe_clean_app_dir() {
@@ -326,19 +495,30 @@ create_rollback_backup() {
   ) | tar -xf - -C "$ROLLBACK_DIR"
 }
 
+set_release_permissions() {
+  find "$APP_DIR" -mindepth 1 -maxdepth 1 \
+    ! -name data \
+    ! -name data-prod \
+    ! -name .git \
+    ! -name .env.production \
+    -exec chown -R root:"$APP_GROUP" {} +
+  find "$APP_DIR" -mindepth 1 -maxdepth 1 \
+    ! -name data \
+    ! -name data-prod \
+    ! -name .git \
+    ! -name .env.production \
+    -exec chmod -R u=rwX,g=rX,o=rX {} +
+  chown -R "$APP_USER:$APP_GROUP" "$DATA_DIR"
+  chmod 0750 "$DATA_DIR"
+}
+
 activate_candidate() {
-  create_rollback_backup
   safe_clean_app_dir
   (
     cd "$STAGING_DIR"
     tar -cf - .
   ) | tar -xf - -C "$APP_DIR"
-  find "$APP_DIR" -mindepth 1 -maxdepth 1 \
-    ! -name .git \
-    ! -name data-prod \
-    ! -name .env.production \
-    -exec chown -R "$APP_USER:$APP_GROUP" {} +
-  chown -R "$APP_USER:$APP_GROUP" "$DATA_DIR"
+  set_release_permissions
 }
 
 service_port() {
@@ -381,6 +561,8 @@ wait_for_health() {
 }
 
 rollback_activation() {
+  restore_service_file
+
   if [ -z "$ROLLBACK_DIR" ] || [ ! -d "$ROLLBACK_DIR" ]; then
     log "没有可回滚版本；已停止未通过验证的服务。"
     systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
@@ -397,8 +579,8 @@ rollback_activation() {
     ! -name .git \
     ! -name data-prod \
     ! -name .env.production \
-    -exec chown -R "$APP_USER:$APP_GROUP" {} +
-  chown -R "$APP_USER:$APP_GROUP" "$DATA_DIR"
+    -exec chown -R root:"$APP_GROUP" {} +
+  set_release_permissions
   systemctl restart "$SERVICE_NAME" || true
   wait_for_health || true
 }
@@ -406,9 +588,25 @@ rollback_activation() {
 restart_and_verify() {
   systemctl restart "$SERVICE_NAME"
   if ! wait_for_health; then
-    rollback_activation
-    fail "新版本未通过健康检查，部署失败。"
+    return 1
   fi
+}
+
+rollback_deploy_failure() {
+  local exit_code="$?"
+  trap - ERR
+
+  log "部署失败，尝试恢复旧代码和旧 systemd unit。"
+  rollback_activation || true
+  fail "新版本未通过部署验证或健康检查，已尝试回滚。原始退出码：$exit_code"
+}
+
+enable_deploy_rollback() {
+  trap rollback_deploy_failure ERR
+}
+
+disable_deploy_rollback() {
+  trap - ERR
 }
 
 deploy() {
@@ -417,14 +615,19 @@ deploy() {
   ensure_base_packages
   ensure_app_user
   ensure_directories
+  migrate_data_prod_if_requested
   write_env_file_if_missing
   validate_env_file
-  write_service_file
   copy_repo_to_staging
   install_candidate_dependencies
-  test_candidate
+  verify_candidate
+  create_rollback_backup
+  backup_service_file
+  enable_deploy_rollback
+  write_service_file
   activate_candidate
   restart_and_verify
+  disable_deploy_rollback
 
   log "部署完成：$(health_url)"
   log "工作目录：$APP_DIR"
@@ -432,19 +635,8 @@ deploy() {
 }
 
 main() {
-  local action="${1:-install}"
-  case "$action" in
-    install|update)
-      deploy
-      ;;
-    -h|--help|help)
-      usage
-      ;;
-    *)
-      usage >&2
-      fail "未知动作：$action"
-      ;;
-  esac
+  parse_args "$@"
+  deploy
 }
 
 main "$@"

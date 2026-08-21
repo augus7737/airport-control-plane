@@ -25,6 +25,9 @@ function createHarness(overrides = {}) {
   const operationStore = [];
   const probeStore = [];
   const nodeStore = new Map();
+  const operationCalls = {
+    count: 0,
+  };
   const persistCounts = {
     tasks: 0,
     operations: 0,
@@ -78,17 +81,20 @@ function createHarness(overrides = {}) {
 
   const dependencies = {
     bootstrapProbeTaskForInitTask: () => null,
-    buildOperationRecord: async ({ node_ids }) => ({
-      id: `operation_${operationStore.length + 1}`,
-      status: "success",
-      started_at: nowIso(),
-      finished_at: nowIso(),
-      targets: node_ids.map((nodeId) => ({
-        node_id: nodeId,
+    buildOperationRecord: async ({ node_ids }) => {
+      operationCalls.count += 1;
+      return {
+        id: `operation_${operationCalls.count}`,
         status: "success",
-        output: ["ok"],
-      })),
-    }),
+        started_at: nowIso(),
+        finished_at: nowIso(),
+        targets: node_ids.map((nodeId) => ({
+          node_id: nodeId,
+          status: "success",
+          output: ["ok"],
+        })),
+      };
+    },
     buildTaskRecord: () => null,
     defaultInitTemplateForNode: () => "alpine-base",
     ensureNodeInitTask: () => null,
@@ -128,6 +134,9 @@ function createHarness(overrides = {}) {
       return record;
     },
     shellSessionLabel: () => "node_1",
+    sleep: async (ms) => {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(ms, 1)));
+    },
     taskStore,
     upsertTaskRecord,
     ...overrides,
@@ -137,6 +146,7 @@ function createHarness(overrides = {}) {
     domain: createTaskLifecycleDomain(dependencies),
     node,
     nodeStore,
+    operationCalls,
     operationStore,
     persistCounts,
     task,
@@ -220,9 +230,12 @@ test("concurrent bootstrap completion executes the init operation once", async (
   const firstResult = await first;
 
   assert.equal(firstResult.task.status, "success");
-  assert.equal(firstResult.task.operation_id, "operation_once");
+  assert.match(firstResult.task.operation_id, /^op_/);
+  assert.equal(firstResult.operation.id, firstResult.task.operation_id);
   assert.equal(firstResult.task.payload.init_execution_claim, undefined);
   assert.equal(harness.operationStore.length, 1);
+  assert.equal(harness.operationStore[0].id, firstResult.task.operation_id);
+  assert.equal(harness.operationStore[0].status, "success");
 
   const third = await harness.domain.executeBootstrapInitTask(harness.taskStore[0], {
     installed_ssh_key: true,
@@ -264,10 +277,113 @@ test("stale claim owner cannot write terminal task state", async () => {
 
   assert.equal(result.idempotent, true);
   assert.equal(harness.taskStore[0].status, "running");
-  assert.equal(harness.taskStore[0].operation_id, null);
+  assert.match(harness.taskStore[0].operation_id, /^op_/);
   assert.equal(harness.taskStore[0].payload.init_execution_claim.owner, "other-owner");
-  assert.equal(harness.operationStore.length, 0);
+  assert.equal(harness.operationStore.length, 1);
+  assert.equal(harness.operationStore[0].status, "running");
   assert.equal(harness.nodeStore.get("node_1").status, "new");
+});
+
+test("pending operation is persisted before remote execution and blocks restart retries", async () => {
+  const operationGate = deferred();
+  const operationStarted = deferred();
+  const harness = createHarness({
+    buildOperationRecord: async ({ node_ids }) => {
+      harness.operationCalls.count += 1;
+      operationStarted.resolve();
+      await operationGate.promise;
+      return {
+        id: "operation_after_side_effect",
+        status: "success",
+        started_at: "2026-01-01T00:00:30.000Z",
+        finished_at: "2026-01-01T00:00:31.000Z",
+        targets: node_ids.map((nodeId) => ({
+          node_id: nodeId,
+          status: "success",
+          output: ["side effect happened"],
+        })),
+      };
+    },
+  });
+
+  const first = harness.domain.executeBootstrapInitTask(harness.task, {
+    installed_ssh_key: true,
+  });
+  await operationStarted.promise;
+
+  const pendingTask = harness.taskStore[0];
+  const pendingOperation = harness.operationStore.find(
+    (operation) => operation.id === pendingTask.operation_id,
+  );
+  assert.equal(pendingTask.status, "running");
+  assert.match(pendingTask.operation_id, /^op_/);
+  assert.equal(pendingOperation.status, "running");
+  assert.equal(pendingOperation.finished_at, null);
+
+  pendingTask.status = "failed";
+  pendingTask.finished_at = "2026-01-01T00:00:32.000Z";
+  const restarted = await harness.domain.executeBootstrapInitTask(pendingTask, {
+    installed_ssh_key: true,
+  });
+
+  assert.equal(restarted.idempotent, true);
+  assert.equal(restarted.operation.id, pendingTask.operation_id);
+  assert.equal(restarted.operation.status, "running");
+  assert.equal(harness.operationCalls.count, 1);
+
+  operationGate.resolve();
+  await first;
+});
+
+test("bootstrap retry owner holds the sequence during retry sleep", async () => {
+  const retrySleepStarted = deferred();
+  const retrySleepRelease = deferred();
+  let sleepCalls = 0;
+  const harness = createHarness({
+    buildOperationRecord: async ({ node_ids }) => {
+      harness.operationCalls.count += 1;
+      return {
+        id: `operation_retry_${harness.operationCalls.count}`,
+        status: "failed",
+        started_at: "2026-01-01T00:01:00.000Z",
+        finished_at: "2026-01-01T00:01:01.000Z",
+        targets: node_ids.map((nodeId) => ({
+          node_id: nodeId,
+          status: "failed",
+          transport_kind: "ssh-direct",
+          output: ["ssh: connect: connection refused"],
+          output_text: "ssh: connect: connection refused",
+        })),
+      };
+    },
+    sleep: async () => {
+      sleepCalls += 1;
+      retrySleepStarted.resolve();
+      await retrySleepRelease.promise;
+    },
+  });
+
+  const first = harness.domain.executeBootstrapInitTask(harness.task, {
+    installed_ssh_key: true,
+  });
+  await retrySleepStarted.promise;
+
+  assert.equal(harness.taskStore[0].status, "failed");
+  assert.equal(typeof harness.taskStore[0].payload.init_execution_claim?.owner, "string");
+
+  const second = await harness.domain.executeBootstrapInitTask(harness.taskStore[0], {
+    installed_ssh_key: true,
+  });
+
+  assert.equal(second.idempotent, true);
+  assert.equal(harness.operationCalls.count, 1);
+  assert.equal(sleepCalls, 1);
+
+  retrySleepRelease.resolve();
+  await first;
+
+  assert.equal(harness.operationCalls.count, 3);
+  assert.equal(harness.taskStore[0].payload.init_execution_claim, undefined);
 });
 
 test("startup reconciliation still finishes running init tasks from completed operations", async () => {

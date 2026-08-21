@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder";
 import { isRelayTransportKind } from "../routes/management-strategies.js";
 
 export function createOperationsExecutorDomain(dependencies) {
@@ -88,12 +89,11 @@ export function createOperationsExecutorDomain(dependencies) {
     let truncated = false;
 
     return {
-      append(chunk) {
+      appendText(text) {
         if (truncated) {
           return;
         }
 
-        const text = chunk.toString();
         const availableBytes = limitBytes - outputBytes;
         const chunkBytes = Buffer.byteLength(text);
 
@@ -117,6 +117,12 @@ export function createOperationsExecutorDomain(dependencies) {
         output += clippedText;
         outputBytes += usedBytes;
         truncated = true;
+      },
+      appendChunk(chunk, decoder) {
+        if (truncated) {
+          return;
+        }
+        this.appendText(decoder.write(chunk));
       },
       text() {
         return output;
@@ -179,6 +185,8 @@ export function createOperationsExecutorDomain(dependencies) {
   function executeSpawnedScript(spawnSpec, scriptBody, timeoutMs, outputLimitBytes) {
     return new Promise((resolve) => {
       const outputBuffer = createLimitedOutputBuffer(outputLimitBytes);
+      const stdoutDecoder = new StringDecoder("utf8");
+      const stderrDecoder = new StringDecoder("utf8");
       let settled = false;
       let timedOut = false;
       let timer = null;
@@ -200,16 +208,18 @@ export function createOperationsExecutorDomain(dependencies) {
         stdio: ["pipe", "pipe", "pipe"],
       });
 
-      const append = (chunk) => {
-        outputBuffer.append(chunk);
-      };
-
-      child.stdout.on("data", append);
-      child.stderr.on("data", append);
+      child.stdout.on("data", (chunk) => {
+        outputBuffer.appendChunk(chunk, stdoutDecoder);
+      });
+      child.stderr.on("data", (chunk) => {
+        outputBuffer.appendChunk(chunk, stderrDecoder);
+      });
       child.stdin.on("error", () => {});
 
       child.on("error", (error) => {
-        outputBuffer.append(`\n[control-plane] 执行器启动失败: ${error.message}\n`);
+        outputBuffer.appendText(stdoutDecoder.end());
+        outputBuffer.appendText(stderrDecoder.end());
+        outputBuffer.appendText(`\n[control-plane] 执行器启动失败: ${error.message}\n`);
         finish({
           output: outputBuffer.text(),
           output_truncated: outputBuffer.isTruncated(),
@@ -220,6 +230,8 @@ export function createOperationsExecutorDomain(dependencies) {
       });
 
       child.on("close", (code, signal) => {
+        outputBuffer.appendText(stdoutDecoder.end());
+        outputBuffer.appendText(stderrDecoder.end());
         finish({
           output: outputBuffer.text(),
           output_truncated: outputBuffer.isTruncated(),
@@ -234,7 +246,7 @@ export function createOperationsExecutorDomain(dependencies) {
 
       timer = setTimeout(() => {
         timedOut = true;
-        outputBuffer.append(`\n[control-plane] 执行超时，已在 ${timeoutMs}ms 后终止进程。\n`);
+        outputBuffer.appendText(`\n[control-plane] 执行超时，已在 ${timeoutMs}ms 后终止进程。\n`);
         terminateChildProcess(child);
       }, timeoutMs);
       timer.unref?.();

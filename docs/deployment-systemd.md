@@ -31,13 +31,20 @@ sudo bash scripts/deploy-systemd.sh install
 - 创建 `/etc/airport-control-plane/airport.env`
 - 生成 `/etc/systemd/system/airport-control-plane.service`
 - 在候选目录执行 `npm ci --omit=dev`
-- 执行 `npm test`
+- 执行最低部署验证：`npm run check`
 - 测试通过后才同步到运行目录
 - 重启 systemd 服务并等待 `/healthz` 就绪
 
-如果候选版本测试失败，脚本不会重启线上服务。如果重启后健康检查失败，脚本会尝试回滚上一版，并以失败退出。
+默认不在低配远端执行完整 `npm test`，避免 LXC/VPS 在部署期被测试峰值拖垮。需要完整测试时显式开启：
 
-如果服务器已经使用旧的 `/opt/airport-control-plane/.env.production` 裸机配置，首次执行时会把它迁移到新的环境文件位置，不会重新生成管理员密码。已有 `/etc/airport-control-plane/airport.env` 时始终以新文件为准。
+```bash
+sudo bash scripts/deploy-systemd.sh update --full-test
+AIRPORT_RUN_FULL_TESTS=true sudo bash scripts/deploy-systemd.sh update
+```
+
+如果候选版本验证失败，脚本不会重启线上服务。从写入 systemd unit、激活代码到健康检查期间，任何失败都会尝试恢复旧代码和旧 unit；如果是首次安装且没有可回滚版本，会停止失败服务并以失败退出。
+
+如果服务器已经使用旧的 `/opt/airport-control-plane/.env.production` 裸机配置，首次执行时会把它迁移到新的环境文件位置，不会重新生成管理员密码。已有 `/etc/airport-control-plane/airport.env` 时始终以新文件为准，并拒绝覆盖迁移。
 
 升级激活会保留 `.git/`、`data/`、历史 `data-prod/` 和旧 `.env.production`，不会把持久数据或仓库元数据当作应用代码清理。
 
@@ -49,7 +56,25 @@ git pull
 sudo bash scripts/deploy-systemd.sh update
 ```
 
-`install` 和 `update` 都会走同一套验证流程：生产依赖安装、测试、激活、重启、健康检查。只有健康检查通过后才算成功。
+`install` 和 `update` 都会走同一套验证流程：生产依赖安装、最低语法检查、激活、重启、健康检查。只有健康检查通过后才算成功。
+
+## 旧 Docker 数据迁移
+
+从旧 Docker/Compose 方式迁移时，历史数据通常在 checkout 目录的 `data-prod/`，旧环境文件通常在 `.env.production`。systemd 脚本不会自动搬迁这些 Docker 路径，必须显式指定，避免误把测试数据覆盖到生产目录：
+
+```bash
+sudo bash scripts/deploy-systemd.sh install \
+  --migrate-env ./\.env.production \
+  --migrate-data-prod ./data-prod
+```
+
+安全规则：
+
+- `--migrate-data-prod` 的目标固定是 `/opt/airport-control-plane/data`
+- 目标 `data/` 非空时会拒绝迁移，不做覆盖
+- 迁移后 `data/` 会设置为 `airport:airport` 和 `0750`
+- `--migrate-env` 只在 `/etc/airport-control-plane/airport.env` 不存在时生效，目标已存在则拒绝覆盖
+- 旧 `/opt/airport-control-plane/.env.production` 只作为裸机历史配置自动迁移；checkout 根目录 `.env.production` 必须显式传入
 
 ## systemd 单元
 
@@ -65,6 +90,8 @@ sudo bash scripts/deploy-systemd.sh update
 - `ReadWritePaths=/opt/airport-control-plane/data`
 
 `StartLimitIntervalSec` 和 `StartLimitBurst` 放在 `[Unit]`，兼容现代 systemd 的推荐位置。
+
+发布后的代码和 `node_modules` 会设置为 `root:airport` 只读，运行用户 `airport` 只对 `/opt/airport-control-plane/data` 有写权限。脚本会保留 `.git/`、旧 `.env.production` 和历史 `data-prod/` 的原有权限，不把它们纳入发布代码权限收紧。
 
 ## 环境文件
 

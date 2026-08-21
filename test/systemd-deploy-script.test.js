@@ -71,21 +71,26 @@ test("generated unit keeps start limits in Unit and includes required hardening"
   assert.match(serviceSection, /^ReadWritePaths=\$\{DATA_DIR\}$/m);
 });
 
-test("candidate is tested after production dependency install and before restart", async () => {
+test("candidate uses low-memory verification by default and full tests are opt-in", async () => {
   const script = await readScript();
   const deployBody = functionBody(script, "deploy");
   const installIndex = deployBody.indexOf("install_candidate_dependencies");
-  const testIndex = deployBody.indexOf("test_candidate");
-  const activateIndex = deployBody.indexOf("activate_candidate");
+  const verifyIndex = deployBody.indexOf("verify_candidate");
+  const rollbackIndex = deployBody.indexOf("enable_deploy_rollback");
   const restartIndex = deployBody.indexOf("restart_and_verify");
 
   assert.ok(installIndex > -1, "missing dependency install step");
-  assert.ok(testIndex > installIndex, "tests must run after npm ci --omit=dev");
-  assert.ok(activateIndex > testIndex, "candidate must activate only after tests");
-  assert.ok(restartIndex > activateIndex, "service restart must happen after activation");
+  assert.ok(verifyIndex > installIndex, "verification must run after npm ci --omit=dev");
+  assert.ok(rollbackIndex > verifyIndex, "rollback boundary must start after candidate verification");
+  assert.ok(restartIndex > rollbackIndex, "service restart must happen inside rollback boundary");
 
   assert.match(functionBody(script, "install_candidate_dependencies"), /npm ci --omit=dev/);
-  assert.match(functionBody(script, "test_candidate"), /npm test/);
+  const verifyBody = functionBody(script, "verify_candidate");
+  assert.match(verifyBody, /npm run check/);
+  assert.match(verifyBody, /is_truthy "\$RUN_FULL_TESTS"/);
+  assert.match(verifyBody, /npm test/);
+  assert.match(script, /--full-test\)/);
+  assert.match(script, /^RUN_FULL_TESTS="\$\{AIRPORT_RUN_FULL_TESTS:-false\}"$/m);
 });
 
 test("environment validation reads EnvironmentFile without shell sourcing", async () => {
@@ -113,11 +118,42 @@ test("existing bare-metal environment is migrated without rotating credentials",
   );
 });
 
+test("legacy docker data-prod migration is explicit and refuses to overwrite data", async () => {
+  const script = await readScript();
+  const parseBody = functionBody(script, "parse_args");
+  const migrateBody = functionBody(script, "migrate_data_prod_if_requested");
+  const deployBody = functionBody(script, "deploy");
+
+  assert.match(script, /^MIGRATE_DATA_PROD_DIR="\$\{AIRPORT_MIGRATE_DATA_PROD:-\}"$/m);
+  assert.match(parseBody, /--migrate-data-prod/);
+  assert.match(migrateBody, /if \[ -z "\$MIGRATE_DATA_PROD_DIR" \]; then/);
+  assert.match(migrateBody, /data_dir_has_content/);
+  assert.match(migrateBody, /拒绝覆盖迁移/);
+  assert.match(migrateBody, /tar -cf - \./);
+  assert.match(migrateBody, /chown -R "\$APP_USER:\$APP_GROUP" "\$DATA_DIR"/);
+  assert.ok(
+    deployBody.indexOf("migrate_data_prod_if_requested") < deployBody.indexOf("write_env_file_if_missing"),
+    "data migration should happen before deployment activation begins",
+  );
+});
+
+test("explicit legacy environment migration refuses to overwrite airport.env", async () => {
+  const script = await readScript();
+  const parseBody = functionBody(script, "parse_args");
+  const envBody = functionBody(script, "write_env_file_if_missing");
+
+  assert.match(script, /^MIGRATE_ENV_FILE="\$\{AIRPORT_MIGRATE_ENV_FILE:-\}"$/m);
+  assert.match(parseBody, /--migrate-env/);
+  assert.match(envBody, /if \[ -f "\$ENV_FILE" \]; then/);
+  assert.match(envBody, /拒绝覆盖显式迁移/);
+  assert.match(envBody, /install -m 0640 -o root -g "\$APP_GROUP" "\$source_env" "\$ENV_FILE"/);
+});
+
 test("activation preserves git metadata and persistent data", async () => {
   const script = await readScript();
   const cleanBody = functionBody(script, "safe_clean_app_dir");
   const backupBody = functionBody(script, "create_rollback_backup");
-  const activateBody = functionBody(script, "activate_candidate");
+  const permissionsBody = functionBody(script, "set_release_permissions");
 
   assert.match(cleanBody, /! -name data/);
   assert.match(cleanBody, /! -name data-prod/);
@@ -127,9 +163,24 @@ test("activation preserves git metadata and persistent data", async () => {
   assert.match(backupBody, /--exclude='\.\/data-prod'/);
   assert.match(backupBody, /--exclude='\.\/\.git'/);
   assert.match(backupBody, /--exclude='\.\/\.env\.production'/);
-  assert.match(activateBody, /! -name \.git/);
-  assert.match(activateBody, /! -name data-prod/);
-  assert.match(activateBody, /! -name \.env\.production/);
+  assert.match(permissionsBody, /! -name \.git/);
+  assert.match(permissionsBody, /! -name data-prod/);
+  assert.match(permissionsBody, /! -name \.env\.production/);
+});
+
+test("published code is root-owned read-only while data remains writable by airport", async () => {
+  const script = await readScript();
+  const permissionsBody = functionBody(script, "set_release_permissions");
+  const activateBody = functionBody(script, "activate_candidate");
+  const rollbackBody = functionBody(script, "rollback_activation");
+
+  assert.match(permissionsBody, /-exec chown -R root:"\$APP_GROUP" \{\} \+/);
+  assert.match(permissionsBody, /-exec chmod -R u=rwX,g=rX,o=rX \{\} \+/);
+  assert.match(permissionsBody, /chown -R "\$APP_USER:\$APP_GROUP" "\$DATA_DIR"/);
+  assert.match(permissionsBody, /chmod 0750 "\$DATA_DIR"/);
+  assert.doesNotMatch(activateBody, /-exec chown -R "\$APP_USER:\$APP_GROUP" \{\} \+/);
+  assert.match(activateBody, /set_release_permissions/);
+  assert.match(rollbackBody, /set_release_permissions/);
 });
 
 test("low-memory defaults and local demo execution are safe", async () => {
@@ -143,12 +194,41 @@ test("failed health checks do not report success and try rollback", async () => 
   const script = await readScript();
   const restartBody = functionBody(script, "restart_and_verify");
   const rollbackBody = functionBody(script, "rollback_activation");
+  const deployBody = functionBody(script, "deploy");
+  const failureBody = functionBody(script, "rollback_deploy_failure");
 
   assert.match(restartBody, /if ! wait_for_health; then/);
-  assert.match(restartBody, /rollback_activation/);
-  assert.match(restartBody, /fail "新版本未通过健康检查，部署失败。"/);
+  assert.match(restartBody, /return 1/);
+  assert.match(deployBody, /backup_service_file/);
+  assert.match(deployBody, /create_rollback_backup/);
+  assert.match(deployBody, /enable_deploy_rollback/);
+  assert.ok(
+    deployBody.indexOf("enable_deploy_rollback") < deployBody.indexOf("write_service_file"),
+    "unit writes must be inside rollback boundary",
+  );
+  assert.ok(
+    deployBody.indexOf("enable_deploy_rollback") < deployBody.indexOf("activate_candidate"),
+    "activation must be inside rollback boundary",
+  );
+  assert.match(failureBody, /rollback_activation/);
   assert.match(rollbackBody, /恢复上一版代码并重启服务。/);
   assert.match(rollbackBody, /systemctl stop "\$SERVICE_NAME"/);
+  assert.match(rollbackBody, /restore_service_file/);
+});
+
+test("systemd unit is backed up and restored on failed deployment", async () => {
+  const script = await readScript();
+  const writeBody = functionBody(script, "write_service_file");
+  const backupBody = functionBody(script, "backup_service_file");
+  const restoreBody = functionBody(script, "restore_service_file");
+
+  assert.match(writeBody, /mktemp \/tmp\/airport-control-plane\.service/);
+  assert.match(writeBody, /install -m 0644 "\$service_tmp" "\$SERVICE_FILE"/);
+  assert.match(backupBody, /cp -a "\$SERVICE_FILE" "\$SERVICE_ROLLBACK_FILE"/);
+  assert.match(backupBody, /SERVICE_FILE_EXISTED=true/);
+  assert.match(restoreBody, /cp -a "\$SERVICE_ROLLBACK_FILE" "\$SERVICE_FILE"/);
+  assert.match(restoreBody, /systemctl daemon-reload \|\| true/);
+  assert.match(restoreBody, /systemctl disable "\$SERVICE_NAME"/);
 });
 
 test("deployment systemd documentation describes the canonical no-docker path", async () => {
@@ -161,4 +241,7 @@ test("deployment systemd documentation describes the canonical no-docker path", 
   assert.match(docs, /\/opt\/airport-control-plane/);
   assert.match(docs, /\/etc\/airport-control-plane\/airport\.env/);
   assert.match(docs, /StartLimitIntervalSec/);
+  assert.match(docs, /--migrate-data-prod/);
+  assert.match(docs, /AIRPORT_RUN_FULL_TESTS=true|--full-test/);
+  assert.match(docs, /root:airport/);
 });

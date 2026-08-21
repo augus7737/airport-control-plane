@@ -79,6 +79,38 @@ test("operation target stores bounded combined stdout and stderr output", async 
   assert.match(target.output_text, /输出已截断/);
 });
 
+test("operation target decodes utf8 safely across chunks near the output limit", async () => {
+  const node = {
+    id: "node-utf8",
+    facts: { hostname: "node-utf8" },
+    labels: { provider: "test", region: "lab" },
+  };
+  const splitCharacter = Buffer.from("中");
+  const domain = createDomain({
+    nodes: [node],
+    operationOutputLimitBytes: 5,
+    spawn: () => createChild((child) => {
+      child.stdout.emit("data", Buffer.from("ab"));
+      child.stdout.emit("data", splitCharacter.subarray(0, 1));
+      child.stdout.emit("data", splitCharacter.subarray(1));
+      child.stdout.emit("data", Buffer.from("c"));
+      child.emit("close", 0, null);
+    }),
+  });
+
+  const operation = await domain.buildOperationRecord({
+    mode: "command",
+    command: "printf utf8",
+    node_ids: [node.id],
+  });
+  const target = operation.targets[0];
+
+  assert.equal(target.output_truncated, true);
+  assert.match(target.output_text, /ab中/);
+  assert.doesNotMatch(target.output_text, /\uFFFD/);
+  assert.doesNotMatch(target.output_text, /ab中c/);
+});
+
 test("operation targets run with configurable bounded concurrency", async () => {
   const nodes = Array.from({ length: 5 }, (_, index) => ({
     id: `node-${index}`,

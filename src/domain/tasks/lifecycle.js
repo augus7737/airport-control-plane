@@ -35,14 +35,16 @@ export function createTaskLifecycleDomain(dependencies) {
     resolveProbeTarget,
     setNodeRecord,
     shellSessionLabel,
+    sleep: sleepImpl = (ms) =>
+      new Promise((resolve) => {
+        setTimeout(resolve, ms);
+      }),
     taskStore,
     upsertTaskRecord,
   } = dependencies;
 
   function sleep(ms) {
-    return new Promise((resolve) => {
-      setTimeout(resolve, ms);
-    });
+    return sleepImpl(ms);
   }
 
   function toCapabilityFlag(value) {
@@ -115,6 +117,125 @@ export function createTaskLifecycleDomain(dependencies) {
       : null;
   }
 
+  function operationFinished(operation) {
+    return Boolean(operation?.finished_at);
+  }
+
+  function replaceOperationRecord(operation) {
+    const index = operationStore.findIndex((item) => item.id === operation.id);
+    if (index >= 0) {
+      operationStore[index] = operation;
+      return operation;
+    }
+
+    pushOperationRecord(operation);
+    return operation;
+  }
+
+  function buildPendingInitOperation(node, template, startedAt) {
+    const output = [
+      `[${startedAt}] 初始化任务已认领，控制面准备通过 SSH 下发初始化模板。`,
+    ];
+
+    return {
+      id: `op_${randomUUID()}`,
+      created_at: startedAt,
+      started_at: startedAt,
+      finished_at: null,
+      duration_ms: null,
+      operator: "当前会话",
+      mode: "script",
+      title: `${template.title} · ${shellSessionLabel(node)}`,
+      command: null,
+      script_name: template.script_name,
+      script_body: template.script_body,
+      node_payloads: null,
+      status: "running",
+      node_ids: [node.id],
+      summary: {
+        total: 1,
+        success: 0,
+        failed: 0,
+      },
+      targets: [
+        {
+          node_id: node.id,
+          hostname: node.facts?.hostname || node.id,
+          provider: node.labels?.provider || null,
+          region: node.labels?.region || null,
+          access_mode: null,
+          management_access_mode: null,
+          summary: template.script_name || template.title,
+          status: "running",
+          output,
+          output_text: output.join("\n"),
+          exit_code: null,
+          signal: null,
+          timed_out: false,
+          output_truncated: false,
+          mode: "script",
+          command: null,
+          script_name: template.script_name,
+          script_body: template.script_body,
+          transport_kind: null,
+          transport_label: null,
+          transport_note: null,
+          started_at: startedAt,
+          finished_at: null,
+          duration_ms: null,
+        },
+      ],
+    };
+  }
+
+  function completePendingOperation(pendingOperation, operation) {
+    return {
+      ...operation,
+      id: pendingOperation.id,
+      created_at: pendingOperation.created_at,
+    };
+  }
+
+  function failPendingOperation(pendingOperation, node, message) {
+    const finishedAt = nowIso();
+    const startedAt = Date.parse(pendingOperation.started_at ?? "");
+    const finished = Date.parse(finishedAt);
+    const durationMs =
+      Number.isFinite(startedAt) && Number.isFinite(finished)
+        ? Math.max(0, finished - startedAt)
+        : 0;
+    const output = [
+      ...(pendingOperation.targets?.[0]?.output || []),
+      `初始化执行器启动失败: ${message}`,
+    ];
+
+    return {
+      ...pendingOperation,
+      status: "failed",
+      finished_at: finishedAt,
+      duration_ms: durationMs,
+      summary: {
+        total: 1,
+        success: 0,
+        failed: 1,
+      },
+      targets: [
+        {
+          ...(pendingOperation.targets?.[0] || {}),
+          node_id: node.id,
+          hostname: node.facts?.hostname || node.id,
+          provider: node.labels?.provider || null,
+          region: node.labels?.region || null,
+          status: "failed",
+          output,
+          output_text: output.join("\n"),
+          finished_at: finishedAt,
+          duration_ms: durationMs,
+        },
+      ],
+    };
+  }
+
   function clearInitExecutionClaim(task) {
     if (!task?.payload || typeof task.payload !== "object") {
       return false;
@@ -138,8 +259,18 @@ export function createTaskLifecycleDomain(dependencies) {
 
   function initTaskClaimStatus(task) {
     const status = String(task?.status || "new").toLowerCase();
+    const operation = taskOperation(task);
+    if (operation && !operationFinished(operation)) {
+      return "idempotent";
+    }
+
     if (status === "success" || status === "running") {
       return "idempotent";
+    }
+
+    const existingOwner = initExecutionClaimOwner(task);
+    if (existingOwner) {
+      return "owned";
     }
 
     return "claimable";
@@ -147,7 +278,12 @@ export function createTaskLifecycleDomain(dependencies) {
 
   function claimInitTask(task, options = {}) {
     const freshTask = findTaskRecord(task.id) || task;
-    if (initTaskClaimStatus(freshTask) === "idempotent") {
+    const claimStatus = initTaskClaimStatus(freshTask);
+    const existingOwner = initExecutionClaimOwner(freshTask);
+    if (
+      claimStatus === "idempotent" ||
+      (claimStatus === "owned" && existingOwner !== options.claim_owner)
+    ) {
       return {
         claimed: false,
         task: freshTask,
@@ -156,7 +292,7 @@ export function createTaskLifecycleDomain(dependencies) {
     }
 
     const claimedAt = nowIso();
-    const owner = `init:${randomUUID()}`;
+    const owner = existingOwner || options.claim_owner || `init:${randomUUID()}`;
     freshTask.status = "running";
     freshTask.started_at = claimedAt;
     freshTask.finished_at = null;
@@ -188,6 +324,17 @@ export function createTaskLifecycleDomain(dependencies) {
     }
 
     return freshTask;
+  }
+
+  function releaseInitExecutionClaim(taskId, owner) {
+    const task = claimedInitTask(taskId, owner);
+    if (!task) {
+      return null;
+    }
+
+    clearInitExecutionClaim(task);
+    upsertTaskRecord(task);
+    return task;
   }
 
   function operationTargetOutputText(target) {
@@ -593,13 +740,16 @@ export function createTaskLifecycleDomain(dependencies) {
       claimedTask.finished_at = nowIso();
       claimedTask.note = "节点不存在，无法继续执行初始化任务。";
       claimedTask.log_excerpt = [claimedTask.note];
-      clearInitExecutionClaim(claimedTask);
+      if (options.retain_claim_on_failure !== true) {
+        clearInitExecutionClaim(claimedTask);
+      }
       upsertTaskRecord(claimedTask);
       await persistTaskStore();
       return {
         task: claimedTask,
         node: null,
         operation: null,
+        claim_owner: claim.owner,
       };
     }
 
@@ -625,6 +775,7 @@ export function createTaskLifecycleDomain(dependencies) {
         task: claimedTask,
         node,
         operation: null,
+        claim_owner: claim.owner,
         skipped: true,
       };
     }
@@ -651,6 +802,7 @@ export function createTaskLifecycleDomain(dependencies) {
         task: claimedTask,
         node,
         operation: null,
+        claim_owner: claim.owner,
         skipped: true,
       };
     }
@@ -671,8 +823,11 @@ export function createTaskLifecycleDomain(dependencies) {
     }
 
     executionTask.attempt = Number(executionTask.attempt ?? 0) + 1;
+    const pendingOperation = buildPendingInitOperation(node, template, nowIso());
+    executionTask.operation_id = pendingOperation.id;
     upsertTaskRecord(executionTask);
-    await persistTaskStore();
+    pushOperationRecord(pendingOperation);
+    await Promise.all([persistTaskStore(), persistOperationStore()]);
 
     try {
       const operation = await buildOperationRecord({
@@ -688,21 +843,24 @@ export function createTaskLifecycleDomain(dependencies) {
         return {
           task: findTaskRecord(taskId) || claim.task,
           node: getNodeById(node.id) || node,
-          operation: null,
+          operation: pendingOperation,
           idempotent: true,
         };
       }
 
-      pushOperationRecord(operation);
-      const target = operationTargetForNode(operation, node.id);
+      const completedOperation = completePendingOperation(pendingOperation, operation);
+      replaceOperationRecord(completedOperation);
+      const target = operationTargetForNode(completedOperation, node.id);
       const taskStatus = target?.status || operation.status || "failed";
 
       claimedTask.status = taskStatus;
-      claimedTask.operation_id = operation.id;
+      claimedTask.operation_id = completedOperation.id;
       claimedTask.finished_at = nowIso();
       claimedTask.note = initTaskNote(taskStatus);
       claimedTask.log_excerpt = taskLogExcerpt(target?.output || []);
-      clearInitExecutionClaim(claimedTask);
+      if (taskStatus === "success" || options.retain_claim_on_failure !== true) {
+        clearInitExecutionClaim(claimedTask);
+      }
       upsertTaskRecord(claimedTask);
 
       const updatedNode = applyNodeInitStatus(node, taskStatus);
@@ -713,7 +871,8 @@ export function createTaskLifecycleDomain(dependencies) {
       return {
         task: claimedTask,
         node: updatedNode,
-        operation,
+        operation: completedOperation,
+        claim_owner: claim.owner,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
@@ -722,18 +881,23 @@ export function createTaskLifecycleDomain(dependencies) {
         return {
           task: findTaskRecord(taskId) || claim.task,
           node: getNodeById(node.id) || node,
-          operation: null,
+          operation: pendingOperation,
           idempotent: true,
         };
       }
 
+      const failedOperation = failPendingOperation(pendingOperation, node, message);
+      replaceOperationRecord(failedOperation);
       claimedTask.status = "failed";
+      claimedTask.operation_id = failedOperation.id;
       claimedTask.finished_at = nowIso();
       claimedTask.note = `初始化执行器启动失败: ${message}`;
       claimedTask.log_excerpt = [claimedTask.note];
-      clearInitExecutionClaim(claimedTask);
+      if (options.retain_claim_on_failure !== true) {
+        clearInitExecutionClaim(claimedTask);
+      }
       upsertTaskRecord(claimedTask);
-      await persistTaskStore();
+      await Promise.all([persistTaskStore(), persistOperationStore()]);
 
       const updatedNode = applyNodeInitStatus(node, "failed");
       setNodeRecord(updatedNode);
@@ -742,7 +906,8 @@ export function createTaskLifecycleDomain(dependencies) {
       return {
         task: claimedTask,
         node: updatedNode,
-        operation: null,
+        operation: failedOperation,
+        claim_owner: claim.owner,
       };
     }
   }
@@ -753,9 +918,15 @@ export function createTaskLifecycleDomain(dependencies) {
         ? "节点已回报 bootstrap 完成，但尚未确认 SSH 公钥写入。"
         : "节点已确认平台 SSH 公钥写入，控制面开始自动执行初始化模板。";
     const retryDelaysMs = [1500, 4000];
+    let claimOwner = null;
     let result = await executeInitTask(task, {
       note: baseNote,
+      retain_claim_on_failure: true,
     });
+    if (result.idempotent) {
+      return result;
+    }
+    claimOwner = result.claim_owner ?? null;
 
     for (let index = 0; index < retryDelaysMs.length; index += 1) {
       if (String(result.task?.status || "").toLowerCase() !== "failed") {
@@ -768,8 +939,22 @@ export function createTaskLifecycleDomain(dependencies) {
 
       await sleep(retryDelaysMs[index]);
       result = await executeInitTask(result.task || task, {
+        claim_owner: claimOwner,
         note: `节点已完成 bootstrap 回报，SSH 服务仍在热启动，控制面正在发起第 ${index + 2} 次初始化尝试。`,
+        retain_claim_on_failure: true,
       });
+      claimOwner = result.claim_owner ?? claimOwner;
+    }
+
+    if (claimOwner && String(result.task?.status || "").toLowerCase() === "failed") {
+      const releasedTask = releaseInitExecutionClaim(result.task.id, claimOwner);
+      if (releasedTask) {
+        await persistTaskStore();
+        result = {
+          ...result,
+          task: releasedTask,
+        };
+      }
     }
 
     return result;
