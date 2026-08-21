@@ -44,10 +44,20 @@ Core fields:
 - `commercial.note`
 - `networking.access_mode`
 - `networking.entry_region`
+- `networking.route_direction`
 - `networking.relay_node_id`
 - `networking.relay_label`
 - `networking.relay_region`
+- `networking.entry_host`
+- `networking.entry_port`
+- `networking.internal_host`
+- `networking.internal_port`
+- `networking.topology`
+- `networking.nat_mode`
 - `networking.route_note`
+- `endpoints.management`
+- `endpoints.business_ingress`
+- `endpoints.service_listen`
 
 Notes:
 
@@ -60,10 +70,73 @@ When a node cannot be reached directly from the target entry region, record the 
 
 - `networking.access_mode`: `direct` or `relay`
 - `networking.entry_region`: where the user first enters the network, such as `中国大陆` or `香港`
+- `networking.route_direction`: optional explicit traffic direction, normalized to `international_egress`, `return_to_china`, or `regional_transit`
 - `networking.relay_node_id`: optional internal node ID of the relay/jump node
 - `networking.relay_label`: human-readable relay node name when the internal node ID is not known yet
 - `networking.relay_region`: relay node region such as `HKG`
+- `networking.entry_host`: optional public business ingress host
+- `networking.entry_port`: optional public entry port; for NAT/LXC port mapping this is the externally reachable port and may differ from the profile listen port
+- `networking.internal_host`: optional internal service target host behind a NAT/LXC mapping
+- `networking.internal_port`: optional internal service target port behind a NAT/LXC mapping
+- `networking.topology`: optional endpoint topology hint such as `direct`, `nat`, or `lxc`
+- `networking.nat_mode`: optional NAT hint such as `port_mapping`
 - `networking.route_note`: free-form note for the route, such as `中国大陆 -> 香港中转 -> 日本落地`
+
+### Endpoint fields
+
+Nodes serialize three endpoint records so NAT/LXC mappings do not overload a
+single port field:
+
+- `endpoints.management`: the control-plane management endpoint. `host` / `port`
+  and `external_host` / `external_port` describe the address the control plane
+  should dial for SSH. `internal_host` / `internal_port` describe the SSH service
+  as it listens inside the node or container.
+- `endpoints.business_ingress`: the public customer/proxy ingress endpoint.
+  `external_host` / `external_port` may differ from `internal_host` /
+  `internal_port` when a cloud firewall, NAT gateway, LXC mapping, or relay
+  forwards traffic.
+- `endpoints.service_listen`: the node-local proxy service listen endpoint.
+  This is populated only from explicit listen fields, such as
+  `endpoints.service_listen.port` or `listen_port`; it is never inferred from
+  the SSH mapping port.
+
+Compatibility fields remain valid:
+
+- `management.ssh_host` and `management.ssh_port` continue to mean the external
+  SSH management ingress used by probes, shell, and operations.
+- `facts.ssh_port` remains the node-reported SSH daemon port. In LXC/NAT
+  deployments this is usually the internal port, often `22`.
+- `networking.entry_port` remains the legacy business ingress port and is
+  serialized into `endpoints.business_ingress.port`.
+
+Endpoint topology values are intentionally small and descriptive:
+
+- `direct`: external and internal endpoint are the same.
+- `nat`: external and internal host or port differ.
+- `lxc`: container or LXC host-port mapping.
+- `mapped`: generic mapping when the operator does not want to classify it.
+- `relay`: reachable through a relay.
+- `unknown`: recorded but not classified yet.
+- `internal`: node-local service listen endpoint.
+
+## TrafficRoute
+
+`resolveTrafficRoute` returns a backward-compatible runtime route object for publish and share generation. It now also carries stable fields for future RoutePool health input:
+
+- `route_direction`: normalized direction, inferred when the node does not explicitly set one
+- `requested_route_direction`: original operator-supplied value when present
+- `route_id`
+- `route_key`
+- `route_identity`
+- `health_input`
+
+Direction inference keeps the first-hop region and landing region separate:
+
+- mainland China entry to non-mainland landing defaults to `international_egress`
+- non-mainland entry to mainland China landing defaults to `return_to_china`
+- other relay or regional paths default to `regional_transit`
+
+Invalid explicit directions add `route_direction_invalid` to `problems` and keep the route unpublished.
 
 ## BootstrapToken
 

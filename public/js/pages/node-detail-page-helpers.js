@@ -15,6 +15,25 @@ export function getLastSeenMinutes(node) {
   return Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
 }
 
+function formatEndpoint(host, port, fallback = "-") {
+  const normalizedHost = String(host || "").trim();
+  const normalizedPort = Number(port);
+  if (!normalizedHost) return fallback;
+  const hostLabel = normalizedHost.includes(":") ? `[${normalizedHost}]` : normalizedHost;
+  return Number.isInteger(normalizedPort) && normalizedPort > 0
+    ? `${hostLabel}:${normalizedPort}`
+    : hostLabel;
+}
+
+function formatRouteDirection(value) {
+  const labels = {
+    international_egress: "国际出口",
+    return_to_china: "回国链路",
+    regional_transit: "区域中转",
+  };
+  return labels[String(value || "").trim()] || "自动判断";
+}
+
 export function buildCapabilityGauge(probeCapabilityText) {
   if (probeCapabilityText === "全链路就绪") return { value: "全通", percent: 100, tone: "green", foot: "管理与业务均正常" };
   if (probeCapabilityText === "已验证接管") return { value: "SSH", percent: 88, tone: "green", foot: "管理链路已验证" };
@@ -608,7 +627,14 @@ export function buildNodeDetailViewModel({
   ];
   const managementOverview = [
     ["管理接入", formatManagementAccessMode(node)],
-    ["管理 SSH 端口", sshPort],
+    ["外部管理入口", formatEndpoint(
+      node.endpoints?.management?.external_host || node.endpoints?.management?.host || node.management?.ssh_host || primaryPublicIp?.address,
+      node.endpoints?.management?.external_port || node.endpoints?.management?.port || sshPort,
+    )],
+    ["内部管理入口", formatEndpoint(
+      node.endpoints?.management?.internal_host || node.facts?.private_ipv4,
+      node.endpoints?.management?.internal_port,
+    )],
     ["管理中转", managementRelayLabel],
     ["策略配置", managementRelayStrategyText],
     ["生效策略", effectiveManagementRelayStrategyText],
@@ -617,9 +643,22 @@ export function buildNodeDetailViewModel({
   ];
   const trafficOverview = [
     ["业务链路", accessModeText],
+    ["链路方向", formatRouteDirection(node.networking?.route_direction)],
     ["业务入口区域", node.networking?.entry_region || "中国大陆"],
-    ["业务入口地址", primaryPublicIp?.address || node.networking?.entry_host || "未探测"],
-    ["业务入口端口", node.networking?.entry_port ? String(node.networking.entry_port) : "跟随代理配置"],
+    ["公共业务入口", formatEndpoint(
+      node.endpoints?.business_ingress?.external_host || node.endpoints?.business_ingress?.host || node.networking?.entry_host || primaryPublicIp?.address,
+      node.endpoints?.business_ingress?.external_port || node.endpoints?.business_ingress?.port || node.networking?.entry_port,
+      "跟随代理配置",
+    )],
+    ["内部业务入口", formatEndpoint(
+      node.endpoints?.business_ingress?.internal_host,
+      node.endpoints?.business_ingress?.internal_port,
+    )],
+    ["服务监听", formatEndpoint(
+      node.endpoints?.service_listen?.host,
+      node.endpoints?.service_listen?.port,
+      "未显式配置",
+    )],
     ["业务中转节点", accessMode === "relay" ? relayLabel : "无需中转"],
     ["业务中转区域", accessMode === "relay" ? node.networking?.relay_region || relayNode?.labels?.region || "-" : "-"],
     ["链路摘要", routeSummaryText],

@@ -1445,6 +1445,7 @@ exit 127
   return {
     buildProbeRecord,
     executeProbeTask,
+    runTcpProbe,
     resolveBusinessProbeTarget,
     resolveProbeTarget,
     resolveRelayUpstreamTarget,

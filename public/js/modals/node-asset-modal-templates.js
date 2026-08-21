@@ -150,9 +150,38 @@ export function createNodeAssetModalTemplatesModule() {
                         spellcheck="false"
                       />
                     </div>
-                    <div class="field" data-business-relay-field>
+                    <div class="field">
+                      <label for="manual-route-direction">线路方向</label>
+                      <select id="manual-route-direction" name="route_direction">
+                        <option value="">自动推断</option>
+                        <option value="international_egress">国际出口</option>
+                        <option value="return_to_china">回国链路</option>
+                        <option value="regional_transit">区域中转</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="manual-entry-host">公网业务入口</label>
+                      <input id="manual-entry-host" name="entry_host" placeholder="域名或公网 IP；LXC 填宿主机映射地址" />
+                    </div>
+                    <div class="field">
                       <label for="manual-entry-port">业务入口端口</label>
-                      <input id="manual-entry-port" name="entry_port" type="number" min="1" max="65535" placeholder="中转入口监听端口，例如 443 / 8443" />
+                      <input id="manual-entry-port" name="entry_port" type="number" min="1" max="65535" placeholder="公网映射端口，例如 443 / 8443" />
+                    </div>
+                    <div class="field">
+                      <label for="manual-business-internal-host">内部业务地址</label>
+                      <input id="manual-business-internal-host" name="business_internal_host" placeholder="例如 10.0.0.12；普通 VPS 可留空" />
+                    </div>
+                    <div class="field">
+                      <label for="manual-business-internal-port">内部业务端口</label>
+                      <input id="manual-business-internal-port" name="business_internal_port" type="number" min="1" max="65535" placeholder="容器内部服务端口" />
+                    </div>
+                    <div class="field">
+                      <label for="manual-service-listen-host">服务监听地址</label>
+                      <input id="manual-service-listen-host" name="service_listen_host" placeholder="默认 0.0.0.0" />
+                    </div>
+                    <div class="field">
+                      <label for="manual-service-listen-port">服务监听端口</label>
+                      <input id="manual-service-listen-port" name="service_listen_port" type="number" min="1" max="65535" placeholder="sing-box / HY2 内部监听端口" />
                     </div>
                     <div class="field" data-business-relay-field>
                       <label for="manual-relay-node-id">业务入口节点</label>
@@ -187,6 +216,14 @@ export function createNodeAssetModalTemplatesModule() {
                     <div class="field">
                       <label for="manual-management-ssh-user">SSH 用户</label>
                       <input id="manual-management-ssh-user" name="management_ssh_user" placeholder="例如 root / admin" />
+                    </div>
+                    <div class="field">
+                      <label for="manual-management-internal-host">内部 SSH 地址</label>
+                      <input id="manual-management-internal-host" name="management_internal_host" placeholder="例如 10.0.0.12；普通 VPS 可留空" />
+                    </div>
+                    <div class="field">
+                      <label for="manual-management-internal-port">内部 sshd 端口</label>
+                      <input id="manual-management-internal-port" name="management_internal_port" type="number" min="1" max="65535" value="22" />
                     </div>
                     <div class="field" data-management-relay-field>
                       <label for="manual-management-relay-strategy">管理中转策略</label>
@@ -404,9 +441,38 @@ export function createNodeAssetModalTemplatesModule() {
                         spellcheck="false"
                       />
                     </div>
-                    <div class="field" data-business-relay-field>
+                    <div class="field">
+                      <label for="asset-route-direction">线路方向</label>
+                      <select id="asset-route-direction" name="route_direction">
+                        <option value="">自动推断</option>
+                        <option value="international_egress">国际出口</option>
+                        <option value="return_to_china">回国链路</option>
+                        <option value="regional_transit">区域中转</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="asset-entry-host">公网业务入口</label>
+                      <input id="asset-entry-host" name="entry_host" placeholder="域名或公网 IP；LXC 填宿主机映射地址" />
+                    </div>
+                    <div class="field">
                       <label for="asset-entry-port">业务入口端口</label>
-                      <input id="asset-entry-port" name="entry_port" type="number" min="1" max="65535" placeholder="中转入口监听端口，例如 443 / 8443" />
+                      <input id="asset-entry-port" name="entry_port" type="number" min="1" max="65535" placeholder="公网映射端口，例如 443 / 8443" />
+                    </div>
+                    <div class="field">
+                      <label for="asset-business-internal-host">内部业务地址</label>
+                      <input id="asset-business-internal-host" name="business_internal_host" placeholder="例如 10.0.0.12；普通 VPS 可留空" />
+                    </div>
+                    <div class="field">
+                      <label for="asset-business-internal-port">内部业务端口</label>
+                      <input id="asset-business-internal-port" name="business_internal_port" type="number" min="1" max="65535" placeholder="容器内部服务端口" />
+                    </div>
+                    <div class="field">
+                      <label for="asset-service-listen-host">服务监听地址</label>
+                      <input id="asset-service-listen-host" name="service_listen_host" placeholder="默认 0.0.0.0" />
+                    </div>
+                    <div class="field">
+                      <label for="asset-service-listen-port">服务监听端口</label>
+                      <input id="asset-service-listen-port" name="service_listen_port" type="number" min="1" max="65535" placeholder="sing-box / HY2 内部监听端口" />
                     </div>
                     <div class="field" data-business-relay-field>
                       <label for="asset-relay-node-id">业务入口节点</label>
@@ -441,6 +507,14 @@ export function createNodeAssetModalTemplatesModule() {
                     <div class="field">
                       <label for="asset-management-ssh-user">SSH 用户</label>
                       <input id="asset-management-ssh-user" name="management_ssh_user" placeholder="例如 root / admin" />
+                    </div>
+                    <div class="field">
+                      <label for="asset-management-internal-host">内部 SSH 地址</label>
+                      <input id="asset-management-internal-host" name="management_internal_host" placeholder="例如 10.0.0.12；普通 VPS 可留空" />
+                    </div>
+                    <div class="field">
+                      <label for="asset-management-internal-port">内部 sshd 端口</label>
+                      <input id="asset-management-internal-port" name="management_internal_port" type="number" min="1" max="65535" />
                     </div>
                     <div class="field" data-management-relay-field>
                       <label for="asset-management-relay-strategy">管理中转策略</label>

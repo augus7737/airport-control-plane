@@ -165,21 +165,19 @@ function buildEndpoint(node, options = {}) {
     samePrivateIpv4Subnet,
     sshHost = null,
     sshPort = DEFAULT_NODE_SSH_PORT,
+    endpoint = null,
     allowIpv6 = false,
   } = options;
 
+  const normalizedEndpoint = isPlainObject(endpoint) ? endpoint : {};
   const explicitHost = normalizeString(sshHost);
-  if (explicitHost) {
-    return {
-      host: explicitHost,
-      port: sshPort,
-      family: explicitHost.includes(":") ? "ipv6" : "ipv4",
-      source: "ssh_host",
-    };
-  }
-
-  const privateIpv4 = normalizeString(node?.facts?.private_ipv4);
-  const publicIpv4 = normalizeString(node?.facts?.public_ipv4);
+  const privateIpv4 =
+    normalizeString(normalizedEndpoint.internal_host) ?? normalizeString(node?.facts?.private_ipv4);
+  const publicIpv4 =
+    normalizeString(normalizedEndpoint.external_host) ??
+    normalizeString(normalizedEndpoint.host) ??
+    explicitHost ??
+    normalizeString(node?.facts?.public_ipv4);
   const publicIpv6 = normalizeString(node?.facts?.public_ipv6);
   const relayPrivateIpv4 = normalizeString(relayNode?.facts?.private_ipv4);
 
@@ -208,13 +206,21 @@ function buildEndpoint(node, options = {}) {
 
   return {
     host,
-    port: sshPort,
+    port: useReachablePrivateIpv4
+      ? normalizeSshPort(normalizedEndpoint.internal_port, DEFAULT_NODE_SSH_PORT)
+      : normalizeSshPort(normalizedEndpoint.external_port, sshPort),
     family: host.includes(":") ? "ipv6" : "ipv4",
     source:
       useReachablePrivateIpv4
-        ? "private_ipv4"
-        : host === publicIpv4
-          ? "public_ipv4"
+        ? normalizedEndpoint.internal_host
+          ? "endpoints.management.internal"
+          : "private_ipv4"
+        : normalizedEndpoint.external_host || normalizedEndpoint.host
+          ? "endpoints.management.external"
+          : host === explicitHost
+            ? "ssh_host"
+            : host === publicIpv4
+              ? "public_ipv4"
           : host === publicIpv6
             ? "public_ipv6"
             : "management_target_unresolved",
@@ -260,6 +266,7 @@ export function createManagementRouteDomain(dependencies = {}) {
       samePrivateIpv4Subnet,
       sshHost: management.ssh_host,
       sshPort: management.ssh_port,
+      endpoint: node?.endpoints?.management,
       allowIpv6: management.allow_ipv6,
     });
     const relayTarget = relayNode
@@ -270,6 +277,7 @@ export function createManagementRouteDomain(dependencies = {}) {
           samePrivateIpv4Subnet,
           sshHost: relayConfig?.ssh_host,
           sshPort: relayConfig?.ssh_port ?? DEFAULT_NODE_SSH_PORT,
+          endpoint: relayNode?.endpoints?.management,
           allowIpv6: relayConfig?.allow_ipv6 ?? false,
         })
       : proxyTarget;

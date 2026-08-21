@@ -10,6 +10,7 @@ export function createOperationsExecutorDomain(dependencies) {
     operationExecutionTimeoutMs,
     operationOutputLimitBytes,
     operationTargetConcurrency,
+    onOperationStarted = null,
     randomUUID,
     resolveExecutionTransport,
     spawn,
@@ -371,30 +372,12 @@ export function createOperationsExecutorDomain(dependencies) {
     const nodes = payload.node_ids
       .map((nodeId) => getNodeById(nodeId))
       .filter(Boolean);
-    const targets = await mapWithConcurrency(
-      nodes,
-      targetConcurrency,
-      (node) => executeOperationTarget(node, payload, timeoutMs, outputLimitBytes),
-    );
-
-    const successCount = targets.filter((item) => item.status === "success").length;
-    const failedCount = targets.length - successCount;
-    const finishedAt = nowIso();
-    const durationMs = Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt));
-
-    let status = "success";
-    if (successCount === 0) {
-      status = "failed";
-    } else if (failedCount > 0) {
-      status = "partial";
-    }
-
-    return {
+    const operation = {
       id: `op_${randomUUID()}`,
       created_at: startedAt,
       started_at: startedAt,
-      finished_at: finishedAt,
-      duration_ms: durationMs,
+      finished_at: null,
+      duration_ms: null,
       operator: "当前会话",
       mode: payload.mode ?? "command",
       title:
@@ -409,15 +392,72 @@ export function createOperationsExecutorDomain(dependencies) {
         payload.node_payloads && typeof payload.node_payloads === "object"
           ? payload.node_payloads
           : null,
-      status,
+      status: "running",
       node_ids: payload.node_ids,
+      summary: { total: nodes.length, success: 0, failed: 0 },
+      targets: nodes.map((node) => ({
+        node_id: node.id,
+        hostname: node.facts?.hostname || node.id,
+        status: "pending",
+      })),
+    };
+    if (typeof onOperationStarted === "function") {
+      await onOperationStarted(operation);
+    }
+    const targets = await mapWithConcurrency(
+      nodes,
+      targetConcurrency,
+      async (node) => {
+        try {
+          return await executeOperationTarget(node, payload, timeoutMs, outputLimitBytes);
+        } catch (error) {
+          const finishedAt = nowIso();
+          const message = error instanceof Error ? error.message : "unknown execution error";
+          return {
+            node_id: node.id,
+            hostname: node.facts?.hostname || node.id,
+            provider: node.labels?.provider || null,
+            region: node.labels?.region || null,
+            status: "failed",
+            output: [operationLogLine(finishedAt, `执行通道失败: ${message}`)],
+            output_text: operationLogLine(finishedAt, `执行通道失败: ${message}`),
+            exit_code: null,
+            signal: null,
+            timed_out: false,
+            transport_kind: null,
+            transport_label: null,
+            started_at: startedAt,
+            finished_at: finishedAt,
+            duration_ms: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
+            error_message: message,
+          };
+        }
+      },
+    );
+
+    const successCount = targets.filter((item) => item.status === "success").length;
+    const failedCount = targets.length - successCount;
+    const finishedAt = nowIso();
+    const durationMs = Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt));
+
+    let status = "success";
+    if (successCount === 0) {
+      status = "failed";
+    } else if (failedCount > 0) {
+      status = "partial";
+    }
+
+    return Object.assign(operation, {
+      finished_at: finishedAt,
+      duration_ms: durationMs,
+      status,
       summary: {
         total: targets.length,
         success: successCount,
         failed: failedCount,
       },
       targets,
-    };
+    });
   }
 
   return {

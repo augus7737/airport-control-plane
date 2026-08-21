@@ -6,6 +6,7 @@ import {
 } from "../costs/normalize.js";
 import { normalizeManagementRelayStrategy } from "../routes/management-strategies.js";
 import {
+  DEFAULT_LOCAL_SSH_PORT,
   DEFAULT_NODE_SSH_PORT,
   normalizeSshPort,
 } from "./management-defaults.js";
@@ -48,6 +49,133 @@ function normalizeNullableStringValue(value, fallback = null) {
 
   const normalized = String(value).trim();
   return normalized ? normalized : fallback;
+}
+
+function normalizeNullablePortValue(value, fallback = null) {
+  const port = Number(value);
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : fallback;
+}
+
+function normalizeEndpointTopology(value, fallback = null) {
+  const normalized = normalizeNullableStringValue(value)?.toLowerCase() ?? null;
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (["direct", "nat", "lxc", "mapped", "relay", "unknown"].includes(normalized)) {
+    return normalized;
+  }
+
+  return fallback;
+}
+
+function readEndpointSource(source, key) {
+  const endpoints = isPlainObject(source?.endpoints) ? source.endpoints : {};
+  return isPlainObject(endpoints[key]) ? endpoints[key] : {};
+}
+
+function firstSourceValue(sources, keys, fallback = null) {
+  for (const source of sources) {
+    if (!isPlainObject(source)) {
+      continue;
+    }
+
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        return source[key];
+      }
+    }
+  }
+
+  return fallback;
+}
+
+function firstNormalizedStringValue(sources, keys, fallback = null) {
+  for (const source of sources) {
+    if (!isPlainObject(source)) {
+      continue;
+    }
+
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) {
+        continue;
+      }
+
+      const normalized = normalizeNullableStringValue(source[key]);
+      if (normalized !== null) {
+        return normalized;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+function firstNormalizedPortValue(sources, keys, fallback = null) {
+  for (const source of sources) {
+    if (!isPlainObject(source)) {
+      continue;
+    }
+
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) {
+        continue;
+      }
+
+      const normalized = normalizeNullablePortValue(source[key]);
+      if (normalized !== null) {
+        return normalized;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+function firstEndpointTopologyValue(sources, keys, fallback = null) {
+  for (const source of sources) {
+    if (!isPlainObject(source)) {
+      continue;
+    }
+
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) {
+        continue;
+      }
+
+      const normalized = normalizeEndpointTopology(source[key]);
+      if (normalized !== null) {
+        return normalized;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+function endpointHostFamily(host) {
+  const normalized = normalizeNullableStringValue(host);
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.includes(":") ? "ipv6" : "ipv4";
+}
+
+function inferMappedTopology(explicitTopology, externalHost, externalPort, internalHost, internalPort) {
+  if (explicitTopology) {
+    return explicitTopology;
+  }
+
+  if (!externalHost || !externalPort || !internalPort) {
+    return null;
+  }
+
+  if (internalHost && internalHost !== externalHost) {
+    return "nat";
+  }
+
+  return externalPort === internalPort ? "direct" : "nat";
 }
 
 function readRecordSource(source, key) {
@@ -337,7 +465,19 @@ function buildNetworkingRecord(source = {}, existingNetworking = {}) {
       sourceValue(input, "entry_region", existingNetworking.entry_region ?? null),
       "entry",
     ),
+    entry_host: normalizeNullableStringValue(
+      sourceValue(input, "entry_host", existingNetworking.entry_host ?? null),
+    ),
     entry_port: sourceValue(input, "entry_port", existingNetworking.entry_port ?? null),
+    internal_host: normalizeNullableStringValue(
+      sourceValue(input, "internal_host", existingNetworking.internal_host ?? null),
+    ),
+    internal_port: normalizeNullablePortValue(
+      sourceValue(input, "internal_port", existingNetworking.internal_port ?? null),
+    ),
+    topology: normalizeEndpointTopology(
+      sourceValue(input, "topology", existingNetworking.topology ?? null),
+    ),
     route_note: sourceValue(input, "route_note", existingNetworking.route_note ?? null),
   };
 }
@@ -407,6 +547,23 @@ function buildManagementRecord(
         : null,
     ssh_host: sourceValue(input, "ssh_host", currentManagement.ssh_host ?? null),
     ssh_port: sourceValue(input, "ssh_port", currentManagement.ssh_port ?? null),
+    ssh_internal_host: normalizeNullableStringValue(
+      firstSourceValue(
+        [input],
+        ["ssh_internal_host", "internal_ssh_host", "internal_host"],
+        currentManagement.ssh_internal_host ?? currentManagement.internal_ssh_host ?? null,
+      ),
+    ),
+    ssh_internal_port: normalizeNullablePortValue(
+      firstSourceValue(
+        [input],
+        ["ssh_internal_port", "internal_ssh_port", "internal_port"],
+        currentManagement.ssh_internal_port ?? currentManagement.internal_ssh_port ?? null,
+      ),
+    ),
+    topology: normalizeEndpointTopology(
+      sourceValue(input, "topology", currentManagement.topology ?? null),
+    ),
     allow_ipv6: normalizeBooleanValue(
       sourceValue(input, "allow_ipv6", currentManagement.allow_ipv6 ?? false),
       currentManagement.allow_ipv6 ?? false,
@@ -493,6 +650,24 @@ function buildMigratedManagementRecord(node = {}) {
       "ssh_port",
       sourceValue(node, "ssh_port", sourceValue(node?.facts ?? {}, "ssh_port", DEFAULT_NODE_SSH_PORT)),
     ),
+    ssh_internal_host: normalizeNullableStringValue(
+      firstSourceValue(
+        [currentManagement, node],
+        ["ssh_internal_host", "internal_ssh_host", "internal_host"],
+        sourceValue(node?.facts ?? {}, "private_ipv4", null),
+      ),
+    ),
+    ssh_internal_port: normalizeNullablePortValue(
+      firstSourceValue(
+        [currentManagement, node],
+        ["ssh_internal_port", "internal_ssh_port", "internal_port"],
+        sourceValue(node?.facts ?? {}, "ssh_port", DEFAULT_LOCAL_SSH_PORT),
+      ),
+      DEFAULT_LOCAL_SSH_PORT,
+    ),
+    topology: normalizeEndpointTopology(
+      sourceValue(currentManagement, "topology", sourceValue(node, "topology", null)),
+    ),
     allow_ipv6: normalizeBooleanValue(
       sourceValue(currentManagement, "allow_ipv6", false),
       false,
@@ -506,6 +681,205 @@ function buildMigratedManagementRecord(node = {}) {
   };
 }
 
+function buildManagementEndpointRecord(source = {}, existingEndpoints = {}, facts = {}, management = {}) {
+  const input = readEndpointSource(source, "management");
+  const managementInput = readRecordSource(source, "management");
+  const existing = isPlainObject(existingEndpoints?.management) ? existingEndpoints.management : {};
+  const factsHost = facts.public_ipv4 ?? facts.public_ipv6 ?? facts.private_ipv4 ?? null;
+  const existingHostFallback =
+    existing.source === "facts"
+      ? factsHost
+      : existing.external_host ?? existing.host ?? factsHost;
+  const externalHost = firstNormalizedStringValue(
+    [input, managementInput],
+    ["external_host", "host", "ssh_host"],
+    normalizeNullableStringValue(existingHostFallback ?? management.ssh_host ?? null),
+  );
+  const externalPort = firstNormalizedPortValue(
+    [input, managementInput],
+    ["external_port", "port", "ssh_port"],
+    normalizeNullablePortValue(
+      existing.external_port ?? existing.port ?? management.ssh_port ?? facts.ssh_port,
+    ) ?? DEFAULT_NODE_SSH_PORT,
+  );
+  const internalHost = firstNormalizedStringValue(
+    [input, managementInput],
+    ["internal_host", "ssh_internal_host", "internal_ssh_host"],
+    normalizeNullableStringValue(existing.internal_host ?? management.ssh_internal_host ?? facts.private_ipv4 ?? null),
+  );
+  const internalPortCandidate = firstNormalizedPortValue(
+    [input, managementInput],
+    ["internal_port", "ssh_internal_port", "internal_ssh_port"],
+    null,
+  );
+  const factsSshPort = normalizeNullablePortValue(facts.ssh_port);
+  const internalPort =
+    normalizeNullablePortValue(internalPortCandidate) ??
+    (factsSshPort && factsSshPort !== externalPort ? factsSshPort : null) ??
+    normalizeNullablePortValue(existing.internal_port) ??
+    DEFAULT_LOCAL_SSH_PORT;
+  const topology = inferMappedTopology(
+    firstEndpointTopologyValue(
+      [input, managementInput],
+      ["topology"],
+      normalizeEndpointTopology(existing.topology ?? management.topology ?? null),
+    ),
+    externalHost,
+    externalPort,
+    internalHost,
+    internalPort,
+  );
+
+  return {
+    kind: "management",
+    protocol: "ssh",
+    host: externalHost,
+    port: externalPort,
+    external_host: externalHost,
+    external_port: externalPort,
+    internal_host: internalHost,
+    internal_port: internalPort,
+    family: endpointHostFamily(externalHost),
+    topology,
+    ssh_user: firstNormalizedStringValue(
+      [input, managementInput],
+      ["ssh_user"],
+      normalizeNullableStringValue(existing.ssh_user ?? management.ssh_user ?? null),
+    ),
+    source: isPlainObject(input) && Object.keys(input).length > 0
+      ? "endpoints.management"
+      : management.ssh_host || management.ssh_port
+        ? "management"
+        : existing.source ?? "facts",
+  };
+}
+
+function buildBusinessIngressEndpointRecord(
+  source = {},
+  existingEndpoints = {},
+  facts = {},
+  networking = {},
+) {
+  const input = readEndpointSource(source, "business_ingress");
+  const networkingInput = readRecordSource(source, "networking");
+  const existing = isPlainObject(existingEndpoints?.business_ingress)
+    ? existingEndpoints.business_ingress
+    : {};
+  const factsHost = facts.public_ipv4 ?? facts.public_ipv6 ?? null;
+  const existingHostFallback =
+    existing.source === "facts"
+      ? factsHost
+      : existing.external_host ?? existing.host ?? factsHost;
+  const externalHost = firstNormalizedStringValue(
+    [input, networkingInput],
+    ["external_host", "host", "entry_host"],
+    normalizeNullableStringValue(existingHostFallback ?? networking.entry_host ?? null),
+  );
+  const externalPort = firstNormalizedPortValue(
+    [input, networkingInput],
+    ["external_port", "port", "entry_port"],
+    normalizeNullablePortValue(existing.external_port ?? existing.port ?? networking.entry_port ?? null),
+  );
+  const internalHost = firstNormalizedStringValue(
+    [input, networkingInput],
+    ["internal_host"],
+    normalizeNullableStringValue(existing.internal_host ?? networking.internal_host ?? facts.private_ipv4 ?? null),
+  );
+  const internalPort = firstNormalizedPortValue(
+    [input, networkingInput],
+    ["internal_port"],
+    normalizeNullablePortValue(existing.internal_port ?? networking.internal_port ?? null),
+  );
+  const topology = inferMappedTopology(
+    firstEndpointTopologyValue(
+      [input, networkingInput],
+      ["topology"],
+      normalizeEndpointTopology(existing.topology ?? networking.topology ?? null),
+    ),
+    externalHost,
+    externalPort,
+    internalHost,
+    internalPort,
+  );
+
+  return {
+    kind: "business_ingress",
+    protocol: firstNormalizedStringValue(
+      [input],
+      ["protocol"],
+      normalizeNullableStringValue(existing.protocol ?? null),
+    ),
+    host: externalHost,
+    port: externalPort,
+    external_host: externalHost,
+    external_port: externalPort,
+    internal_host: internalHost,
+    internal_port: internalPort,
+    family: endpointHostFamily(externalHost),
+    topology,
+    source: isPlainObject(input) && Object.keys(input).length > 0
+      ? "endpoints.business_ingress"
+      : networking.entry_port || networking.entry_host
+        ? "networking"
+        : externalHost
+          ? existing.source ?? "facts"
+          : null,
+  };
+}
+
+function buildServiceListenEndpointRecord(source = {}, existingEndpoints = {}) {
+  const input = readEndpointSource(source, "service_listen");
+  const existing = isPlainObject(existingEndpoints?.service_listen)
+    ? existingEndpoints.service_listen
+    : {};
+  const host = firstNormalizedStringValue(
+    [input, source],
+    ["listen_host", "host", "service_listen_host"],
+    normalizeNullableStringValue(existing.host ?? existing.listen_host ?? null),
+  );
+  const port = firstNormalizedPortValue(
+    [input, source],
+    ["listen_port", "port", "service_listen_port"],
+    normalizeNullablePortValue(existing.port ?? existing.listen_port ?? null),
+  );
+
+  return {
+    kind: "service_listen",
+    protocol: firstNormalizedStringValue(
+      [input, source],
+      ["protocol"],
+      normalizeNullableStringValue(existing.protocol ?? null),
+    ),
+    host: port ? host ?? "0.0.0.0" : host,
+    port,
+    listen_host: port ? host ?? "0.0.0.0" : host,
+    listen_port: port,
+    internal_host: port ? host ?? "0.0.0.0" : host,
+    internal_port: port,
+    family: endpointHostFamily(host),
+    topology: "internal",
+    source: isPlainObject(input) && Object.keys(input).length > 0
+      ? "endpoints.service_listen"
+      : port
+        ? existing.source ?? "listen_port"
+        : null,
+  };
+}
+
+export function normalizeNodeEndpointsRecord(
+  source = {},
+  existingEndpoints = {},
+  facts = {},
+  management = {},
+  networking = {},
+) {
+  return {
+    management: buildManagementEndpointRecord(source, existingEndpoints, facts, management),
+    business_ingress: buildBusinessIngressEndpointRecord(source, existingEndpoints, facts, networking),
+    service_listen: buildServiceListenEndpointRecord(source, existingEndpoints),
+  };
+}
+
 function migrateLegacyNodeManagementRecord(node = {}) {
   const nextManagement = buildMigratedManagementRecord(node);
   const currentManagement = isPlainObject(node?.management) ? node.management : null;
@@ -513,10 +887,19 @@ function migrateLegacyNodeManagementRecord(node = {}) {
   const currentLabels = isPlainObject(node?.labels) ? node.labels : {};
   const nextNetworking = normalizeNetworkingRecord(node?.networking ?? {});
   const currentNetworking = isPlainObject(node?.networking) ? node.networking : {};
+  const nextEndpoints = normalizeNodeEndpointsRecord(
+    node,
+    node?.endpoints,
+    node?.facts,
+    nextManagement,
+    nextNetworking,
+  );
+  const currentEndpoints = isPlainObject(node?.endpoints) ? node.endpoints : null;
   const changed =
     JSON.stringify(currentManagement ?? null) !== JSON.stringify(nextManagement) ||
     JSON.stringify(currentLabels) !== JSON.stringify(nextLabels) ||
-    JSON.stringify(currentNetworking) !== JSON.stringify(nextNetworking);
+    JSON.stringify(currentNetworking) !== JSON.stringify(nextNetworking) ||
+    JSON.stringify(currentEndpoints ?? null) !== JSON.stringify(nextEndpoints);
 
   if (!changed) {
     return {
@@ -532,6 +915,7 @@ function migrateLegacyNodeManagementRecord(node = {}) {
       labels: nextLabels,
       networking: nextNetworking,
       management: nextManagement,
+      endpoints: nextEndpoints,
     },
   };
 }
@@ -560,6 +944,10 @@ export function createNodeRecordBuilders({
     });
     const networking = buildNetworkingRecord(payload.networking ?? payload, existingNode?.networking);
     const management = buildManagementRecord(payload.management, existingNode?.management);
+    const resolvedManagement = {
+      ...management,
+      ssh_port: resolveManagedSshPort(payload, existingNode, management, facts),
+    };
 
     return {
       id: existingNode?.id ?? createNodeId(),
@@ -579,10 +967,14 @@ export function createNodeRecordBuilders({
       facts,
       commercial: buildCommercialRecord(payload.commercial, existingNode?.commercial),
       networking,
-      management: {
-        ...management,
-        ssh_port: resolveManagedSshPort(payload, existingNode, management, facts),
-      },
+      management: resolvedManagement,
+      endpoints: normalizeNodeEndpointsRecord(
+        payload,
+        existingNode?.endpoints,
+        facts,
+        resolvedManagement,
+        networking,
+      ),
     };
   }
 
@@ -592,6 +984,33 @@ export function createNodeRecordBuilders({
 
     const nextNetworking = buildNetworkingRecord(payload.networking ?? payload, existingNode.networking);
     const nextManagement = buildManagementRecord(payload.management, existingNode.management);
+    const nextFacts = normalizeNodeFacts(
+      {
+        ...currentFacts,
+        public_ipv4: sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null),
+        public_ipv6: sourceValue(payload, "public_ipv6", currentFacts.public_ipv6 ?? null),
+        private_ipv4: sourceValue(payload, "private_ipv4", currentFacts.private_ipv4 ?? null),
+        ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? DEFAULT_NODE_SSH_PORT),
+        public_ipv4_source:
+          sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null) !==
+          (currentFacts.public_ipv4 ?? null)
+            ? "manual_override"
+            : currentFacts.public_ipv4_source ?? null,
+        public_ipv6_source:
+          sourceValue(payload, "public_ipv6", currentFacts.public_ipv6 ?? null) !==
+          (currentFacts.public_ipv6 ?? null)
+            ? "manual_override"
+            : currentFacts.public_ipv6_source ?? null,
+      },
+      { existingFacts: currentFacts },
+    );
+    const resolvedManagement = {
+      ...nextManagement,
+      ssh_port: resolveManagedSshPort(payload, existingNode, nextManagement, {
+        ...currentFacts,
+        ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? DEFAULT_NODE_SSH_PORT),
+      }),
+    };
 
     return {
       ...existingNode,
@@ -608,35 +1027,17 @@ export function createNodeRecordBuilders({
         sourceValue(payload, "provider_id", existingNode.provider_id ?? null),
         null,
       ),
-      facts: normalizeNodeFacts(
-        {
-          ...currentFacts,
-          public_ipv4: sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null),
-          public_ipv6: sourceValue(payload, "public_ipv6", currentFacts.public_ipv6 ?? null),
-          private_ipv4: sourceValue(payload, "private_ipv4", currentFacts.private_ipv4 ?? null),
-          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? DEFAULT_NODE_SSH_PORT),
-          public_ipv4_source:
-            sourceValue(payload, "public_ipv4", currentFacts.public_ipv4 ?? null) !==
-            (currentFacts.public_ipv4 ?? null)
-              ? "manual_override"
-              : currentFacts.public_ipv4_source ?? null,
-          public_ipv6_source:
-            sourceValue(payload, "public_ipv6", currentFacts.public_ipv6 ?? null) !==
-            (currentFacts.public_ipv6 ?? null)
-              ? "manual_override"
-              : currentFacts.public_ipv6_source ?? null,
-        },
-        { existingFacts: currentFacts },
-      ),
+      facts: nextFacts,
       commercial: buildCommercialRecord(payload, existingNode.commercial),
       networking: nextNetworking,
-      management: {
-        ...nextManagement,
-        ssh_port: resolveManagedSshPort(payload, existingNode, nextManagement, {
-          ...currentFacts,
-          ssh_port: sourceValue(payload, "ssh_port", currentFacts.ssh_port ?? DEFAULT_NODE_SSH_PORT),
-        }),
-      },
+      management: resolvedManagement,
+      endpoints: normalizeNodeEndpointsRecord(
+        payload,
+        existingNode.endpoints,
+        nextFacts,
+        resolvedManagement,
+        nextNetworking,
+      ),
     };
   }
 
@@ -668,6 +1069,10 @@ export function createNodeRecordBuilders({
 
     const networking = buildNetworkingRecord(payload.networking ?? payload);
     const management = buildManagementRecord(payload.management, null);
+    const resolvedManagement = {
+      ...management,
+      ssh_port: resolveManagedSshPort(payload, null, management, facts),
+    };
 
     return {
       id: createNodeId(),
@@ -687,10 +1092,8 @@ export function createNodeRecordBuilders({
       facts,
       commercial: buildCommercialRecord(payload),
       networking,
-      management: {
-        ...management,
-        ssh_port: resolveManagedSshPort(payload, null, management, facts),
-      },
+      management: resolvedManagement,
+      endpoints: normalizeNodeEndpointsRecord(payload, null, facts, resolvedManagement, networking),
     };
   }
 
@@ -700,6 +1103,7 @@ export function createNodeRecordBuilders({
     buildManagementRecord,
     migrateLegacyNodeManagementRecord,
     buildNetworkingRecord,
+    normalizeNodeEndpointsRecord,
     buildNodeRecord,
     updateNodeAssetRecord,
     buildManualNodeRecord,

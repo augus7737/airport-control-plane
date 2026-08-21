@@ -36,14 +36,15 @@ function createDomain(options = {}) {
     operationExecutionTimeoutMs: options.operationExecutionTimeoutMs ?? 1000,
     operationOutputLimitBytes: options.operationOutputLimitBytes,
     operationTargetConcurrency: options.operationTargetConcurrency,
+    onOperationStarted: options.onOperationStarted,
     randomUUID: () => "test",
-    resolveExecutionTransport: async () => ({
+    resolveExecutionTransport: options.resolveExecutionTransport ?? (async () => ({
       kind: "local-demo",
       command: "sh",
       env: {},
       label: "测试执行器",
       note: "本地测试",
-    }),
+    })),
     spawn: options.spawn,
   });
 }
@@ -171,4 +172,40 @@ test("operation target concurrency defaults to three", async () => {
   });
 
   assert.equal(maxActive, 3);
+});
+
+test("operation is exposed as running before remote targets execute", async () => {
+  const node = { id: "pending-node", facts: { hostname: "pending-node" }, labels: {} };
+  let startedSnapshot = null;
+  const domain = createDomain({
+    nodes: [node],
+    onOperationStarted: async (operation) => {
+      startedSnapshot = structuredClone(operation);
+    },
+    spawn: () => createChild((child) => child.emit("close", 0, null)),
+  });
+
+  const operation = await domain.buildOperationRecord({ mode: "command", command: "true", node_ids: [node.id] });
+
+  assert.equal(startedSnapshot.status, "running");
+  assert.equal(startedSnapshot.finished_at, null);
+  assert.equal(startedSnapshot.targets[0].status, "pending");
+  assert.equal(operation.status, "success");
+});
+
+test("missing execution transport becomes a failed operation target", async () => {
+  const node = { id: "no-transport", facts: { hostname: "no-transport" }, labels: {} };
+  const domain = createDomain({
+    nodes: [node],
+    resolveExecutionTransport: async () => null,
+    spawn: () => {
+      throw new Error("spawn must not run");
+    },
+  });
+
+  const operation = await domain.buildOperationRecord({ mode: "command", command: "true", node_ids: [node.id] });
+
+  assert.equal(operation.status, "failed");
+  assert.equal(operation.targets[0].status, "failed");
+  assert.match(operation.targets[0].error_message, /缺少可用执行通道/);
 });

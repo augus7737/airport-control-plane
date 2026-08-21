@@ -166,10 +166,21 @@ function validateRouteSection(errors, payload, fieldName, options = {}) {
 
   if (options.allowEntryPort) {
     validateNullablePortField(errors, payload.entry_port, `${fieldName}.entry_port`);
+    validateNullableStringField(errors, payload.entry_host, `${fieldName}.entry_host`);
+    validateNullableStringField(errors, payload.internal_host, `${fieldName}.internal_host`);
+    validateNullablePortField(errors, payload.internal_port, `${fieldName}.internal_port`);
+    validateNullableStringField(errors, payload.topology, `${fieldName}.topology`);
   }
 
   if (options.allowSshPort) {
     validateNullablePortField(errors, payload.ssh_port, `${fieldName}.ssh_port`);
+    validateNullableStringField(errors, payload.ssh_internal_host, `${fieldName}.ssh_internal_host`);
+    validateNullableStringField(errors, payload.internal_ssh_host, `${fieldName}.internal_ssh_host`);
+    validateNullableStringField(errors, payload.internal_host, `${fieldName}.internal_host`);
+    validateNullablePortField(errors, payload.ssh_internal_port, `${fieldName}.ssh_internal_port`);
+    validateNullablePortField(errors, payload.internal_ssh_port, `${fieldName}.internal_ssh_port`);
+    validateNullablePortField(errors, payload.internal_port, `${fieldName}.internal_port`);
+    validateNullableStringField(errors, payload.topology, `${fieldName}.topology`);
   }
 
   if (
@@ -242,6 +253,77 @@ function validateRouteSection(errors, payload, fieldName, options = {}) {
   }
 }
 
+function validateEndpointTopologyField(errors, value, fieldName) {
+  if (value === undefined || value === null || value === "") {
+    return;
+  }
+
+  if (typeof value !== "string") {
+    errors.push(`${fieldName} must be a string`);
+    return;
+  }
+
+  if (!["direct", "nat", "lxc", "mapped", "relay", "unknown", "internal"].includes(value.trim().toLowerCase())) {
+    errors.push(`${fieldName} must be direct, nat, lxc, mapped, relay, unknown or internal`);
+  }
+}
+
+function validateEndpointSection(errors, payload, fieldName, options = {}) {
+  if (payload === undefined || payload === null) {
+    return;
+  }
+
+  if (!isPlainObject(payload)) {
+    errors.push(`${fieldName} must be an object`);
+    return;
+  }
+
+  for (const field of [
+    "host",
+    "external_host",
+    "internal_host",
+    "listen_host",
+    "protocol",
+    "source",
+    "ssh_user",
+    "label",
+  ]) {
+    validateNullableStringField(errors, payload[field], `${fieldName}.${field}`);
+  }
+
+  for (const field of ["port", "external_port", "internal_port", "listen_port"]) {
+    validateNullablePortField(errors, payload[field], `${fieldName}.${field}`);
+  }
+
+  validateEndpointTopologyField(errors, payload.topology, `${fieldName}.topology`);
+
+  if (options.management) {
+    validateNullableStringField(errors, payload.ssh_host, `${fieldName}.ssh_host`);
+    validateNullablePortField(errors, payload.ssh_port, `${fieldName}.ssh_port`);
+    validateNullableStringField(errors, payload.ssh_internal_host, `${fieldName}.ssh_internal_host`);
+    validateNullableStringField(errors, payload.internal_ssh_host, `${fieldName}.internal_ssh_host`);
+    validateNullablePortField(errors, payload.ssh_internal_port, `${fieldName}.ssh_internal_port`);
+    validateNullablePortField(errors, payload.internal_ssh_port, `${fieldName}.internal_ssh_port`);
+  }
+}
+
+function validateNodeEndpoints(errors, payload) {
+  if (payload === undefined || payload === null) {
+    return;
+  }
+
+  if (!isPlainObject(payload)) {
+    errors.push("endpoints must be an object");
+    return;
+  }
+
+  validateEndpointSection(errors, payload.management, "endpoints.management", {
+    management: true,
+  });
+  validateEndpointSection(errors, payload.business_ingress, "endpoints.business_ingress");
+  validateEndpointSection(errors, payload.service_listen, "endpoints.service_listen");
+}
+
 export function validateRegistration(payload) {
   const errors = [];
 
@@ -310,6 +392,9 @@ export function validateManualNode(payload) {
 
   validateNullablePortField(errors, payload.ssh_port, "ssh_port");
   validateNullablePortField(errors, payload.entry_port, "entry_port");
+  validateNullablePortField(errors, payload.listen_port, "listen_port");
+  validateNullablePortField(errors, payload.service_listen_port, "service_listen_port");
+  validateNullableStringField(errors, payload.service_listen_host, "service_listen_host");
   validateNullableStringField(errors, payload.provider, "provider");
   validateNullableStringField(errors, payload.region, "region");
   validateNullableStringField(errors, payload.role, "role");
@@ -330,6 +415,7 @@ export function validateManualNode(payload) {
     allowProxyLabel: true,
     allowIpv6Flag: true,
   });
+  validateNodeEndpoints(errors, payload.endpoints);
 
   return errors;
 }
@@ -350,6 +436,9 @@ export function validateAssetUpdate(payload) {
 
   validateNullablePortField(errors, payload.ssh_port, "ssh_port");
   validateNullablePortField(errors, payload.entry_port, "entry_port");
+  validateNullablePortField(errors, payload.listen_port, "listen_port");
+  validateNullablePortField(errors, payload.service_listen_port, "service_listen_port");
+  validateNullableStringField(errors, payload.service_listen_host, "service_listen_host");
   validateNullableStringField(errors, payload.provider, "provider");
   validateNullableStringField(errors, payload.region, "region");
   validateNullableStringField(errors, payload.role, "role");
@@ -370,6 +459,7 @@ export function validateAssetUpdate(payload) {
     allowProxyLabel: true,
     allowIpv6Flag: true,
   });
+  validateNodeEndpoints(errors, payload.endpoints);
 
   return errors;
 }

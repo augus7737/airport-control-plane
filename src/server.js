@@ -63,6 +63,8 @@ import { createPlatformSshDomain } from "./domain/platform/ssh.js";
 import { createPlatformSingBoxDistributionDomain } from "./domain/platform/sing-box-distribution.js";
 import { createOperationsExecutorDomain } from "./domain/operations/executor.js";
 import { createProbeExecutorDomain } from "./domain/probes/executor.js";
+import { runUdpProbe } from "./domain/probes/udp.js";
+import { evaluateProfilePublishCapabilities } from "./domain/probes/capabilities.js";
 import { createNodeDiagnosticsDomain } from "./domain/diagnostics/node-quality.js";
 import {
   buildSingBoxConfig,
@@ -74,6 +76,7 @@ import {
   buildTrafficForwarderConfig,
   buildTrafficForwarderPublishScript,
 } from "./domain/releases/haproxy.js";
+import { evaluateReleaseVerification } from "./domain/releases/verification.js";
 import { buildSystemTemplateApplyScript } from "./domain/system/templates.js";
 import { buildSystemUserApplyScript } from "./domain/system/users.js";
 import { createShellSessionsDomain } from "./domain/shell/sessions.js";
@@ -1123,6 +1126,10 @@ const {
   operationExecutionTimeoutMs,
   operationOutputLimitBytes,
   operationTargetConcurrency,
+  onOperationStarted: async (operation) => {
+    pushOperationRecord(operation);
+    await persistOperationStore();
+  },
   randomUUID,
   resolveExecutionTransport,
   spawn,
@@ -1130,6 +1137,7 @@ const {
 
 const {
   executeProbeTask,
+  runTcpProbe,
   resolveProbeTarget,
   sshProbeTimeoutMs,
 } = createProbeExecutorDomain({
@@ -1339,6 +1347,10 @@ function formatTimeLabel(value) {
 }
 
 function pushOperationRecord(operation) {
+  const existingIndex = operationStore.findIndex((item) => item?.id === operation?.id);
+  if (existingIndex >= 0) {
+    operationStore.splice(existingIndex, 1);
+  }
   operationStore.unshift(operation);
   if (operationStore.length > operationHistoryLimit) {
     operationStore.length = operationHistoryLimit;
@@ -2423,6 +2435,10 @@ function serializeTrafficRoute(route) {
     node_name: route?.landing_node?.facts?.hostname ?? route?.landing_node?.id ?? null,
     access_mode: route?.access_mode ?? "direct",
     route_role: route?.route_role ?? "landing",
+    route_id: route?.route_id ?? null,
+    route_key: route?.route_key ?? null,
+    route_direction: route?.route_direction ?? null,
+    network_protocol: route?.route_identity?.network_protocol ?? null,
     entry_node_id: route?.entry_node?.id ?? null,
     entry_node_name: route?.entry_node?.facts?.hostname ?? route?.entry_node?.id ?? null,
     entry_endpoint: route?.entry_endpoint?.host ?? null,
@@ -2431,9 +2447,97 @@ function serializeTrafficRoute(route) {
     upstream_family: route?.upstream_family ?? null,
     route_label: route?.route_label ?? null,
     route_note: route?.route_note ?? null,
+    health_input: route?.health_input ?? null,
     publishable: Boolean(route?.publishable),
     problems: Array.isArray(route?.problems) ? route.problems : [],
   };
+}
+
+function manifestRouteForDeployment(deployment) {
+  const manifest =
+    deployment?.artifacts?.sing_box?.manifest ??
+    deployment?.artifacts?.traffic_forwarder?.manifest ??
+    null;
+  const routes = Array.isArray(manifest?.routes) ? manifest.routes : [];
+  return routes.find((route) => route?.node_id === deployment?.node_id) ?? routes[0] ?? null;
+}
+
+async function verifyConfigReleaseAfterPublish(release, operation, profile) {
+  const checksByNodeId = {};
+  const businessProbesByNodeId = {};
+  const subscriptionsByNodeId = {};
+
+  for (const deployment of release.deployments) {
+    const nodeId = deployment.node_id;
+    const route = findReleaseRouteForNode(release, nodeId);
+    if (!route) {
+      checksByNodeId[nodeId] = {
+        business_entry: {
+          success: true,
+          reason_code: "covered_by_landing_route_verification",
+        },
+        subscription_entry: {
+          success: true,
+          reason_code: "not_applicable_to_entry_component",
+        },
+      };
+      continue;
+    }
+
+    const target = {
+      host: route.entry_endpoint,
+      port: route.entry_port,
+      family: String(route.entry_endpoint || "").includes(":") ? "ipv6" : "ipv4",
+    };
+    const requirement = evaluateProfilePublishCapabilities({ profile, route });
+    let probe;
+    try {
+      probe = requirement.requires_udp
+        ? await runUdpProbe(target, {
+            probeType: requirement.requires_quic ? "udp_quic" : "udp",
+            timeoutMs: probeTcpTimeoutMs,
+            expectResponse: true,
+          })
+        : await runTcpProbe(target);
+    } catch (error) {
+      probe = {
+        attempted: true,
+        success: false,
+        latency_ms: null,
+        error_message: error instanceof Error ? error.message : "business probe failed",
+        reason_code: "business_probe_error",
+        transport: requirement.requires_udp ? "udp" : "tcp",
+      };
+    }
+    const stageName = requirement.requires_udp
+      ? "business_entry_udp_quic"
+      : "business_entry_tcp";
+    businessProbesByNodeId[nodeId] = {
+      stages: {
+        [stageName]: probe,
+      },
+    };
+
+    const manifestRoute = manifestRouteForDeployment(deployment);
+    subscriptionsByNodeId[nodeId] = {
+      endpoint: {
+        host: manifestRoute?.entry_endpoint ?? null,
+        port: manifestRoute?.entry_port ?? null,
+        protocol: profile?.protocol ?? null,
+        transport: profile?.transport ?? null,
+        source: "release_manifest",
+      },
+    };
+  }
+
+  return evaluateReleaseVerification({
+    release,
+    operation,
+    checksByNodeId,
+    businessProbesByNodeId,
+    subscriptionsByNodeId,
+    requireSubscriptionConsistency: true,
+  });
 }
 
 function buildCompositePublishScript(components = []) {
@@ -2733,6 +2837,19 @@ async function executeConfigRelease(payload, options = {}) {
   if (routeConflicts.length > 0) {
     throw new Error(routeConflicts.map((conflict) => buildTrafficConflictMessage(conflict)).join("；"));
   }
+  const capabilityIssues = trafficRoutes.flatMap((route) =>
+    evaluateProfilePublishCapabilities({ profile, route }).publish_issues.map((issue) => ({
+      ...issue,
+      route_label: route.route_label,
+    })),
+  );
+  if (capabilityIssues.length > 0) {
+    throw new Error(
+      `线路能力不满足发布要求：${capabilityIssues
+        .map((issue) => `${issue.route_label} (${issue.code}: ${issue.message})`)
+        .join("；")}`,
+    );
+  }
   const resolved = {
     accessUsers,
     groupIds,
@@ -2893,8 +3010,9 @@ async function executeConfigRelease(payload, options = {}) {
 
   await Promise.all([persistConfigReleaseStore(), persistTaskStore()]);
 
+  let operation = null;
   try {
-    const operation = await buildOperationRecord({
+    operation = await buildOperationRecord({
       mode: "script",
       title: `${release.title} · ${profile.protocol.toUpperCase()}`,
       script_name: `发布 ${profile.protocol.toUpperCase()} 线路配置`,
@@ -2935,14 +3053,51 @@ async function executeConfigRelease(payload, options = {}) {
       failed_nodes_sample: publishSummary.failed_nodes_sample,
     };
 
+    const verification = await verifyConfigReleaseAfterPublish(release, operation, profile);
+    const verificationByNodeId = new Map(
+      verification.deployments.map((item) => [item.node_id, item]),
+    );
+    release.status = verification.status;
+    release.finished_at = nowIso();
+    release.verification = verification;
+    release.deployments = release.deployments.map((deployment) => {
+      const result = verificationByNodeId.get(deployment.node_id);
+      const failureText = result?.failures
+        ?.map((failure) => failure.reason_code)
+        .filter(Boolean)
+        .join(", ");
+      return {
+        ...deployment,
+        status: result?.status ?? "failed",
+        verification: result ?? null,
+        note:
+          result?.status === "success"
+            ? deployment.note
+            : `发布后复检${result?.status === "partial" ? "未完成" : "失败"}: ${failureText || "unknown"}`,
+      };
+    });
+    release.summary = {
+      ...release.summary,
+      verification: verification.summary,
+      verification_failures: verification.failures.slice(0, 8),
+    };
+
     for (const task of tasks) {
       const target = operationTargetForNode(operation, task.node_id);
-      const taskStatus = String(target?.status || operation.status || "failed").toLowerCase();
-      task.status = taskStatus === "success" ? "success" : "failed";
+      const deploymentVerification = verificationByNodeId.get(task.node_id);
+      task.status = deploymentVerification?.status === "success" ? "success" : "failed";
       task.operation_id = operation.id;
       task.started_at = target?.started_at ?? operation.started_at ?? task.started_at ?? nowIso();
       task.finished_at = target?.finished_at ?? operation.finished_at ?? nowIso();
-      task.note = describeSingBoxTargetOutcome(target);
+      task.note =
+        deploymentVerification?.status === "success"
+          ? describeSingBoxTargetOutcome(target)
+          : `发布后复检${deploymentVerification?.status === "partial" ? "未完成" : "失败"}: ${
+              deploymentVerification?.failures
+                ?.map((failure) => failure.reason_code)
+                .filter(Boolean)
+                .join(", ") || "unknown"
+            }`;
       task.log_excerpt = taskExcerptFromLines(target?.output || []);
       upsertTaskRecord(task);
     }
@@ -2979,7 +3134,11 @@ async function executeConfigRelease(payload, options = {}) {
       upsertTaskRecord(task);
     }
 
-    await Promise.all([persistTaskStore(), persistConfigReleaseStore()]);
+    await Promise.all([
+      operation ? persistOperationStore() : Promise.resolve(),
+      persistTaskStore(),
+      persistConfigReleaseStore(),
+    ]);
     throw error;
   }
 }

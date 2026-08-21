@@ -31,8 +31,40 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
     };
   }
 
+  function textOrNull(value) {
+    return String(value || "").trim() || null;
+  }
+
+  function inferEndpointTopology({
+    externalHost,
+    externalPort,
+    internalHost,
+    internalPort,
+    fallback = null,
+  }) {
+    if (!externalHost || !externalPort || !internalPort) {
+      return fallback;
+    }
+
+    if (internalHost && internalHost !== externalHost) {
+      return "nat";
+    }
+
+    return externalPort === internalPort ? "direct" : "nat";
+  }
+
   function collectBusinessRoutePayload(formData) {
     const accessMode = String(formData.get("access_mode") || "").trim() || "direct";
+    const entryHost = textOrNull(formData.get("entry_host"));
+    const entryPort = toNumberOrNull(formData.get("entry_port"));
+    const internalHost = textOrNull(formData.get("business_internal_host"));
+    const internalPort = toNumberOrNull(formData.get("business_internal_port"));
+    const topology = inferEndpointTopology({
+      externalHost: entryHost,
+      externalPort: entryPort,
+      internalHost,
+      internalPort,
+    });
     const relayReference =
       accessMode === "relay"
         ? resolveRelayReference({
@@ -44,7 +76,13 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
     return {
       access_mode: accessMode,
       entry_region: normalizeLocationValue(formData.get("entry_region"), { scope: "entry" }),
-      entry_port: toNumberOrNull(formData.get("entry_port")),
+      route_direction: textOrNull(formData.get("route_direction")),
+      entry_host: entryHost,
+      entry_port: entryPort,
+      internal_host: internalHost,
+      internal_port: internalPort,
+      topology,
+      nat_mode: topology === "nat" ? "port_mapping" : null,
       relay_node_id: relayReference?.relay_node_id ?? null,
       relay_label: relayReference?.relay_label ?? null,
       relay_region: relayReference?.relay_region ?? null,
@@ -54,6 +92,16 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
 
   function collectManagementPayload(formData) {
     const accessMode = String(formData.get("management_access_mode") || "").trim() || "direct";
+    const sshHost = textOrNull(formData.get("management_ssh_host"));
+    const sshPort = toNumberOrNull(formData.get("management_ssh_port"));
+    const internalHost = textOrNull(formData.get("management_internal_host"));
+    const internalPort = toNumberOrNull(formData.get("management_internal_port"));
+    const topology = inferEndpointTopology({
+      externalHost: sshHost,
+      externalPort: sshPort,
+      internalHost,
+      internalPort,
+    });
     const relayReference =
       accessMode === "relay"
         ? resolveRelayReference({
@@ -64,8 +112,11 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
         : null;
     return {
       access_mode: accessMode,
-      ssh_host: String(formData.get("management_ssh_host") || "").trim() || null,
-      ssh_port: toNumberOrNull(formData.get("management_ssh_port")),
+      ssh_host: sshHost,
+      ssh_port: sshPort,
+      ssh_internal_host: internalHost,
+      ssh_internal_port: internalPort,
+      topology,
       relay_strategy:
         accessMode === "relay"
           ? String(formData.get("management_relay_strategy") || "").trim() || "auto"
@@ -94,9 +145,55 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
     };
   }
 
+  function collectEndpointsPayload(formData, { networking, management }) {
+    const serviceListenHost = textOrNull(formData.get("service_listen_host"));
+    const serviceListenPort = toNumberOrNull(formData.get("service_listen_port"));
+
+    return {
+      management: {
+        kind: "management",
+        protocol: "ssh",
+        host: management.ssh_host,
+        port: management.ssh_port,
+        external_host: management.ssh_host,
+        external_port: management.ssh_port,
+        internal_host: management.ssh_internal_host,
+        internal_port: management.ssh_internal_port,
+        topology: management.topology,
+        ssh_user: management.ssh_user,
+      },
+      business_ingress: {
+        kind: "business_ingress",
+        protocol: null,
+        host: networking.entry_host,
+        port: networking.entry_port,
+        external_host: networking.entry_host,
+        external_port: networking.entry_port,
+        internal_host: networking.internal_host,
+        internal_port: networking.internal_port,
+        topology: networking.topology,
+      },
+      service_listen: {
+        kind: "service_listen",
+        protocol: null,
+        host: serviceListenPort ? serviceListenHost || "0.0.0.0" : serviceListenHost,
+        port: serviceListenPort,
+        listen_host: serviceListenPort ? serviceListenHost || "0.0.0.0" : serviceListenHost,
+        listen_port: serviceListenPort,
+        internal_host: serviceListenPort ? serviceListenHost || "0.0.0.0" : serviceListenHost,
+        internal_port: serviceListenPort,
+        topology: "internal",
+      },
+    };
+  }
+
   function buildManualNodePayload(formData) {
     const providerId = String(formData.get("provider_id") || "").trim() || null;
     const providerName = String(formData.get("provider") || "").trim() || null;
+    const networking = collectBusinessRoutePayload(formData);
+    const management = collectManagementPayload(formData);
+    const serviceListenHost = textOrNull(formData.get("service_listen_host"));
+    const serviceListenPort = toNumberOrNull(formData.get("service_listen_port"));
     return {
       hostname: String(formData.get("hostname") || "").trim(),
       provider_id: providerId,
@@ -106,7 +203,7 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       public_ipv4: String(formData.get("public_ipv4") || "").trim() || null,
       public_ipv6: String(formData.get("public_ipv6") || "").trim() || null,
       private_ipv4: String(formData.get("private_ipv4") || "").trim() || null,
-      ssh_port: toNumberOrNull(formData.get("management_ssh_port")) ?? DEFAULT_NODE_SSH_PORT,
+      ssh_port: management.ssh_internal_port ?? management.ssh_port ?? DEFAULT_NODE_SSH_PORT,
       memory_mb: toNumberOrNull(formData.get("memory_mb")),
       bandwidth_mbps: toNumberOrNull(formData.get("bandwidth_mbps")),
       traffic_quota_gb: toNumberOrNull(formData.get("traffic_quota_gb")),
@@ -122,18 +219,24 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       auto_renew: formData.get("auto_renew") === "on",
       cost_note: String(formData.get("cost_note") || "").trim() || null,
       note: String(formData.get("note") || "").trim() || null,
+      service_listen_host: serviceListenHost,
+      service_listen_port: serviceListenPort,
       os_name: "待补充",
       status: "active",
-      networking: collectBusinessRoutePayload(formData),
-      management: collectManagementPayload(formData),
+      networking,
+      management,
+      endpoints: collectEndpointsPayload(formData, { networking, management }),
     };
   }
 
   function buildAssetPayload(formData) {
     const providerId = String(formData.get("provider_id") || "").trim() || null;
-    const managementSshPort = toNumberOrNull(formData.get("management_ssh_port"));
+    const networking = collectBusinessRoutePayload(formData);
+    const management = collectManagementPayload(formData);
+    const serviceListenHost = textOrNull(formData.get("service_listen_host"));
+    const serviceListenPort = toNumberOrNull(formData.get("service_listen_port"));
     return {
-      ...(managementSshPort !== null ? { ssh_port: managementSshPort } : {}),
+      ...(management.ssh_internal_port !== null ? { ssh_port: management.ssh_internal_port } : {}),
       provider_id: providerId,
       provider: String(formData.get("provider") || "").trim() || null,
       region: normalizeLocationValue(formData.get("region"), { scope: "region" }),
@@ -155,8 +258,11 @@ export function createNodeAssetModalPayloadsModule(dependencies = {}) {
       traffic_used_gb: toNumberOrNull(formData.get("traffic_used_gb")),
       cost_note: String(formData.get("cost_note") || "").trim() || null,
       note: String(formData.get("note") || "").trim() || null,
-      networking: collectBusinessRoutePayload(formData),
-      management: collectManagementPayload(formData),
+      service_listen_host: serviceListenHost,
+      service_listen_port: serviceListenPort,
+      networking,
+      management,
+      endpoints: collectEndpointsPayload(formData, { networking, management }),
     };
   }
 

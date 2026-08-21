@@ -158,11 +158,72 @@ export function createNodeAssetModalsModule(dependencies) {
   }
 
   function shouldOpenRoutingAdvanced(options = {}) {
+    const managementPort = toNumberOrNull(options.managementPort);
+    const managementInternalPort = toNumberOrNull(options.managementInternalPort);
     return Boolean(
       String(options.businessMode || "").trim() === "relay" ||
         String(options.managementMode || "").trim() === "relay" ||
-        String(options.proxyHost || "").trim(),
+        String(options.proxyHost || "").trim() ||
+        String(options.routeDirection || "").trim() ||
+        String(options.entryHost || "").trim() ||
+        String(options.entryPort || "").trim() ||
+        String(options.businessInternalHost || "").trim() ||
+        String(options.businessInternalPort || "").trim() ||
+        String(options.serviceListenHost || "").trim() ||
+        String(options.serviceListenPort || "").trim() ||
+        String(options.managementHost || "").trim() ||
+        (managementPort !== null && managementPort !== DEFAULT_NODE_SSH_PORT) ||
+        String(options.managementInternalHost || "").trim() ||
+        (managementInternalPort !== null && managementInternalPort !== DEFAULT_NODE_SSH_PORT),
     );
+  }
+
+  function setFieldValue(id, value) {
+    const element = documentRef.getElementById(id);
+    if (element) {
+      element.value = value ?? "";
+    }
+  }
+
+  function endpointHost(endpoint = {}) {
+    return endpoint.external_host || endpoint.host || "";
+  }
+
+  function endpointPort(endpoint = {}) {
+    return endpoint.external_port ?? endpoint.port ?? null;
+  }
+
+  function endpointInternalHost(endpoint = {}) {
+    return endpoint.internal_host || "";
+  }
+
+  function endpointInternalPort(endpoint = {}) {
+    return endpoint.internal_port ?? null;
+  }
+
+  function serviceListenHost(endpoint = {}) {
+    return endpoint.listen_host || endpoint.host || endpoint.internal_host || "";
+  }
+
+  function serviceListenPort(endpoint = {}) {
+    return endpoint.listen_port ?? endpoint.port ?? endpoint.internal_port ?? null;
+  }
+
+  function bindRoutingAdvancedAutoOpen(routingAdvanced, getOptions, controls = []) {
+    if (!routingAdvanced || typeof getOptions !== "function") {
+      return;
+    }
+
+    const maybeOpen = () => {
+      if (shouldOpenRoutingAdvanced(getOptions())) {
+        routingAdvanced.open = true;
+      }
+    };
+
+    controls.forEach((element) => {
+      element?.addEventListener("input", maybeOpen);
+      element?.addEventListener("change", maybeOpen);
+    });
   }
 
   function getAssetEditorNode(nodes = appState.nodes) {
@@ -192,12 +253,40 @@ export function createNodeAssetModalsModule(dependencies) {
     const managementRelayNodeSelect = documentRef.getElementById("manual-management-relay-node-id");
     const businessModeSelect = documentRef.getElementById("manual-access-mode");
     const managementModeSelect = documentRef.getElementById("manual-management-access-mode");
+    const routeDirectionSelect = documentRef.getElementById("manual-route-direction");
+    const entryHostInput = documentRef.getElementById("manual-entry-host");
+    const entryPortInput = documentRef.getElementById("manual-entry-port");
+    const businessInternalHostInput = documentRef.getElementById("manual-business-internal-host");
+    const businessInternalPortInput = documentRef.getElementById("manual-business-internal-port");
+    const serviceListenHostInput = documentRef.getElementById("manual-service-listen-host");
+    const serviceListenPortInput = documentRef.getElementById("manual-service-listen-port");
+    const managementSshHostInput = documentRef.getElementById("manual-management-ssh-host");
+    const managementSshPortInput = documentRef.getElementById("manual-management-ssh-port");
+    const managementInternalHostInput = documentRef.getElementById("manual-management-internal-host");
+    const managementInternalPortInput = documentRef.getElementById("manual-management-internal-port");
     const managementProxyHostInput = documentRef.getElementById("manual-management-proxy-host");
     const routingAdvanced = documentRef.getElementById("manual-routing-advanced");
 
     if (!modal || !closeButton || !form || !message) return;
     if (modal.dataset.bound === "1") return;
     modal.dataset.bound = "1";
+
+    const manualAdvancedOptions = () => ({
+      businessMode: businessModeSelect?.value,
+      managementMode: managementModeSelect?.value,
+      proxyHost: managementProxyHostInput?.value,
+      routeDirection: routeDirectionSelect?.value,
+      entryHost: entryHostInput?.value,
+      entryPort: entryPortInput?.value,
+      businessInternalHost: businessInternalHostInput?.value,
+      businessInternalPort: businessInternalPortInput?.value,
+      serviceListenHost: serviceListenHostInput?.value,
+      serviceListenPort: serviceListenPortInput?.value,
+      managementHost: managementSshHostInput?.value,
+      managementPort: managementSshPortInput?.value,
+      managementInternalHost: managementInternalHostInput?.value,
+      managementInternalPort: managementInternalPortInput?.value,
+    });
 
     const refreshManualSelects = () => {
       if (providerSelect) {
@@ -224,11 +313,7 @@ export function createNodeAssetModalsModule(dependencies) {
         managementModeSelector: "#manual-management-access-mode",
       });
       if (routingAdvanced) {
-        routingAdvanced.open = shouldOpenRoutingAdvanced({
-          businessMode: businessModeSelect?.value,
-          managementMode: managementModeSelect?.value,
-          proxyHost: managementProxyHostInput?.value,
-        });
+        routingAdvanced.open = shouldOpenRoutingAdvanced(manualAdvancedOptions());
       }
     };
 
@@ -259,11 +344,7 @@ export function createNodeAssetModalsModule(dependencies) {
       });
       if (
         routingAdvanced &&
-        shouldOpenRoutingAdvanced({
-          businessMode: businessModeSelect?.value,
-          managementMode: managementModeSelect?.value,
-          proxyHost: managementProxyHostInput?.value,
-        })
+        shouldOpenRoutingAdvanced(manualAdvancedOptions())
       ) {
         routingAdvanced.open = true;
       }
@@ -275,11 +356,7 @@ export function createNodeAssetModalsModule(dependencies) {
       });
       if (
         routingAdvanced &&
-        shouldOpenRoutingAdvanced({
-          businessMode: businessModeSelect?.value,
-          managementMode: managementModeSelect?.value,
-          proxyHost: managementProxyHostInput?.value,
-        })
+        shouldOpenRoutingAdvanced(manualAdvancedOptions())
       ) {
         routingAdvanced.open = true;
       }
@@ -287,15 +364,25 @@ export function createNodeAssetModalsModule(dependencies) {
     managementProxyHostInput?.addEventListener("input", () => {
       if (
         routingAdvanced &&
-        shouldOpenRoutingAdvanced({
-          businessMode: businessModeSelect?.value,
-          managementMode: managementModeSelect?.value,
-          proxyHost: managementProxyHostInput?.value,
-        })
+        shouldOpenRoutingAdvanced(manualAdvancedOptions())
       ) {
         routingAdvanced.open = true;
       }
     });
+    bindRoutingAdvancedAutoOpen(routingAdvanced, manualAdvancedOptions, [
+      routeDirectionSelect,
+      entryHostInput,
+      entryPortInput,
+      businessInternalHostInput,
+      businessInternalPortInput,
+      serviceListenHostInput,
+      serviceListenPortInput,
+      managementSshHostInput,
+      managementSshPortInput,
+      managementInternalHostInput,
+      managementInternalPortInput,
+      managementProxyHostInput,
+    ]);
     resetButton?.addEventListener("click", () => {
       setTimeout(refreshManualSelects, 0);
     });
@@ -356,10 +443,38 @@ export function createNodeAssetModalsModule(dependencies) {
     const managementRelayNodeSelect = documentRef.getElementById("asset-management-relay-node-id");
     const businessModeSelect = documentRef.getElementById("asset-access-mode");
     const managementModeSelect = documentRef.getElementById("asset-management-access-mode");
+    const routeDirectionSelect = documentRef.getElementById("asset-route-direction");
+    const entryHostInput = documentRef.getElementById("asset-entry-host");
+    const entryPortInput = documentRef.getElementById("asset-entry-port");
+    const businessInternalHostInput = documentRef.getElementById("asset-business-internal-host");
+    const businessInternalPortInput = documentRef.getElementById("asset-business-internal-port");
+    const serviceListenHostInput = documentRef.getElementById("asset-service-listen-host");
+    const serviceListenPortInput = documentRef.getElementById("asset-service-listen-port");
+    const managementSshHostInput = documentRef.getElementById("asset-management-ssh-host");
+    const managementSshPortInput = documentRef.getElementById("asset-management-ssh-port");
+    const managementInternalHostInput = documentRef.getElementById("asset-management-internal-host");
+    const managementInternalPortInput = documentRef.getElementById("asset-management-internal-port");
     const managementProxyHostInput = documentRef.getElementById("asset-management-proxy-host");
     const routingAdvanced = documentRef.getElementById("asset-routing-advanced");
 
     if (!modal || !closeButton || !form || !message) return;
+
+    const assetAdvancedOptions = () => ({
+      businessMode: businessModeSelect?.value,
+      managementMode: managementModeSelect?.value,
+      proxyHost: managementProxyHostInput?.value,
+      routeDirection: routeDirectionSelect?.value,
+      entryHost: entryHostInput?.value,
+      entryPort: entryPortInput?.value,
+      businessInternalHost: businessInternalHostInput?.value,
+      businessInternalPort: businessInternalPortInput?.value,
+      serviceListenHost: serviceListenHostInput?.value,
+      serviceListenPort: serviceListenPortInput?.value,
+      managementHost: managementSshHostInput?.value,
+      managementPort: managementSshPortInput?.value,
+      managementInternalHost: managementInternalHostInput?.value,
+      managementInternalPort: managementInternalPortInput?.value,
+    });
 
     const fillForm = () => {
       const node = getAssetEditorNode(appState.nodes);
@@ -369,6 +484,40 @@ export function createNodeAssetModalsModule(dependencies) {
         }
         return;
       }
+
+      const managementEndpoint = node.endpoints?.management || {};
+      const businessEndpoint = node.endpoints?.business_ingress || {};
+      const serviceEndpoint = node.endpoints?.service_listen || {};
+      const managementHost =
+        endpointHost(managementEndpoint) || node.management?.ssh_host || node.ssh_host || "";
+      const managementPort =
+        endpointPort(managementEndpoint) ??
+        node.management?.ssh_port ??
+        node.ssh_port ??
+        node.facts?.ssh_port ??
+        DEFAULT_NODE_SSH_PORT;
+      const managementInternalHost =
+        endpointInternalHost(managementEndpoint) ||
+        node.management?.ssh_internal_host ||
+        node.management?.internal_ssh_host ||
+        node.management?.internal_host ||
+        "";
+      const managementInternalPort =
+        endpointInternalPort(managementEndpoint) ??
+        node.management?.ssh_internal_port ??
+        node.management?.internal_ssh_port ??
+        node.management?.internal_port ??
+        "";
+      const businessHost =
+        endpointHost(businessEndpoint) || node.networking?.entry_host || "";
+      const businessPort =
+        endpointPort(businessEndpoint) ?? node.networking?.entry_port ?? "";
+      const businessInternalHost =
+        endpointInternalHost(businessEndpoint) || node.networking?.internal_host || "";
+      const businessInternalPort =
+        endpointInternalPort(businessEndpoint) ?? node.networking?.internal_port ?? "";
+      const serviceHost = serviceListenHost(serviceEndpoint);
+      const servicePort = serviceListenPort(serviceEndpoint);
 
       if (summary) {
         summary.textContent = `当前编辑节点：${getNodeDisplayName(node)} · ${node.id}`;
@@ -415,14 +564,20 @@ export function createNodeAssetModalsModule(dependencies) {
         formatDateInput(node.commercial?.billing_started_at);
       documentRef.getElementById("asset-expire").value = formatDateInput(node.commercial?.expires_at);
       documentRef.getElementById("asset-access-mode").value = node.networking?.access_mode || "direct";
-      documentRef.getElementById("asset-entry-port").value = node.networking?.entry_port ?? "";
-      documentRef.getElementById("asset-management-ssh-host").value =
-        node.management?.ssh_host || node.ssh_host || "";
-      documentRef.getElementById("asset-management-ssh-port").value =
-        node.management?.ssh_port ?? node.ssh_port ?? node.facts?.ssh_port ?? DEFAULT_NODE_SSH_PORT;
+      setFieldValue("asset-route-direction", node.networking?.route_direction || "");
+      setFieldValue("asset-entry-host", businessHost);
+      setFieldValue("asset-entry-port", businessPort);
+      setFieldValue("asset-business-internal-host", businessInternalHost);
+      setFieldValue("asset-business-internal-port", businessInternalPort);
+      setFieldValue("asset-service-listen-host", serviceHost);
+      setFieldValue("asset-service-listen-port", servicePort);
+      setFieldValue("asset-management-ssh-host", managementHost);
+      setFieldValue("asset-management-ssh-port", managementPort);
       documentRef.getElementById("asset-management-access-mode").value =
         node.management?.access_mode || "direct";
       documentRef.getElementById("asset-management-ssh-user").value = node.management?.ssh_user || "";
+      setFieldValue("asset-management-internal-host", managementInternalHost);
+      setFieldValue("asset-management-internal-port", managementInternalPort);
       documentRef.getElementById("asset-management-relay-strategy").value =
         node.management?.relay_strategy || "auto";
       documentRef.getElementById("asset-management-proxy-host").value =
@@ -448,11 +603,7 @@ export function createNodeAssetModalsModule(dependencies) {
         managementModeSelector: "#asset-management-access-mode",
       });
       if (routingAdvanced) {
-        routingAdvanced.open = shouldOpenRoutingAdvanced({
-          businessMode: node.networking?.access_mode || "direct",
-          managementMode: node.management?.access_mode || "direct",
-          proxyHost: node.management?.proxy_host || "",
-        });
+        routingAdvanced.open = shouldOpenRoutingAdvanced(assetAdvancedOptions());
       }
     };
 
@@ -481,11 +632,7 @@ export function createNodeAssetModalsModule(dependencies) {
         });
         if (
           routingAdvanced &&
-          shouldOpenRoutingAdvanced({
-            businessMode: businessModeSelect?.value,
-            managementMode: managementModeSelect?.value,
-            proxyHost: managementProxyHostInput?.value,
-          })
+          shouldOpenRoutingAdvanced(assetAdvancedOptions())
         ) {
           routingAdvanced.open = true;
         }
@@ -497,11 +644,7 @@ export function createNodeAssetModalsModule(dependencies) {
         });
         if (
           routingAdvanced &&
-          shouldOpenRoutingAdvanced({
-            businessMode: businessModeSelect?.value,
-            managementMode: managementModeSelect?.value,
-            proxyHost: managementProxyHostInput?.value,
-          })
+          shouldOpenRoutingAdvanced(assetAdvancedOptions())
         ) {
           routingAdvanced.open = true;
         }
@@ -509,15 +652,25 @@ export function createNodeAssetModalsModule(dependencies) {
       managementProxyHostInput?.addEventListener("input", () => {
         if (
           routingAdvanced &&
-          shouldOpenRoutingAdvanced({
-            businessMode: businessModeSelect?.value,
-            managementMode: managementModeSelect?.value,
-            proxyHost: managementProxyHostInput?.value,
-          })
+          shouldOpenRoutingAdvanced(assetAdvancedOptions())
         ) {
           routingAdvanced.open = true;
         }
       });
+      bindRoutingAdvancedAutoOpen(routingAdvanced, assetAdvancedOptions, [
+        routeDirectionSelect,
+        entryHostInput,
+        entryPortInput,
+        businessInternalHostInput,
+        businessInternalPortInput,
+        serviceListenHostInput,
+        serviceListenPortInput,
+        managementSshHostInput,
+        managementSshPortInput,
+        managementInternalHostInput,
+        managementInternalPortInput,
+        managementProxyHostInput,
+      ]);
       resetButton?.addEventListener("click", () => {
         setTimeout(fillForm, 0);
       });
