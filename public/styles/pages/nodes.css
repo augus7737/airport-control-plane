@@ -525,3 +525,45 @@ body[data-page="nodes"] .node-row-menu-panel {
     grid-template-columns: 1fr;
   }
 }
+
+html[data-theme="light"] body[data-page="nodes"] .nodes-overview-pill,
+html[data-theme="light"] body[data-page="nodes"] .nodes-overview-status-item {
+  border-color: rgba(15, 23, 42, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94)),
+    #ffffff;
+}
+
+html[data-theme="light"] body[data-page="nodes"] .nodes-overview-dock {
+  border-top-color: rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] body[data-page="nodes"] .table-action-primary {
+  border-color: rgba(14, 116, 144, 0.18);
+  background: linear-gradient(180deg, #ffffff, #f1f5f9);
+  color: #0369a1;
+}
+
+html[data-theme="light"] body[data-page="nodes"] .table-action-pill {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+}
+
+html[data-theme="light"] body[data-page="nodes"] .table-action-primary:hover,
+html[data-theme="light"] body[data-page="nodes"] .table-action-primary:focus-visible {
+  border-color: rgba(14, 116, 144, 0.28);
+  background: linear-gradient(180deg, #f8fafc, #e0f2fe);
+  color: #075985;
+  box-shadow: 0 8px 18px rgba(14, 116, 144, 0.12);
+}
+
+html[data-theme="light"] body[data-page="nodes"] .table-action-pill:hover,
+html[data-theme="light"] body[data-page="nodes"] .table-action-pill:focus-visible {
+  border-color: rgba(14, 116, 144, 0.2);
+  background: #f8fafc;
+}
+
+html[data-theme="light"] body[data-page="nodes"] .cell-hover-panel {
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.14);
+}

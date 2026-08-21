@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>登录 | 机场控制台</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script src="/js/shared/theme-bootstrap.js"></script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body data-page="login">
@@ -53,6 +54,44 @@
         </div>
 
         <section class="login-panel">
+          <details class="node-row-menu theme-preference-menu" id="theme-preference-menu">
+            <summary
+              class="button quiet"
+              id="theme-preference-trigger"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-label="主题：浅色"
+              title="主题：浅色"
+            >
+              <span id="theme-preference-icon" aria-hidden="true">☀</span>
+            </summary>
+            <div class="node-row-menu-panel" role="menu" aria-label="主题偏好">
+              <button
+                class="node-row-menu-item"
+                type="button"
+                role="menuitemradio"
+                aria-checked="true"
+                data-theme-preference-option="light"
+                title="切换到浅色主题"
+              >✓ 浅色</button>
+              <button
+                class="node-row-menu-item"
+                type="button"
+                role="menuitemradio"
+                aria-checked="false"
+                data-theme-preference-option="dark"
+                title="切换到深色主题"
+              >深色</button>
+              <button
+                class="node-row-menu-item"
+                type="button"
+                role="menuitemradio"
+                aria-checked="false"
+                data-theme-preference-option="system"
+                title="切换到跟随系统主题"
+              >跟随系统</button>
+            </div>
+          </details>
           <div class="login-panel-head">
             <span class="eyebrow">管理员登录</span>
             <h2>继续进入控制台</h2>

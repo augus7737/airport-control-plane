@@ -293,3 +293,93 @@ body[data-page="login"]::after {
     transition: none;
   }
 }
+
+html[data-theme="light"] body[data-page="login"] {
+  background:
+    radial-gradient(circle at 12% 14%, rgba(14, 165, 233, 0.14), transparent 24%),
+    radial-gradient(circle at 86% 18%, rgba(16, 185, 129, 0.1), transparent 20%),
+    linear-gradient(180deg, #f8fbff 0%, #eef6ff 50%, #f7fafc 100%);
+}
+
+html[data-theme="light"] body[data-page="login"]::before {
+  background-image:
+    linear-gradient(rgba(14, 116, 144, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 116, 144, 0.08) 1px, transparent 1px);
+  opacity: 0.72;
+}
+
+html[data-theme="light"] body[data-page="login"]::after {
+  background:
+    radial-gradient(circle at 22% 14%, rgba(14, 165, 233, 0.14), transparent 18%),
+    radial-gradient(circle at 76% 10%, rgba(245, 158, 11, 0.12), transparent 14%);
+}
+
+html[data-theme="light"] .login-card {
+  border-color: rgba(15, 23, 42, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98)),
+    #ffffff;
+  box-shadow:
+    0 28px 70px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+html[data-theme="light"] .login-side,
+html[data-theme="light"] .login-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96)),
+    #ffffff;
+}
+
+html[data-theme="light"] .login-panel {
+  border-left-color: rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .login-brand-mark,
+html[data-theme="light"] .login-side-card,
+html[data-theme="light"] .login-foot-item {
+  border-color: rgba(14, 116, 144, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.92)),
+    #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .login-kicker,
+html[data-theme="light"] .login-side-label,
+html[data-theme="light"] .login-brand-mark {
+  color: #0369a1;
+}
+
+html[data-theme="light"] .login-intro,
+html[data-theme="light"] .login-side-card p,
+html[data-theme="light"] .login-panel-head p,
+html[data-theme="light"] .login-message,
+html[data-theme="light"] .login-foot-item span {
+  color: #64748b;
+}
+
+html[data-theme="light"] .login-field span {
+  color: #334155;
+}
+
+html[data-theme="light"] .login-field input {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: #ffffff;
+  color: #0f172a;
+}
+
+html[data-theme="light"] .login-field input:hover {
+  border-color: rgba(14, 116, 144, 0.24);
+}
+
+html[data-theme="light"] .login-field input:focus-visible {
+  border-color: rgba(14, 116, 144, 0.36);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
+}
+
+@media (max-width: 960px) {
+  html[data-theme="light"] .login-panel {
+    border-top-color: rgba(15, 23, 42, 0.08);
+  }
+}

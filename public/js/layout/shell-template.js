@@ -104,6 +104,44 @@ export function createShellTemplateModule(dependencies) {
           <div class="topbar-actions">
             <div class="topbar-actions-main">${actionsHtml}</div>
             <div class="topbar-auth" id="operator-session-bar">
+              <details class="node-row-menu theme-preference-menu" id="theme-preference-menu">
+                <summary
+                  class="button quiet"
+                  id="theme-preference-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  aria-label="主题：浅色"
+                  title="主题：浅色"
+                >
+                  <span id="theme-preference-icon" aria-hidden="true">☀</span>
+                </summary>
+                <div class="node-row-menu-panel" role="menu" aria-label="主题偏好">
+                  <button
+                    class="node-row-menu-item"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked="true"
+                    data-theme-preference-option="light"
+                    title="切换到浅色主题"
+                  >✓ 浅色</button>
+                  <button
+                    class="node-row-menu-item"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked="false"
+                    data-theme-preference-option="dark"
+                    title="切换到深色主题"
+                  >深色</button>
+                  <button
+                    class="node-row-menu-item"
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked="false"
+                    data-theme-preference-option="system"
+                    title="切换到跟随系统主题"
+                  >跟随系统</button>
+                </div>
+              </details>
               <div class="session-indicator" id="operator-session-pill" data-auth-state="pending">
                 <span class="session-indicator-dot" aria-hidden="true"></span>
                 <span id="operator-session-label">会话校验中</span>

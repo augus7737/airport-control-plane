@@ -68,8 +68,128 @@ export function createRoutesPageModule(dependencies) {
   } = dependencies;
 
   let routeChart = null;
+  let routeChartModel = null;
   let routeChartResizeHandlerBound = false;
+  let routeChartThemeHandlerBound = false;
+  let routeChartThemeObserver = null;
+  let routeChartThemeFrame = null;
   let worldMapPromise = null;
+
+  function getRootTheme() {
+    const theme = documentRef?.documentElement?.dataset?.theme;
+    if (theme === "light" || theme === "dark") {
+      return theme;
+    }
+
+    if (windowRef?.matchMedia?.("(prefers-color-scheme: dark)")?.matches) {
+      return "dark";
+    }
+
+    return "light";
+  }
+
+  function getCssVariable(name, fallback) {
+    const root = documentRef?.documentElement;
+    if (!root || !windowRef?.getComputedStyle) {
+      return fallback;
+    }
+
+    const value = windowRef.getComputedStyle(root).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
+  function colorWithAlpha(color, alpha, fallback) {
+    const normalized = String(color || "").trim();
+    const hexMatch = normalized.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const expanded =
+        hex.length === 3
+          ? hex
+              .split("")
+              .map((character) => character + character)
+              .join("")
+          : hex;
+      const red = parseInt(expanded.slice(0, 2), 16);
+      const green = parseInt(expanded.slice(2, 4), 16);
+      const blue = parseInt(expanded.slice(4, 6), 16);
+      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    }
+
+    const rgbMatch = normalized.match(/^rgba?\(([^)]+)\)$/i);
+    if (rgbMatch) {
+      const channels = rgbMatch[1]
+        .split(",")
+        .slice(0, 3)
+        .map((channel) => channel.trim());
+      if (channels.length === 3) {
+        return `rgba(${channels.join(", ")}, ${alpha})`;
+      }
+    }
+
+    return fallback;
+  }
+
+  function buildRouteChartTheme() {
+    const theme = getRootTheme();
+    const isLight = theme === "light";
+    const entryColor = getCssVariable("--cyan", isLight ? "#087ea4" : "#38bdf8");
+    const relayColor = getCssVariable("--accent", isLight ? "#b15f16" : "#f0b35c");
+    const countryColor = getCssVariable("--green", isLight ? "#16845c" : "#34d399");
+    const textColor = getCssVariable("--text", isLight ? "#172033" : "#e6edf7");
+    const mutedColor = getCssVariable("--muted", isLight ? "#617089" : "#8da1bc");
+    const borderColor = getCssVariable(
+      "--line-strong",
+      isLight ? "rgba(68, 88, 112, 0.32)" : "rgba(148, 163, 184, 0.27)",
+    );
+
+    return {
+      theme,
+      textColor,
+      mutedColor,
+      tooltipBackground: getCssVariable(
+        "--bg-elevated",
+        isLight ? "rgba(255, 255, 255, 0.96)" : "rgba(6, 12, 24, 0.92)",
+      ),
+      tooltipBorder: borderColor,
+      mapAreaColor: isLight ? "#e7eef8" : "#071321",
+      mapBorderColor: borderColor,
+      entryColor,
+      relayColor,
+      countryColor,
+      countryBorderColor: isLight ? "rgba(15, 23, 42, 0.5)" : "rgba(255, 255, 255, 0.8)",
+      directLineColor: colorWithAlpha(
+        entryColor,
+        isLight ? 0.5 : 0.42,
+        isLight ? "rgba(8, 126, 164, 0.5)" : "rgba(125, 211, 252, 0.42)",
+      ),
+      relayEntryLineColor: colorWithAlpha(
+        relayColor,
+        isLight ? 0.72 : 0.76,
+        isLight ? "rgba(177, 95, 22, 0.72)" : "rgba(251, 146, 60, 0.76)",
+      ),
+      relayCountryLineColor: colorWithAlpha(
+        countryColor,
+        isLight ? 0.7 : 0.68,
+        isLight ? "rgba(22, 132, 92, 0.7)" : "rgba(52, 211, 153, 0.68)",
+      ),
+      entryShadowColor: colorWithAlpha(
+        entryColor,
+        isLight ? 0.24 : 0.38,
+        isLight ? "rgba(8, 126, 164, 0.24)" : "rgba(125, 211, 252, 0.38)",
+      ),
+      relayShadowColor: colorWithAlpha(
+        relayColor,
+        isLight ? 0.22 : 0.4,
+        isLight ? "rgba(177, 95, 22, 0.22)" : "rgba(251, 146, 60, 0.4)",
+      ),
+      countryShadowColor: colorWithAlpha(
+        countryColor,
+        isLight ? 0.2 : 0.28,
+        isLight ? "rgba(22, 132, 92, 0.2)" : "rgba(52, 211, 153, 0.28)",
+      ),
+    };
+  }
 
   function renderCountryDistribution(nodes, options = {}) {
     const limit = options.limit ?? 6;
@@ -405,6 +525,7 @@ export function createRoutesPageModule(dependencies) {
     const maxEntryCount = Math.max(...model.entryPoints.map((item) => item.total), 1);
     const maxRelayCount = Math.max(...model.relayPoints.map((item) => item.total), 1);
     const maxCountryCount = Math.max(...model.countryPoints.map((item) => item.total), 1);
+    const theme = buildRouteChartTheme();
 
     return {
       backgroundColor: "transparent",
@@ -414,10 +535,10 @@ export function createRoutesPageModule(dependencies) {
         trigger: "item",
         confine: true,
         borderWidth: 1,
-        borderColor: "rgba(125, 211, 252, 0.16)",
-        backgroundColor: "rgba(6, 12, 24, 0.92)",
+        borderColor: theme.tooltipBorder,
+        backgroundColor: theme.tooltipBackground,
         textStyle: {
-          color: "#e2e8f0",
+          color: theme.textColor,
           fontSize: 12,
         },
         formatter: buildRouteTooltip,
@@ -433,8 +554,8 @@ export function createRoutesPageModule(dependencies) {
         },
         silent: true,
         itemStyle: {
-          areaColor: "#071321",
-          borderColor: "rgba(123, 151, 182, 0.36)",
+          areaColor: theme.mapAreaColor,
+          borderColor: theme.mapBorderColor,
           borderWidth: 0.8,
         },
         emphasis: {
@@ -451,7 +572,7 @@ export function createRoutesPageModule(dependencies) {
             show: false,
           },
           data: buildLineSeriesData(directLines, {
-            color: "rgba(125, 211, 252, 0.42)",
+            color: theme.directLineColor,
             lineType: "dashed",
             opacity: 0.48,
             curveness: 0.16,
@@ -468,10 +589,10 @@ export function createRoutesPageModule(dependencies) {
             trailLength: 0.2,
             symbol: "circle",
             symbolSize: 5,
-            color: "#fb923c",
+            color: theme.relayColor,
           },
           data: buildLineSeriesData(relayEntryLines, {
-            color: "rgba(251, 146, 60, 0.76)",
+            color: theme.relayEntryLineColor,
             curveness: 0.24,
           }),
         },
@@ -486,10 +607,10 @@ export function createRoutesPageModule(dependencies) {
             trailLength: 0.22,
             symbol: "circle",
             symbolSize: 5,
-            color: "#34d399",
+            color: theme.countryColor,
           },
           data: buildLineSeriesData(relayCountryLines, {
-            color: "rgba(52, 211, 153, 0.68)",
+            color: theme.relayCountryLineColor,
             curveness: 0.24,
           }),
         },
@@ -503,9 +624,9 @@ export function createRoutesPageModule(dependencies) {
             brushType: "stroke",
           },
           itemStyle: {
-            color: "#7dd3fc",
+            color: theme.entryColor,
             shadowBlur: 18,
-            shadowColor: "rgba(125, 211, 252, 0.38)",
+            shadowColor: theme.entryShadowColor,
           },
           symbolSize(value) {
             return scaleMetric(Number(value?.[2] || 0), maxEntryCount, 8, 18);
@@ -522,9 +643,9 @@ export function createRoutesPageModule(dependencies) {
             brushType: "stroke",
           },
           itemStyle: {
-            color: "#fb923c",
+            color: theme.relayColor,
             shadowBlur: 18,
-            shadowColor: "rgba(251, 146, 60, 0.4)",
+            shadowColor: theme.relayShadowColor,
           },
           symbolSize(value) {
             return scaleMetric(Number(value?.[2] || 0), maxRelayCount, 10, 20);
@@ -537,11 +658,11 @@ export function createRoutesPageModule(dependencies) {
           coordinateSystem: "geo",
           zlevel: 3,
           itemStyle: {
-            color: "#34d399",
-            borderColor: "rgba(255, 255, 255, 0.8)",
+            color: theme.countryColor,
+            borderColor: theme.countryBorderColor,
             borderWidth: 1.2,
             shadowBlur: 12,
-            shadowColor: "rgba(52, 211, 153, 0.28)",
+            shadowColor: theme.countryShadowColor,
           },
           symbolSize(value) {
             return scaleMetric(Number(value?.[2] || 0), maxCountryCount, 7, 16);
@@ -678,6 +799,65 @@ export function createRoutesPageModule(dependencies) {
     `;
   }
 
+  function updateRouteChartTheme() {
+    if (!routeChart || !routeChartModel) {
+      return;
+    }
+
+    if (typeof routeChart.isDisposed === "function" && routeChart.isDisposed()) {
+      return;
+    }
+
+    routeChart.setOption(buildRouteChartOption(routeChartModel), true);
+    routeChart.resize();
+  }
+
+  function scheduleRouteChartThemeUpdate() {
+    if (routeChartThemeFrame !== null) {
+      return;
+    }
+
+    const flushUpdate = () => {
+      routeChartThemeFrame = null;
+      updateRouteChartTheme();
+    };
+
+    if (windowRef?.requestAnimationFrame) {
+      routeChartThemeFrame = windowRef.requestAnimationFrame(flushUpdate);
+      return;
+    }
+
+    routeChartThemeFrame = windowRef?.setTimeout?.(flushUpdate, 0) ?? null;
+    if (routeChartThemeFrame === null) {
+      flushUpdate();
+    }
+  }
+
+  function ensureRouteChartThemeListener() {
+    if (routeChartThemeHandlerBound) {
+      return;
+    }
+
+    const handleThemeChange = () => {
+      scheduleRouteChartThemeUpdate();
+    };
+
+    windowRef?.addEventListener?.("themechange", handleThemeChange);
+    documentRef?.addEventListener?.("themechange", handleThemeChange);
+    if (!routeChartThemeObserver && windowRef?.MutationObserver && documentRef?.documentElement) {
+      routeChartThemeObserver = new windowRef.MutationObserver((mutations) => {
+        if (mutations.some((mutation) => mutation.attributeName === "data-theme")) {
+          scheduleRouteChartThemeUpdate();
+        }
+      });
+      routeChartThemeObserver.observe(documentRef.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme"],
+      });
+    }
+    routeChartThemeHandlerBound = true;
+  }
+
   async function setupRoutesPage(nodes = []) {
     if (!documentRef || !windowRef) {
       return;
@@ -704,6 +884,7 @@ export function createRoutesPageModule(dependencies) {
       if (routeChart) {
         routeChart.dispose();
       }
+      routeChartModel = model;
       routeChart = echartsLib.init(chartElement, null, { renderer: "canvas" });
       routeChart.setOption(buildRouteChartOption(model), true);
       routeChart.off("click");
@@ -720,6 +901,7 @@ export function createRoutesPageModule(dependencies) {
         });
         routeChartResizeHandlerBound = true;
       }
+      ensureRouteChartThemeListener();
     } catch (error) {
       console.error("[routes] failed to initialize world map", error);
       chartElement.innerHTML = '<div class="route-map-inline-error">世界地图资源加载失败，请稍后刷新重试。</div>';

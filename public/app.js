@@ -157,6 +157,12 @@ import { createTokensPageModule } from "./js/pages/tokens-page.js";
 import { createPlatformSshPageModule } from "./js/platform/platform-ssh-page.js";
 import { createNodeNavigationModule } from "./js/shared/node-navigation.js";
 import { createNodeShellRuntimeModule } from "./js/shell/node-shell-runtime.js";
+import {
+  applyThemePreference,
+  setupThemePreferenceControls,
+} from "./js/shared/theme-preference.js";
+
+applyThemePreference(undefined, { notify: false });
 
 const page = document.body.dataset.page || "overview";
 const authFetch = (input, init = {}) => fetchWithAuth(input, init, { windowRef: window });
@@ -925,6 +931,7 @@ async function startApp() {
 
   try {
     await renderPage();
+    setupThemePreferenceControls();
     syncOperatorSessionChrome(session);
     setupLogoutAction();
   } catch (error) {

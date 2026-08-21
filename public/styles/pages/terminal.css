@@ -550,3 +550,44 @@ body[data-page="terminal"] .workspace {
     white-space: normal;
   }
 }
+
+html[data-theme="light"] .terminal-operation-focus,
+html[data-theme="light"] .terminal-selection-stat,
+html[data-theme="light"] .terminal-composer-card,
+html[data-theme="light"] .terminal-node-card,
+html[data-theme="light"] .terminal-run-item,
+html[data-theme="light"] .terminal-output-card,
+html[data-theme="light"] .terminal-shell-summary-card,
+html[data-theme="light"] .terminal-guide-card,
+html[data-theme="light"] .mode-chip,
+html[data-theme="light"] .terminal-run-meta span,
+html[data-theme="light"] .terminal-output-kv {
+  border-color: rgba(15, 23, 42, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+    #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .terminal-operation-focus {
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 40%),
+    linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+html[data-theme="light"] .mode-chip.active,
+html[data-theme="light"] .terminal-node-card.selected,
+html[data-theme="light"] .terminal-run-item.active {
+  border-color: rgba(14, 116, 144, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 34%),
+    linear-gradient(180deg, #ffffff, #f0f9ff);
+}
+
+html[data-theme="light"] .terminal-node-card:hover,
+html[data-theme="light"] .terminal-node-card:focus-within,
+html[data-theme="light"] .terminal-run-item:hover,
+html[data-theme="light"] .terminal-run-item:focus-visible {
+  border-color: rgba(14, 116, 144, 0.18);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+}

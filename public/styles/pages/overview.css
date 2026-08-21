@@ -810,3 +810,75 @@ body[data-page="overview"] .table-action-pill {
     align-items: flex-start;
   }
 }
+
+html[data-theme="light"] body[data-page="overview"] .overview-attention-item {
+  border-top-color: rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-shortcut,
+html[data-theme="light"] body[data-page="overview"] .overview-mini-card,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-card,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-metric,
+html[data-theme="light"] body[data-page="overview"] .country-list-row {
+  border-color: rgba(15, 23, 42, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+    #ffffff;
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-mini-card.tone-green,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-card.tone-green {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.1), #ffffff);
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-mini-card.tone-yellow,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-card.tone-yellow,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-error,
+html[data-theme="light"] body[data-page="overview"] .overview-inline-alert {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.1), #ffffff);
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-mini-card.tone-blue,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-card.tone-blue {
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.1), #ffffff);
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-mini-card.tone-muted,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-card.tone-muted {
+  background: linear-gradient(180deg, rgba(100, 116, 139, 0.08), #ffffff);
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-shortcut:hover,
+html[data-theme="light"] body[data-page="overview"] .overview-shortcut:focus-visible {
+  border-color: rgba(14, 116, 144, 0.18);
+  background: rgba(240, 249, 255, 0.86);
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-shortcut-action {
+  color: #0369a1;
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-issue-pill.red {
+  color: #b91c1c;
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-issue-pill.yellow {
+  color: #92400e;
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-issue-pill.blue,
+html[data-theme="light"] body[data-page="overview"] .overview-probe-badge.tone-blue {
+  color: #0369a1;
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-probe-badge.tone-green {
+  color: #047857;
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-probe-badge.tone-muted {
+  color: #475569;
+}
+
+html[data-theme="light"] body[data-page="overview"] .overview-probe-badge.tone-yellow {
+  color: #92400e;
+}

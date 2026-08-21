@@ -4,6 +4,13 @@ import {
   loginOperator,
   normalizeNextPath,
 } from "./auth-client.js";
+import {
+  applyThemePreference,
+  setupThemePreferenceControls,
+} from "../shared/theme-preference.js";
+
+applyThemePreference(undefined, { notify: false });
+setupThemePreferenceControls();
 
 const routeLabels = [
   ["/node.html", "节点详情"],
