@@ -79,8 +79,8 @@ body[data-page="shell"] .single-terminal-window .terminal-screen {
 }
 
 body[data-page="shell"] .single-terminal-window.shell-interactive {
-  border-color: rgba(95, 213, 210, 0.28);
-  box-shadow: 0 0 0 1px rgba(95, 213, 210, 0.08);
+  border-color: rgba(56, 189, 248, 0.28);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.08);
 }
 
 body[data-page="shell"] .terminal-screen-xterm {

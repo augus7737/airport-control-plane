@@ -9,6 +9,7 @@ export function statusText(status) {
   if (value === "degraded") return "降级";
   if (value === "failed") return "异常";
   if (value === "expired") return "已过期";
+  if (value === "draft") return "草稿";
   return "待初始化";
 }
 

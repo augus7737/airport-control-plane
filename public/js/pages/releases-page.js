@@ -80,6 +80,54 @@ export function createReleasesPageModule(dependencies) {
     return `${scopeSummary} · 成功 ${Number(apply.success || 0)} / 失败 ${Number(apply.failed || 0)} / 已应用 ${Number(apply.applied || 0)} / 仅渲染 ${Number(apply.rendered_only || 0)}`;
   }
 
+  function renderReleaseDeployments(release) {
+    const deployments = Array.isArray(release?.deployments) ? release.deployments : [];
+    if (!deployments.length) {
+      return '<div class="empty">该发布记录没有逐节点明细。</div>';
+    }
+
+    return `
+      <div class="release-deployments">
+        ${deployments
+          .map((deployment) => {
+            const roles = Array.isArray(deployment.route_roles)
+              ? deployment.route_roles
+              : [];
+            const engine = deployment.artifact_engine || deployment.engine || null;
+            const digest = deployment.config_digest || null;
+            return `
+              <div class="release-deployment-row">
+                <div class="release-deployment-main">
+                  <strong>${escapeHtml(deployment.node_name || deployment.node_id || "-")}</strong>
+                  <span class="${statusClassName(deployment.status)}">${statusText(deployment.status)}</span>
+                  ${engine ? `<span class="pill">${escapeHtml(String(engine).toUpperCase())}</span>` : ""}
+                  ${roles.length ? `<span class="tiny">角色 ${escapeHtml(roles.join(" / "))}</span>` : ""}
+                </div>
+                <div class="release-deployment-sub">
+                  ${
+                    digest
+                      ? `<span class="tiny mono">digest ${escapeHtml(String(digest).slice(0, 8))}</span>`
+                      : ""
+                  }
+                  ${
+                    deployment.config_path
+                      ? `<span class="tiny mono">${escapeHtml(deployment.config_path)}</span>`
+                      : ""
+                  }
+                </div>
+                ${
+                  deployment.note
+                    ? `<p class="tiny release-deployment-note">${escapeHtml(deployment.note)}</p>`
+                    : ""
+                }
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
   function renderReleaseMetaBadges(summary) {
     return `
       <div class="ops-chip-list">
@@ -87,7 +135,7 @@ export function createReleasesPageModule(dependencies) {
         <span class="pill">${escapeHtml(String(summary.action_type || "publish").toUpperCase())}</span>
         ${
           summary.rollbackable
-            ? '<span class="pill">自动回滚</span>'
+            ? '<span class="pill" title="本次发布保留旧配置备份，具备回滚条件；回滚入口将在后续版本提供。">可回滚</span>'
             : ""
         }
       </div>
@@ -110,6 +158,20 @@ export function createReleasesPageModule(dependencies) {
     if (!query) {
       return appState.configReleases;
     }
+    const statusAliases = {
+      成功: "success",
+      可用: "success",
+      失败: "failed",
+      异常: "failed",
+      执行中: "running",
+      排队: "queued",
+      排队中: "queued",
+      部分: "partial",
+      部分成功: "partial",
+      已停用: "disabled",
+      已过期: "expired",
+    };
+    const normalizedQuery = statusAliases[query] ? statusAliases[query] : query;
     return appState.configReleases.filter((release) =>
       [
         release.id,
@@ -121,7 +183,7 @@ export function createReleasesPageModule(dependencies) {
       ]
         .join(" ")
         .toLowerCase()
-        .includes(query),
+        .includes(normalizedQuery),
     );
   }
 
@@ -242,7 +304,12 @@ export function createReleasesPageModule(dependencies) {
                 <td>
                   <div class="ops-inline-meta">
                     <strong>${escapeHtml(getProfileName(release.profile_id))}</strong>
-                    <span class="tiny">${escapeHtml(summary.change_summary || `${accessUserCount} 个接入用户 / ${nodeGroupCount} 个节点组`)}</span>
+                    <span class="tiny">${escapeHtml(`${accessUserCount} 个接入用户 / ${nodeGroupCount} 个节点组`)}</span>
+                    ${
+                      summary.change_summary
+                        ? `<span class="tiny">${escapeHtml(summary.change_summary)}</span>`
+                        : ""
+                    }
                     <span class="tiny">估算月成本 ${escapeHtml(
                       formatCurrencyTotals(
                         releaseCost?.totals_by_currency,
@@ -276,16 +343,30 @@ export function createReleasesPageModule(dependencies) {
                   </div>
                 </td>
                 <td>
-                  ${
-                    release.operation_id
-                      ? `<a class="button ghost" href="/terminal.html?operation_id=${encodeURIComponent(release.operation_id)}">查看回显</a>`
-                      : '<span class="tiny">等待执行链路</span>'
-                  }
+                  <div class="ops-table-actions">
+                    <button class="button ghost" type="button" data-release-toggle="${escapeHtml(release.id)}">逐节点</button>
+                    ${
+                      release.operation_id
+                        ? `<a class="button ghost" href="/terminal.html?operation_id=${encodeURIComponent(release.operation_id)}">查看回显</a>`
+                        : '<span class="tiny">等待执行链路</span>'
+                    }
+                  </div>
                   ${
                     formatFailedNodesSample(summary)
                       ? `<div class="ops-inline-meta"><span class="tiny">失败样本：${escapeHtml(formatFailedNodesSample(summary))}</span></div>`
                       : ""
                   }
+                </td>
+              </tr>
+              <tr class="release-detail-row" id="release-detail-${escapeHtml(release.id)}" hidden>
+                <td colspan="6">
+                  <div class="release-detail-body">
+                    <div class="release-detail-head">
+                      <strong>逐节点发布明细</strong>
+                      <span class="tiny">${Array.isArray(release.deployments) ? release.deployments.length : 0} 台节点</span>
+                    </div>
+                    ${renderReleaseDeployments(release)}
+                  </div>
                 </td>
               </tr>
             `;
@@ -294,7 +375,11 @@ export function createReleasesPageModule(dependencies) {
       : `
         <tr>
           <td colspan="6">
-            <div class="empty">还没有符合条件的发布记录。先选模板、用户和节点组发一版试试。</div>
+            <div class="empty">${
+              appState.configReleases.length > 0
+                ? "当前筛选条件下没有匹配的发布记录。"
+                : "还没有发布记录。先选模板、用户和节点组发一版试试。"
+            }</div>
           </td>
         </tr>
       `;
@@ -730,7 +815,29 @@ export function createReleasesPageModule(dependencies) {
 
     documentRef.getElementById("release-filter")?.addEventListener("input", (event) => {
       state.filter = event.currentTarget.value;
-      renderCurrentContent();
+      clearTimeout(state._filterTimer);
+      state._filterTimer = setTimeout(() => {
+        renderCurrentContent();
+        const input = documentRef.getElementById("release-filter");
+        if (input) {
+          input.focus();
+          const restoreAt = Math.min(state.filter.length, input.value.length);
+          input.setSelectionRange(restoreAt, restoreAt);
+        }
+      }, 260);
+    });
+
+    documentRef.querySelectorAll("[data-release-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const releaseId = button.getAttribute("data-release-toggle");
+        const detailRow = documentRef.getElementById(`release-detail-${releaseId}`);
+        if (!detailRow) {
+          return;
+        }
+        const willShow = detailRow.hidden;
+        detailRow.hidden = !willShow;
+        button.textContent = willShow ? "收起" : "逐节点";
+      });
     });
 
     documentRef.getElementById("node-group-create-empty")?.addEventListener("click", () => {
@@ -813,6 +920,11 @@ export function createReleasesPageModule(dependencies) {
     documentRef.getElementById("config-release-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton?.dataset.submitting === "true") {
+        return;
+      }
+
       const formData = new FormData(form);
       const payload = {
         title: String(formData.get("title") || "").trim(),
@@ -843,6 +955,12 @@ export function createReleasesPageModule(dependencies) {
         return;
       }
 
+      if (submitButton) {
+        submitButton.dataset.submitting = "true";
+        submitButton.disabled = true;
+        submitButton.textContent = "发布中...";
+      }
+
       try {
         const result = await createConfigRelease(payload);
         await refreshRuntimeData();
@@ -868,6 +986,12 @@ export function createReleasesPageModule(dependencies) {
         };
         renderCurrentContent();
         scrollToReleaseBuilder();
+      } finally {
+        if (submitButton) {
+          delete submitButton.dataset.submitting;
+          submitButton.disabled = false;
+          submitButton.textContent = "立即发布";
+        }
       }
     });
   }

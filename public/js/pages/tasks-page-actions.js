@@ -1,6 +1,7 @@
 export function createTasksPageActions(dependencies) {
   const {
     appState,
+    documentRef = document,
     fetchImpl = fetch,
     refreshRuntimeData,
     renderCurrentContent,
@@ -34,7 +35,17 @@ export function createTasksPageActions(dependencies) {
 
   function setTaskQuery(value) {
     appState.taskCenter.query = value;
-    rerenderWithClearedMessage();
+    clearTaskCenterMessage();
+    clearTimeout(appState.taskCenter._queryTimer);
+    appState.taskCenter._queryTimer = setTimeout(() => {
+      rerender();
+      const input = documentRef?.getElementById?.("task-query");
+      if (input) {
+        input.focus();
+        const restoreAt = Math.min(value.length, input.value.length);
+        input.setSelectionRange(restoreAt, restoreAt);
+      }
+    }, 260);
   }
 
   function setTaskStatus(value) {
@@ -63,6 +74,7 @@ export function createTasksPageActions(dependencies) {
   }
 
   function resetTaskFilters() {
+    clearTimeout(appState.taskCenter._queryTimer);
     appState.taskCenter.query = "";
     appState.taskCenter.status = "all";
     appState.taskCenter.type = "all";

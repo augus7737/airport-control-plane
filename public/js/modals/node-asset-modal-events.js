@@ -8,7 +8,7 @@ export function createNodeAssetModalEventsModule(dependencies = {}) {
 
     modal.dataset.escapeBound = "1";
     documentRef.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && modal.classList.contains("open")) {
         close();
       }
     });

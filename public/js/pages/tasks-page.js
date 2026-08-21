@@ -25,6 +25,7 @@ export function createTasksPageModule(dependencies) {
   } = dependencies;
   const actions = createTasksPageActions({
     appState,
+    documentRef,
     fetchImpl,
     refreshRuntimeData,
     renderCurrentContent,
@@ -257,6 +258,24 @@ export function createTasksPageModule(dependencies) {
     return parts.join(" · ");
   }
 
+  function taskTriggerLabel(trigger) {
+    const value = String(trigger || "").toLowerCase();
+    const labels = {
+      bootstrap_register: "bootstrap 注册",
+      bootstrap_refresh: "bootstrap 刷新",
+      bootstrap_auto_probe: "注册后自动首探",
+      scheduled_probe: "周期巡检调度",
+      manual_probe: "手动复探",
+      manual: "手动触发",
+      init_alpine: "初始化任务",
+      publish_proxy_config: "代理配置发布",
+      restart_service: "服务重启",
+      system_user_apply: "系统用户下发",
+      system_template_apply: "系统模板下发",
+    };
+    return labels[value] || value || "-";
+  }
+
   function renderTasksPage() {
     const tasks = appState.tasks;
     const probeScheduler = appState.platform?.probe_scheduler || null;
@@ -329,7 +348,7 @@ export function createTasksPageModule(dependencies) {
     const detailRows = selectedTask
       ? [
           ["任务类型", taskTypeLabel(selectedTask)],
-          ["触发方式", selectedTask.trigger || "-"],
+          ["触发方式", taskTriggerLabel(selectedTask.trigger)],
           ["目标节点", selectedNode ? getNodeDisplayName(selectedNode) : selectedTask.node_id || "-"],
           ["当前状态", statusText(selectedTask.status)],
           ["重试次数", formatTaskAttempt(selectedTask)],
@@ -340,6 +359,13 @@ export function createTasksPageModule(dependencies) {
     const payloadRows = selectedTask
       ? Object.entries(selectedTask.payload || {})
           .filter(([, value]) => value !== null && value !== "" && value !== false)
+          .map(([label, value]) => {
+            const rendered =
+              typeof value === "object"
+                ? JSON.stringify(value, null, 0)
+                : String(value);
+            return [label, rendered];
+          })
           .slice(0, 8)
       : [];
     const logItems = Array.isArray(selectedTask?.log_excerpt) ? selectedTask.log_excerpt : [];
@@ -587,6 +613,7 @@ export function createTasksPageModule(dependencies) {
               <select id="task-status">
                 <option value="all"${appState.taskCenter.status === "all" ? " selected" : ""}>全部</option>
                 <option value="new"${appState.taskCenter.status === "new" ? " selected" : ""}>待执行</option>
+                <option value="queued"${appState.taskCenter.status === "queued" ? " selected" : ""}>排队中</option>
                 <option value="running"${appState.taskCenter.status === "running" ? " selected" : ""}>执行中</option>
                 <option value="success"${appState.taskCenter.status === "success" ? " selected" : ""}>已成功</option>
                 <option value="failed"${appState.taskCenter.status === "failed" ? " selected" : ""}>失败</option>

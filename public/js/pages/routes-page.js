@@ -803,20 +803,20 @@ export function createRoutesPageModule(dependencies) {
       <section class="grid fade-up" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:18px;">
         <article class="panel">
           <div class="panel-body">
-            <div class="panel-title"><div><h3>经中转节点列表</h3><p>适合看哪些落地机依赖上游中转机。</p></div></div>
+            <div class="panel-title"><div><h3>经中转节点列表</h3><p>上游链路关系见上方"中转链路分组"，或悬浮在"归属与接入"单元格查看链路摘要。</p></div></div>
             ${
               relayNodes.length > 0
-                ? nodeTable(relayNodes, { showCommercial: true, showRoute: true })
+                ? nodeTable(relayNodes)
                 : '<div class="empty">当前没有经中转节点。</div>'
             }
           </div>
         </article>
         <article class="panel">
           <div class="panel-body">
-            <div class="panel-title"><div><h3>直连节点列表</h3><p>适合看可以独立提供接入能力的节点。</p></div></div>
+            <div class="panel-title"><div><h3>直连节点列表</h3><p>可直接提供接入能力的节点，链路信息见"归属与接入"单元格悬浮面板。</p></div></div>
             ${
               directNodes.length > 0
-                ? nodeTable(directNodes, { showCommercial: true, showRoute: true })
+                ? nodeTable(directNodes)
                 : '<div class="empty">当前没有直连节点。</div>'
             }
           </div>

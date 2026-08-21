@@ -110,6 +110,16 @@ export function createPageRenderRuntime({
     const meta = pageMeta[page] || pageMeta.overview;
     app.innerHTML = shellTemplate(meta, page === "node-detail" || page === "shell" ? "nodes" : page);
 
+    const pageContent = documentRef.getElementById("page-content");
+    if (pageContent) {
+      pageContent.innerHTML = `
+        <div class="page-loading" role="status" aria-live="polite">
+          <div class="page-loading-spinner" aria-hidden="true"></div>
+          <p>正在加载控制台数据…</p>
+        </div>
+      `;
+    }
+
     await hydrateRuntimeStore();
     renderCurrentContent();
 

@@ -2,6 +2,7 @@ export function createTerminalPageActions(dependencies) {
   const {
     appState,
     applyTerminalPreset,
+    documentRef = document,
     fetchImpl = fetch,
     getAccessMode,
     refreshOperations,
@@ -56,6 +57,10 @@ export function createTerminalPageActions(dependencies) {
     appState.terminal.activeOperationId = operationId;
     syncActiveOperationUrl(operationId);
     renderCurrentContent();
+    const panel = documentRef.getElementById("terminal-output-panel");
+    if (panel) {
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   function setTerminalTitle(value) {
@@ -120,7 +125,39 @@ export function createTerminalPageActions(dependencies) {
   }
 
   async function submitExecution() {
+    if (appState.terminal.submitting) {
+      return;
+    }
+
+    if (!appState.terminal.selectedNodeIds.length) {
+      appState.terminal.message = {
+        type: "error",
+        text: "请先至少选择一台目标节点。",
+      };
+      renderCurrentContent();
+      return;
+    }
+
     const payload = buildExecutePayload();
+    if (payload.mode === "command" && !payload.command) {
+      appState.terminal.message = {
+        type: "error",
+        text: "命令模式下需要先填写要执行的命令。",
+      };
+      renderCurrentContent();
+      return;
+    }
+
+    if (payload.mode === "script" && !payload.script_body) {
+      appState.terminal.message = {
+        type: "error",
+        text: "脚本模式下需要先填写要下发的脚本内容。",
+      };
+      renderCurrentContent();
+      return;
+    }
+
+    appState.terminal.submitting = true;
     try {
       const response = await fetchImpl("/api/v1/operations/execute", {
         method: "POST",
@@ -145,12 +182,13 @@ export function createTerminalPageActions(dependencies) {
         type: "success",
         text: `任务已提交，正在等待节点回传${appState.terminal.mode === "script" ? "脚本" : "命令"}执行结果。`,
       };
-      renderCurrentContent();
     } catch (error) {
       appState.terminal.message = {
         type: "error",
         text: error instanceof Error ? error.message : "执行失败",
       };
+    } finally {
+      appState.terminal.submitting = false;
       renderCurrentContent();
     }
   }

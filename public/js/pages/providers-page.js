@@ -703,8 +703,8 @@ export function createProvidersPageModule(dependencies) {
 
     documentRef.getElementById("providers-sync-placeholder")?.addEventListener("click", () => {
       state.message = {
-        type: "success",
-        text: "云厂商同步入口已经预留好。当前这版先支持手工建档，厂商 API 接入我们后续单独做。",
+        type: "info",
+        text: "云厂商 API 同步尚未接入，当前版本支持手工建档。后续接入厂商 API 后会在这里自动拉取实例与账单。",
       };
       renderCurrentContent();
       scrollToForm();
@@ -773,7 +773,13 @@ export function createProvidersPageModule(dependencies) {
 
     documentRef.getElementById("provider-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const formData = new FormData(event.currentTarget);
+      const form = event.currentTarget;
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton?.dataset.submitting === "true") {
+        return;
+      }
+
+      const formData = new FormData(form);
       const payload = {
         name: String(formData.get("name") || "").trim(),
         account_name: String(formData.get("account_name") || "").trim() || null,
@@ -800,6 +806,12 @@ export function createProvidersPageModule(dependencies) {
         note: String(formData.get("note") || "").trim() || null,
       };
 
+      if (submitButton) {
+        submitButton.dataset.submitting = "true";
+        submitButton.disabled = true;
+        submitButton.textContent = "保存中...";
+      }
+
       try {
         const currentProvider = getSelectedProvider();
         const savedProvider = currentProvider
@@ -822,6 +834,12 @@ export function createProvidersPageModule(dependencies) {
         };
         renderCurrentContent();
         scrollToForm();
+      } finally {
+        if (submitButton) {
+          delete submitButton.dataset.submitting;
+          submitButton.disabled = false;
+          submitButton.textContent = getSelectedProvider() ? "保存更新" : "新增厂商";
+        }
       }
     });
   }

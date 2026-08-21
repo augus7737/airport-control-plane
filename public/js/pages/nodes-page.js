@@ -29,7 +29,7 @@ export function createNodesPageModule(dependencies) {
     );
     const expiringSoon = nodes.filter((node) => {
       const days = daysUntil(node.commercial?.expires_at);
-      return days != null && days <= 7;
+      return days != null && days >= 0 && days <= 7;
     }).length;
     const meta = pageMeta.nodes;
     const stats = [
@@ -39,9 +39,9 @@ export function createNodesPageModule(dependencies) {
         note: "全部节点",
       },
       {
-        label: "可接管",
+        label: "可用节点",
         value: counts.active,
-        note: "状态稳定",
+        note: "状态可用",
       },
       {
         label: "待处理",
@@ -164,10 +164,14 @@ export function createNodesPageModule(dependencies) {
     const filteredNodes = applyNodeFilters(nodes);
     const expiringSoon = filteredNodes.filter((node) => {
       const days = daysUntil(node.commercial?.expires_at);
-      return days != null && days <= 7;
+      return days != null && days >= 0 && days <= 7;
     }).length;
     const relayCount = filteredNodes.filter((node) => getAccessMode(node) === "relay").length;
     const directCount = filteredNodes.filter((node) => getAccessMode(node) !== "relay").length;
+    const expiredCount = filteredNodes.filter((node) => {
+      const days = daysUntil(node.commercial?.expires_at);
+      return days != null && days < 0;
+    }).length;
 
     return `
       ${renderNodesOverviewHeader(nodes)}
@@ -243,6 +247,7 @@ export function createNodesPageModule(dependencies) {
           </div>
           <div class="chips nodes-filter-summary">
             <div class="pill"><span>7 天内到期</span><strong>${expiringSoon} 台</strong></div>
+            <div class="pill"><span>已过期</span><strong>${expiredCount} 台</strong></div>
             <div class="pill"><span>直连</span><strong>${directCount} 台</strong></div>
             <div class="pill"><span>中转</span><strong>${relayCount} 台</strong></div>
             <button class="button ghost" type="button" id="reset-filters">清空筛选</button>
@@ -255,7 +260,15 @@ export function createNodesPageModule(dependencies) {
             <div><h3>全部节点</h3><p>以台账视图集中查看状态、归属、规格和资产信息。</p></div>
             <div class="provider-pill">共 ${filteredNodes.length} 台</div>
           </div>
-          ${nodeTable(filteredNodes, { variant: "ledger" })}
+          ${
+            filteredNodes.length > 0
+              ? nodeTable(filteredNodes, { variant: "ledger" })
+              : `<div class="empty">${
+                  nodes.length > 0
+                    ? "当前筛选条件下没有匹配节点，试试清空筛选条件。"
+                    : "当前还没有节点，先执行纳管命令把第一台机器接入平台。"
+                }</div>`
+          }
         </div>
       </section>
     `;
@@ -282,11 +295,27 @@ export function createNodesPageModule(dependencies) {
       const eventName = id === "filter-query" ? "input" : "change";
       element.addEventListener(eventName, (event) => {
         appState.filters[key] = event.currentTarget.value;
+        if (id === "filter-query") {
+          const cursor = event.currentTarget.selectionStart ?? appState.filters.query.length;
+          appState.filters.queryCursor = cursor;
+          clearTimeout(appState.filters._queryTimer);
+          appState.filters._queryTimer = setTimeout(() => {
+            renderCurrentContent();
+            const nextInput = documentRef.getElementById("filter-query");
+            if (nextInput) {
+              nextInput.focus();
+              const restoreAt = Math.min(appState.filters.queryCursor ?? nextInput.value.length, nextInput.value.length);
+              nextInput.setSelectionRange(restoreAt, restoreAt);
+            }
+          }, 260);
+          return;
+        }
         renderCurrentContent();
       });
     }
 
     documentRef.getElementById("reset-filters")?.addEventListener("click", () => {
+      clearTimeout(appState.filters._queryTimer);
       appState.filters = {
         query: "",
         provider: "",
@@ -295,6 +324,7 @@ export function createNodesPageModule(dependencies) {
         expiry: "all",
         source: "all",
         accessMode: "all",
+        queryCursor: 0,
       };
       renderCurrentContent();
     });

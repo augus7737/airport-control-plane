@@ -46,8 +46,9 @@ fi
 install -d -m 755 /opt/airport/bin /opt/airport/log /etc/airport
 cat >/etc/airport/node.env <<'EOF'
 NODE_ROLE=edge
-PANEL_ENDPOINT=https://example.com
-PANEL_TOKEN=replace_me
+# 注意：以下两个占位值必须替换为真实值后再执行，不要直接下发到生产节点
+PANEL_ENDPOINT=
+PANEL_TOKEN=
 EOF
 chmod 600 /etc/airport/node.env
 

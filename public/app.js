@@ -198,8 +198,8 @@ const pageMeta = {
     title: "任务中心",
     subtitle: "把初始化、重试、修复、纳管这些动作变成可追踪的任务流。",
     actions: [
-      { label: "创建任务模板", kind: "default" },
-      { label: "新建一次性任务", kind: "primary" },
+      { label: "批量执行", kind: "default", href: "/terminal.html" },
+      { label: "管理系统模板", kind: "default", href: "/system-templates.html" },
     ],
   },
   terminal: {
@@ -213,7 +213,6 @@ const pageMeta = {
     title: "注册令牌",
     subtitle: "用可审计、可失效、可分组的令牌管理节点入网入口。",
     actions: [
-      { label: "查看审计日志", kind: "default" },
       { label: "创建新令牌", kind: "primary", id: "open-token-modal" },
     ],
   },
@@ -747,19 +746,34 @@ const { renderNodeDetail } = createNodeDetailPageRenderer({
   statusText,
 });
 
-const navItems = [
-  { key: "overview", label: "总览", href: "/" },
-  { key: "nodes", label: "节点清单", href: "/nodes.html" },
-  { key: "tasks", label: "任务中心", href: "/tasks.html" },
-  { key: "terminal", label: "运维终端", href: "/terminal.html" },
-  { key: "tokens", label: "注册令牌", href: "/tokens.html" },
-  { key: "access-users", label: "接入用户", href: "/access-users.html" },
-  { key: "system-users", label: "系统用户", href: "/system-users.html" },
-  { key: "system-templates", label: "系统模板", href: "/system-templates.html" },
-  { key: "proxy-profiles", label: "协议模板", href: "/proxy-profiles.html" },
-  { key: "releases", label: "发布中心", href: "/releases.html" },
-  { key: "providers", label: "云厂商", href: "/providers.html" },
-  { key: "routes", label: "中转拓扑", href: "/routes.html" },
+const navGroups = [
+  {
+    label: "节点运维",
+    items: [
+      { key: "overview", label: "总览", href: "/" },
+      { key: "nodes", label: "节点清单", href: "/nodes.html" },
+      { key: "terminal", label: "运维终端", href: "/terminal.html" },
+      { key: "tasks", label: "任务中心", href: "/tasks.html" },
+    ],
+  },
+  {
+    label: "配置发布",
+    items: [
+      { key: "tokens", label: "注册令牌", href: "/tokens.html" },
+      { key: "access-users", label: "接入用户", href: "/access-users.html" },
+      { key: "proxy-profiles", label: "协议模板", href: "/proxy-profiles.html" },
+      { key: "releases", label: "发布中心", href: "/releases.html" },
+    ],
+  },
+  {
+    label: "系统管理",
+    items: [
+      { key: "system-users", label: "系统用户", href: "/system-users.html" },
+      { key: "system-templates", label: "系统模板", href: "/system-templates.html" },
+      { key: "routes", label: "中转拓扑", href: "/routes.html" },
+      { key: "providers", label: "云厂商", href: "/providers.html" },
+    ],
+  },
 ];
 const { shellTemplate } = createShellTemplateModule({
   assetModalTemplate,
@@ -767,7 +781,7 @@ const { shellTemplate } = createShellTemplateModule({
   escapeHtml,
   getPlatformBaseUrl,
   manualModalTemplate,
-  navItems,
+  navGroups,
   platformSshStatusLabel,
   renderBootstrapCommandPair,
   shouldShowBootstrapHero,

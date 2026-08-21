@@ -4,7 +4,10 @@ export function createNodeNavigationModule(dependencies = {}) {
   function getCurrentNode(nodes) {
     const params = new URLSearchParams(windowRef.location.search);
     const id = params.get("id") || params.get("node_id");
-    return nodes.find((item) => item.id === id) || nodes[0];
+    if (!id) {
+      return null;
+    }
+    return nodes.find((item) => item.id === id) || null;
   }
 
   function nodeDetailHref(nodeId) {

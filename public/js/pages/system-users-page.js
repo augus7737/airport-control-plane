@@ -229,7 +229,15 @@ export function createSystemUsersPageModule(dependencies) {
     const keyedCount = appState.systemUsers.filter(
       (item) => Array.isArray(item.ssh_authorized_keys) && item.ssh_authorized_keys.length > 0,
     ).length;
-    const recentReleases = appState.systemUserReleases.slice(0, 8);
+    const recentReleases = (
+      selectedSystemUser
+        ? appState.systemUserReleases.filter(
+            (release) =>
+              Array.isArray(release.system_user_ids) &&
+              release.system_user_ids.includes(selectedSystemUser.id),
+          )
+        : appState.systemUserReleases
+    ).slice(0, 8);
     const selectedUserKeyCount = Array.isArray(selectedSystemUser?.ssh_authorized_keys)
       ? selectedSystemUser.ssh_authorized_keys.length
       : 0;
@@ -268,7 +276,7 @@ export function createSystemUsersPageModule(dependencies) {
                 <td>
                   <div class="ops-inline-meta">
                     <strong>${escapeHtml(String(keysCount))} 把密钥</strong>
-                    <span class="tiny">${systemUser.updated_at ? `更新于 ${formatRelativeTime(systemUser.updated_at)}` : "尚未下发"}</span>
+                    <span class="tiny">${systemUser.updated_at ? `更新于 ${formatRelativeTime(systemUser.updated_at)}` : "暂无更新记录"}</span>
                   </div>
                 </td>
                 <td>
@@ -284,7 +292,11 @@ export function createSystemUsersPageModule(dependencies) {
       : `
         <tr>
           <td colspan="7">
-            <div class="empty">还没有符合条件的系统用户。先建一个统一运维账号，再批量下发到节点。</div>
+            <div class="empty">${
+              appState.systemUsers.length > 0
+                ? "当前筛选条件下没有匹配的系统用户。"
+                : "还没有系统用户。先建一个统一运维账号，再批量下发到节点。"
+            }</div>
           </td>
         </tr>
       `;
@@ -690,7 +702,13 @@ export function createSystemUsersPageModule(dependencies) {
 
     documentRef.getElementById("system-user-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const formData = new FormData(event.currentTarget);
+      const form = event.currentTarget;
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton?.dataset.submitting === "true") {
+        return;
+      }
+
+      const formData = new FormData(form);
       const payload = {
         name: String(formData.get("name") || "").trim(),
         username: String(formData.get("username") || "").trim(),
@@ -718,6 +736,11 @@ export function createSystemUsersPageModule(dependencies) {
       }
 
       const isEditing = Boolean(state.selectedId);
+      if (submitButton) {
+        submitButton.dataset.submitting = "true";
+        submitButton.disabled = true;
+        submitButton.textContent = "保存中...";
+      }
 
       try {
         const result = isEditing
@@ -746,6 +769,12 @@ export function createSystemUsersPageModule(dependencies) {
         };
         renderCurrentContent();
         scrollToForm();
+      } finally {
+        if (submitButton) {
+          delete submitButton.dataset.submitting;
+          submitButton.disabled = false;
+          submitButton.textContent = isEditing ? "保存修改" : "创建系统用户";
+        }
       }
     });
 
@@ -784,6 +813,11 @@ export function createSystemUsersPageModule(dependencies) {
 
     documentRef.getElementById("system-user-apply-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const form = event.currentTarget;
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton?.dataset.submitting === "true") {
+        return;
+      }
 
       const payload = {
         title: state.applyDraft.title.trim() || null,
@@ -796,6 +830,12 @@ export function createSystemUsersPageModule(dependencies) {
       if (!payload.system_user_ids.length) {
         windowRef.alert("请至少选择一个系统用户。");
         return;
+      }
+
+      if (submitButton) {
+        submitButton.dataset.submitting = "true";
+        submitButton.disabled = true;
+        submitButton.textContent = "下发中...";
       }
 
       try {
@@ -820,6 +860,12 @@ export function createSystemUsersPageModule(dependencies) {
         };
         renderCurrentContent();
         scrollToApply();
+      } finally {
+        if (submitButton) {
+          delete submitButton.dataset.submitting;
+          submitButton.disabled = false;
+          submitButton.textContent = "开始下发";
+        }
       }
     });
   }

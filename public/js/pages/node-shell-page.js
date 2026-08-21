@@ -45,7 +45,11 @@ export function createNodeShellPageModule(dependencies = {}) {
   function renderNodeShellPage(nodes, operations) {
     const node = getCurrentNode(nodes);
     if (!node) {
-      return '<div class="empty">当前还没有可打开终端的节点。先完成节点纳管，再进入独立终端页。</div>';
+      return `<div class="empty">${
+        nodes.length > 0
+          ? "没有找到该节点，可能已被删除或链接有误。返回节点清单重新选择。"
+          : "当前还没有可打开终端的节点。先完成节点纳管，再进入独立终端页。"
+      }</div>`;
     }
 
     return `

@@ -606,27 +606,13 @@ export function buildNodeDetailViewModel({
       statusText,
     ),
   ];
-  const commercialOverview = [
-    ["到期时间", expiryText],
-    ["续费方式", formatRenewal(node.commercial?.auto_renew)],
-    ["计费周期", node.commercial?.billing_cycle || "-"],
-    ["账单金额", nodeCost?.billing_amount != null ? `${nodeCost.billing_amount} ${nodeCost.billing_currency || ""}`.trim() : "-"],
-    ["带宽", node.commercial?.bandwidth_mbps ? `${node.commercial.bandwidth_mbps} Mbps` : "-"],
-    ["流量", formatTraffic(node.commercial?.traffic_used_gb, node.commercial?.traffic_quota_gb)],
-    ["基础月成本", nodeCost ? formatCurrencyTotals([{ currency: nodeCost.effective_currency, amount: nodeCost.base_monthly_cost }], "-") : "-"],
-    ["超额成本", nodeCost ? formatCurrencyTotals([{ currency: nodeCost.effective_currency, amount: nodeCost.overage_cost }], "-") : "-"],
-    ["总月成本", nodeCost ? formatCurrencyTotals(nodeCost, nodeCost.problems?.[0] || "-") : "-"],
-    ["成本状态", formatCostStatus(nodeCost?.cost_status, "-")],
-    ["成本备注", node.commercial?.cost_note || "-"],
-    ["备注", node.commercial?.note || "-"],
-  ];
   const managementOverview = [
     ["管理接入", formatManagementAccessMode(node)],
     ["管理 SSH 端口", sshPort],
     ["管理中转", managementRelayLabel],
     ["策略配置", managementRelayStrategyText],
     ["生效策略", effectiveManagementRelayStrategyText],
-    ["最近中转诊断", managementRelayDiagnosticText],
+    ["最近中转探测", managementRelayDiagnosticText],
     ["管理备注", node.management?.route_note || "-"],
   ];
   const trafficOverview = [
@@ -672,7 +658,6 @@ export function buildNodeDetailViewModel({
 
   return {
     activityItems,
-    commercialOverview,
     costOverview,
     dashboardCards,
     diagnosticActionMeta,

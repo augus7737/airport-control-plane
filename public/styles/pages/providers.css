@@ -49,11 +49,11 @@ body[data-page="providers"] .provider-ledger-callout {
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px 16px;
-  border: 1px solid rgba(31, 111, 127, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.14);
   border-radius: 18px;
   background:
-    radial-gradient(circle at top right, rgba(31, 111, 127, 0.08), transparent 38%),
-    linear-gradient(180deg, rgba(248, 251, 254, 0.98), rgba(242, 247, 251, 0.94));
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 38%),
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.94));
 }
 
 body[data-page="providers"] .provider-ledger-callout strong {
@@ -80,9 +80,9 @@ body[data-page="providers"] .provider-inline-tag {
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
-  border: 1px solid rgba(20, 32, 43, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(19, 30, 51, 0.92);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
@@ -90,12 +90,12 @@ body[data-page="providers"] .provider-inline-tag {
 
 body[data-page="providers"] .ops-empty-block {
   padding: 14px 16px;
-  border: 1px dashed rgba(31, 111, 127, 0.22);
+  border: 1px dashed rgba(56, 189, 248, 0.22);
   border-radius: 18px;
   color: var(--muted);
   background:
-    radial-gradient(circle at top right, rgba(31, 111, 127, 0.06), transparent 34%),
-    rgba(31, 111, 127, 0.04);
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.06), transparent 34%),
+    rgba(56, 189, 248, 0.04);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -108,11 +108,11 @@ body[data-page="providers"] .provider-catalog-grid {
 
 body[data-page="providers"] .provider-summary-card {
   padding: 16px;
-  border: 1px solid rgba(20, 32, 43, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96));
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.96));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 
 body[data-page="providers"] .provider-summary-head {
@@ -154,10 +154,10 @@ body[data-page="providers"] .provider-form-overview-card {
   gap: 4px;
   min-width: 0;
   padding: 12px 13px;
-  border: 1px solid rgba(20, 32, 43, 0.07);
+  border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(245, 249, 252, 0.96));
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.96));
 }
 
 body[data-page="providers"] .provider-form-overview-card span {
@@ -179,10 +179,10 @@ body[data-page="providers"] .provider-form-section {
   display: grid;
   gap: 14px;
   padding: 16px;
-  border: 1px solid rgba(20, 32, 43, 0.07);
+  border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 253, 0.96));
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.96));
 }
 
 body[data-page="providers"] .provider-form-section-head h4 {
@@ -210,9 +210,9 @@ body[data-page="providers"] .provider-region-chip {
   justify-content: center;
   min-height: 30px;
   padding: 0 11px;
-  border: 1px solid rgba(20, 32, 43, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(19, 30, 51, 0.95);
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
@@ -225,8 +225,8 @@ body[data-page="providers"] .provider-region-chip {
 
 body[data-page="providers"] .provider-region-chip:hover,
 body[data-page="providers"] .provider-region-chip:focus-visible {
-  border-color: rgba(47, 111, 182, 0.24);
-  background: rgba(239, 246, 255, 0.96);
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(19, 30, 51, 0.96);
   color: var(--text);
   transform: translateY(-1px);
 }
@@ -240,8 +240,8 @@ body[data-page="providers"] .checkbox {
   border: 1px solid var(--line);
   border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 245, 238, 0.92)),
-    rgba(255, 255, 255, 0.84);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.94), rgba(19, 30, 51, 0.92)),
+    rgba(19, 30, 51, 0.84);
 }
 
 body[data-page="providers"] .checkbox input {

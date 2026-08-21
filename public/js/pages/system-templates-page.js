@@ -339,7 +339,7 @@ export function createSystemTemplatesPageModule(dependencies) {
                   <label for="system-template-filter">筛选</label>
                   <input id="system-template-filter" value="${escapeHtml(state.filter)}" placeholder="名称 / 分类 / 标签 / 备注" />
                 </div>
-                <button class="button" type="button" id="system-template-create-empty">新建空白系统模板</button>
+                <button class="button" type="button" id="system-template-create-empty">新建示例模板</button>
               </div>
             </div>
 
@@ -474,6 +474,11 @@ export function createSystemTemplatesPageModule(dependencies) {
               <div class="field full">
                 <label for="system-template-script-body">脚本内容</label>
                 <textarea id="system-template-script-body" name="script_body" placeholder="#!/bin/sh&#10;set -eu">${escapeHtml(draft.script_body)}</textarea>
+                <div class="ops-toolbar">
+                  <button class="button ghost" type="button" id="system-template-script-check">检查脚本</button>
+                  <span class="tiny">缺 shebang 时下发会自动补 <span class="mono">#!/bin/sh</span></span>
+                </div>
+                <pre id="system-template-script-check-output" class="system-template-script-check-output" hidden></pre>
               </div>
               <div class="field full">
                 <label for="system-template-note">备注</label>
@@ -618,6 +623,46 @@ export function createSystemTemplatesPageModule(dependencies) {
       renderCurrentContent();
     });
 
+    documentRef.getElementById("system-template-script-check")?.addEventListener("click", () => {
+      const body = documentRef.getElementById("system-template-script-body")?.value || "";
+      const output = documentRef.getElementById("system-template-script-check-output");
+      if (!output) {
+        return;
+      }
+
+      const trimmed = String(body).trim();
+      const issues = [];
+      const notes = [];
+      if (!trimmed) {
+        issues.push("脚本内容为空，保存前需要填写。");
+      } else {
+        if (!/^#!/.test(trimmed)) {
+          notes.push("缺少 shebang 行，下发时会自动以 #!/bin/sh 开头。");
+        }
+        if (trimmed.split("\n").length < 2) {
+          notes.push("脚本只有一行，请确认是否完整。");
+        }
+        if (/\r\n/.test(body)) {
+          notes.push("包含 CRLF 换行，建议统一为 LF。");
+        }
+        if (trimmed.includes("replace_me") || trimmed.includes("PANEL_TOKEN=")) {
+          issues.push("脚本里仍包含 replace_me / PANEL_TOKEN 占位符，下发到真实节点前必须替换。");
+        }
+      }
+
+      const lines = [`检查结果：共 ${trimmed ? trimmed.split("\n").length : 0} 行`];
+      if (issues.length) {
+        lines.push(`发现 ${issues.length} 个问题：`);
+        issues.forEach((issue) => lines.push(`- ${issue}`));
+      } else {
+        lines.push("未发现明显问题。");
+      }
+      notes.forEach((note) => lines.push(`- 提示：${note}`));
+      output.textContent = lines.join("\n");
+      output.classList.toggle("is-error", issues.length > 0);
+      output.hidden = false;
+    });
+
     documentRef.querySelectorAll("[data-system-template-edit]").forEach((button) => {
       button.addEventListener("click", (event) => {
         const templateId = event.currentTarget.dataset.systemTemplateEdit || null;
@@ -648,7 +693,13 @@ export function createSystemTemplatesPageModule(dependencies) {
 
     documentRef.getElementById("system-template-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const formData = new FormData(event.currentTarget);
+      const form = event.currentTarget;
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton?.dataset.submitting === "true") {
+        return;
+      }
+
+      const formData = new FormData(form);
       const payload = {
         name: String(formData.get("name") || "").trim(),
         category: String(formData.get("category") || "baseline").trim() || "baseline",
@@ -671,6 +722,11 @@ export function createSystemTemplatesPageModule(dependencies) {
       }
 
       const isEditing = Boolean(state.selectedId);
+      if (submitButton) {
+        submitButton.dataset.submitting = "true";
+        submitButton.disabled = true;
+        submitButton.textContent = "保存中...";
+      }
 
       try {
         const result = isEditing
@@ -697,6 +753,12 @@ export function createSystemTemplatesPageModule(dependencies) {
         };
         renderCurrentContent();
         scrollToForm();
+      } finally {
+        if (submitButton) {
+          delete submitButton.dataset.submitting;
+          submitButton.disabled = false;
+          submitButton.textContent = isEditing ? "保存修改" : "创建模板";
+        }
       }
     });
 
@@ -754,6 +816,11 @@ export function createSystemTemplatesPageModule(dependencies) {
 
     documentRef.getElementById("system-template-apply-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const form = event.currentTarget;
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton?.dataset.submitting === "true") {
+        return;
+      }
 
       const payload = {
         title: state.applyDraft.title.trim() || null,
@@ -766,6 +833,12 @@ export function createSystemTemplatesPageModule(dependencies) {
       if (!payload.template_id) {
         windowRef.alert("请先选择一个系统模板。");
         return;
+      }
+
+      if (submitButton) {
+        submitButton.dataset.submitting = "true";
+        submitButton.disabled = true;
+        submitButton.textContent = "下发中...";
       }
 
       try {
@@ -790,6 +863,12 @@ export function createSystemTemplatesPageModule(dependencies) {
         };
         renderCurrentContent();
         scrollToApply();
+      } finally {
+        if (submitButton) {
+          delete submitButton.dataset.submitting;
+          submitButton.disabled = false;
+          submitButton.textContent = "开始下发";
+        }
       }
     });
   }

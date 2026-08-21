@@ -533,6 +533,11 @@ export function createNodeAssetModalsModule(dependencies) {
         event.preventDefault();
         message.innerHTML = "";
 
+        const submitButton = form.querySelector('button[type="submit"]');
+        if (submitButton?.dataset.submitting === "true") {
+          return;
+        }
+
         const formData = new FormData(form);
         const node = getAssetEditorNode(appState.nodes);
         if (!node) {
@@ -540,6 +545,11 @@ export function createNodeAssetModalsModule(dependencies) {
           return;
         }
         const payload = buildAssetPayload(formData);
+
+        if (submitButton) {
+          submitButton.dataset.submitting = "true";
+          submitButton.disabled = true;
+        }
 
         try {
           const response = await fetchImpl(`/api/v1/nodes/${encodeURIComponent(node.id)}/assets`, {
@@ -567,6 +577,11 @@ export function createNodeAssetModalsModule(dependencies) {
           message.innerHTML = `<div class="message error">${
             error instanceof Error ? error.message : "保存失败"
           }</div>`;
+        } finally {
+          if (submitButton) {
+            delete submitButton.dataset.submitting;
+            submitButton.disabled = false;
+          }
         }
       };
 

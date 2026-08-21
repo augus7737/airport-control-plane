@@ -298,7 +298,7 @@ export function createTerminalPageModule(dependencies) {
               </section>
             </div>
             <div class="modal-actions">
-              <button class="button primary" type="submit" id="terminal-run-button">批量执行</button>
+              <button class="button primary" type="submit" id="terminal-run-button"${appState.terminal.submitting ? ' disabled' : ""}>${appState.terminal.submitting ? "执行中..." : "批量执行"}</button>
               <button class="button ghost" type="button" id="terminal-refresh">刷新执行记录</button>
             </div>
             <div id="terminal-message">${
@@ -504,6 +504,7 @@ export function createTerminalPageModule(dependencies) {
     const actions = createTerminalPageActions({
       appState,
       applyTerminalPreset,
+      documentRef: document,
       fetchImpl,
       getAccessMode,
       refreshOperations,

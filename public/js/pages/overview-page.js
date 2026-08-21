@@ -164,6 +164,7 @@ export function createOverviewPageRenderer({
       resultNote,
       nextRunLabel,
       nextRunNote,
+      failedCount: failed,
       statusNote: `${intervalLabel} · ${batchLabel}`,
       errorBlock,
     };
@@ -191,7 +192,7 @@ export function createOverviewPageRenderer({
     );
     const expiringSoon = nodes.filter((node) => {
       const days = daysUntil(node.commercial?.expires_at);
-      return days != null && days <= 7;
+      return days != null && days >= 0 && days <= 7;
     }).length;
     const total = Math.max(counts.total, 1);
     const metrics = [
@@ -260,7 +261,7 @@ export function createOverviewPageRenderer({
               : [];
             return totals.length > 0
               ? totals.map((item) => `${item.currency} ${Number(item.amount).toFixed(2)}`).join(" / ")
-              : "0";
+              : "待补";
           })(),
         )}</div><div class="stat-foot">当前不在任何活跃发布里的节点成本。</div></div></article>
         <article class="panel"><div class="panel-body"><div class="stat-label">7 天内到期成本</div><div class="stat-value">${escapeHtml(
@@ -451,6 +452,7 @@ export function createOverviewPageRenderer({
                 <div class="overview-probe-badges">
                   <span class="overview-probe-badge tone-${probeScheduler.badgeTone}">${escapeHtml(probeScheduler.badge)}</span>
                   <span class="overview-probe-badge tone-${probeScheduler.runningTone}">${escapeHtml(probeScheduler.runningLabel)}</span>
+                  ${probeScheduler.failedCount > 0 ? '<a class="table-action-pill" href="/tasks.html">去任务中心</a>' : ""}
                 </div>
               </div>
               <div class="overview-probe-metrics">
@@ -484,10 +486,10 @@ export function createOverviewPageRenderer({
           </div>
           <div class="overview-summary-section">
             <div class="overview-summary-section-head">
-              <strong>最近事件</strong>
-              <span>${sortedNodes.length > 0 ? `最近 ${Math.min(sortedNodes.length, 3)} 条` : "暂无记录"}</span>
+              <strong>最近活跃节点</strong>
+              <span>${sortedNodes.length > 0 ? `最近 ${Math.min(sortedNodes.length, 3)} 台` : "暂无记录"}</span>
             </div>
-            <div class="event-list">${recentEvents || '<div class="empty">还没有节点事件。</div>'}</div>
+            <div class="event-list">${recentEvents || '<div class="empty">还没有节点活跃记录。</div>'}</div>
           </div>
           <div class="overview-summary-section">
             <div class="overview-summary-section-head">
@@ -531,7 +533,7 @@ export function createOverviewPageRenderer({
                   <div class="overview-attention-item">
                     <div class="overview-attention-main">
                       <div class="overview-attention-head">
-                        <a class="node-name" href="${nodeDetailHref(node.id)}">${getNodeDisplayName(node)}</a>
+                        <a class="node-name" href="${nodeDetailHref(node.id)}">${escapeHtml(getNodeDisplayName(node))}</a>
                         <span class="tiny">${statusText(node.status)}</span>
                       </div>
                       <p class="overview-attention-meta">${escapeHtml(metaParts.join(" / "))}</p>

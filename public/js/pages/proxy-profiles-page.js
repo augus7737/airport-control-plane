@@ -796,32 +796,32 @@ export function createProxyProfilesPageModule(dependencies) {
                     <label for="proxy-profile-server-name">伪装域名 / SNI</label>
                     <input id="proxy-profile-server-name" name="server_name" value="${escapeHtml(draft.server_name)}" placeholder="cdn.example.com" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-protocol="hysteria2">
                     <label for="proxy-profile-hysteria2-obfs-type">HY2 混淆类型</label>
                     <input id="proxy-profile-hysteria2-obfs-type" name="hysteria2_obfs_type" value="${escapeHtml(draft.hysteria2_obfs_type)}" placeholder="salamander" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-protocol="hysteria2">
                     <label for="proxy-profile-hysteria2-obfs-password">HY2 混淆密码</label>
                     <input id="proxy-profile-hysteria2-obfs-password" name="hysteria2_obfs_password" value="${escapeHtml(draft.hysteria2_obfs_password)}" type="password" placeholder="可选，仅启用 salamander 时填写" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-protocol="vless">
                     <label for="proxy-profile-flow">Flow</label>
                     <input id="proxy-profile-flow" name="flow" value="${escapeHtml(draft.flow)}" placeholder="xtls-rprx-vision" />
                     <div class="field-note">VLESS 常用该字段；如果选择 VMess，发布时会自动忽略。</div>
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-transport="ws,grpc,http,httpupgrade">
                     <label for="proxy-profile-transport-path">传输 Path</label>
                     <input id="proxy-profile-transport-path" name="transport_path" value="${escapeHtml(draft.transport_path)}" placeholder="/ray / grpc / tunnel" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-transport="ws,http,httpupgrade,grpc">
                     <label for="proxy-profile-transport-host">Host / H2 Host</label>
                     <input id="proxy-profile-transport-host" name="transport_host" value="${escapeHtml(draft.transport_host)}" placeholder="cdn.example.com, static.example.com" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-transport="http">
                     <label for="proxy-profile-http-method">HTTP 方法</label>
                     <input id="proxy-profile-http-method" name="http_method" value="${escapeHtml(draft.http_method)}" placeholder="GET / POST / PUT" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-transport="grpc">
                     <label for="proxy-profile-grpc-service">gRPC 服务名</label>
                     <input id="proxy-profile-grpc-service" name="grpc_service_name" value="${escapeHtml(draft.grpc_service_name)}" placeholder="GunService" />
                   </div>
@@ -836,56 +836,56 @@ export function createProxyProfilesPageModule(dependencies) {
                   </div>
                 </div>
                 <div class="ops-form-grid">
-                  <div class="field">
+                  <div class="field" data-show-security="tls">
                     <label for="proxy-profile-tls-cert-path">证书路径</label>
                     <input id="proxy-profile-tls-cert-path" name="tls_certificate_path" value="${escapeHtml(draft.tls_certificate_path)}" placeholder="/etc/ssl/airport/fullchain.pem" />
                     <div class="field-note">推荐配合系统模板里的 ACME 证书申请，把证书统一落到固定路径后再在这里引用。</div>
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="tls">
                     <label for="proxy-profile-tls-key-path">证书私钥路径</label>
                     <input id="proxy-profile-tls-key-path" name="tls_key_path" value="${escapeHtml(draft.tls_key_path)}" placeholder="/etc/ssl/airport/privkey.pem" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="tls,reality">
                     <label for="proxy-profile-tls-alpn">ALPN</label>
                     <input id="proxy-profile-tls-alpn" name="tls_alpn" value="${escapeHtml(draft.tls_alpn)}" placeholder="h2, http/1.1" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="tls,reality">
                     <label for="proxy-profile-tls-min-version">TLS 最低版本</label>
                     <input id="proxy-profile-tls-min-version" name="tls_min_version" value="${escapeHtml(draft.tls_min_version)}" placeholder="1.2" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="tls,reality">
                     <label for="proxy-profile-tls-max-version">TLS 最高版本</label>
                     <input id="proxy-profile-tls-max-version" name="tls_max_version" value="${escapeHtml(draft.tls_max_version)}" placeholder="1.3" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="reality">
                     <label for="proxy-profile-reality-key-path">Reality 私钥路径</label>
                     <input id="proxy-profile-reality-key-path" name="reality_private_key_path" value="${escapeHtml(draft.reality_private_key_path)}" placeholder="/etc/airport/reality/private.key" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="reality">
                     <label for="proxy-profile-reality-public-key">Reality 公钥</label>
                     <input id="proxy-profile-reality-public-key" name="reality_public_key" value="${escapeHtml(draft.reality_public_key)}" placeholder="分享链接需要的 public key，可后补" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="reality">
                     <label for="proxy-profile-reality-client-fingerprint">Reality 客户端指纹</label>
                     <input id="proxy-profile-reality-client-fingerprint" name="reality_client_fingerprint" value="${escapeHtml(draft.reality_client_fingerprint)}" placeholder="例如 chrome / safari / edge" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="reality">
                     <label for="proxy-profile-reality-short-ids">Reality Short IDs</label>
                     <input id="proxy-profile-reality-short-ids" name="reality_short_ids" value="${escapeHtml(draft.reality_short_ids)}" placeholder="0123abcd, 89ef4567" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="reality">
                     <label for="proxy-profile-reality-server">Reality 握手域名</label>
                     <input id="proxy-profile-reality-server" name="reality_handshake_server" value="${escapeHtml(draft.reality_handshake_server)}" placeholder="www.cloudflare.com" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="reality">
                     <label for="proxy-profile-reality-port">Reality 握手端口</label>
                     <input id="proxy-profile-reality-port" name="reality_handshake_server_port" value="${escapeHtml(draft.reality_handshake_server_port)}" placeholder="443" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-security="reality">
                     <label for="proxy-profile-reality-max-diff">Reality 时差容忍</label>
                     <input id="proxy-profile-reality-max-diff" name="reality_max_time_difference" value="${escapeHtml(draft.reality_max_time_difference)}" placeholder="1m" />
                   </div>
-                  <div class="field-note full">
+                  <div class="field-note full" data-show-security="reality">
                     Reality 私钥仍然只建议存节点本地路径；这里新增的 public key / 客户端指纹主要用于后端生成订阅与直连分享链接。
                   </div>
                 </div>
@@ -907,11 +907,11 @@ export function createProxyProfilesPageModule(dependencies) {
                     <label for="proxy-profile-transport-ping-timeout">Ping 超时</label>
                     <input id="proxy-profile-transport-ping-timeout" name="transport_ping_timeout" value="${escapeHtml(draft.transport_ping_timeout)}" placeholder="15s" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-transport="ws">
                     <label for="proxy-profile-early-data-header">Early Data 请求头</label>
                     <input id="proxy-profile-early-data-header" name="early_data_header_name" value="${escapeHtml(draft.early_data_header_name)}" placeholder="Sec-WebSocket-Protocol" />
                   </div>
-                  <div class="field">
+                  <div class="field" data-show-transport="ws">
                     <label for="proxy-profile-max-early-data">Early Data 上限</label>
                     <input id="proxy-profile-max-early-data" name="max_early_data" value="${escapeHtml(draft.max_early_data)}" placeholder="2048" />
                   </div>
@@ -928,6 +928,10 @@ export function createProxyProfilesPageModule(dependencies) {
                     <div class="field-note">
                       上面的结构化字段会优先覆盖这里的同名键。这里更适合补充 <span class="mono">outbounds</span>、<span class="mono">route</span>、高级 <span class="mono">tls</span> / <span class="mono">reality</span> 选项，以及更细的传输参数。私钥仍然建议只放节点本地文件路径，不要把真实内容直接贴进 JSON。
                     </div>
+                    <div class="proxy-profile-preview-actions">
+                      <button class="button ghost" type="button" id="proxy-profile-preview">校验模板 JSON</button>
+                    </div>
+                    <pre id="proxy-profile-preview-output" class="proxy-profile-preview-output" hidden></pre>
                   </div>
                 </div>
               </section>
@@ -954,6 +958,42 @@ export function createProxyProfilesPageModule(dependencies) {
     `;
   }
 
+  function syncProxyProfileFieldVisibility() {
+    const protocol = String(
+      documentRef.getElementById("proxy-profile-protocol")?.value || "vless",
+    ).toLowerCase();
+    const transport = String(
+      documentRef.getElementById("proxy-profile-transport")?.value || "tcp",
+    ).toLowerCase();
+    const security = String(
+      documentRef.getElementById("proxy-profile-security")?.value || "reality",
+    ).toLowerCase();
+    const effectiveSecurity = protocol === "hysteria2" ? "tls" : security;
+    const effectiveTransport = protocol === "hysteria2" ? "udp" : transport;
+
+    documentRef
+      .querySelectorAll("[data-show-protocol], [data-show-transport], [data-show-security]")
+      .forEach((element) => {
+        const protocolList = String(element.dataset.showProtocol || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const transportList = String(element.dataset.showTransport || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const securityList = String(element.dataset.showSecurity || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        let visible = true;
+        if (protocolList.length && !protocolList.includes(protocol)) visible = false;
+        if (transportList.length && !transportList.includes(effectiveTransport)) visible = false;
+        if (securityList.length && !securityList.includes(effectiveSecurity)) visible = false;
+        element.hidden = !visible;
+      });
+  }
+
   function setupProxyProfilesPage() {
     if (page !== "proxy-profiles") {
       return;
@@ -969,8 +1009,27 @@ export function createProxyProfilesPageModule(dependencies) {
 
     documentRef.getElementById("proxy-profile-filter")?.addEventListener("input", (event) => {
       state.filter = event.currentTarget.value;
-      renderCurrentContent();
+      clearTimeout(state._filterTimer);
+      state._filterTimer = setTimeout(() => {
+        renderCurrentContent();
+        const input = documentRef.getElementById("proxy-profile-filter");
+        if (input) {
+          input.focus();
+          const restoreAt = Math.min(state.filter.length, input.value.length);
+          input.setSelectionRange(restoreAt, restoreAt);
+        }
+      }, 260);
     });
+
+    ["proxy-profile-protocol", "proxy-profile-transport", "proxy-profile-security"].forEach(
+      (selectId) => {
+        documentRef.getElementById(selectId)?.addEventListener("change", () => {
+          syncProxyProfileFieldVisibility();
+        });
+      },
+    );
+
+    syncProxyProfileFieldVisibility();
 
     documentRef.getElementById("proxy-profile-create-empty")?.addEventListener("click", () => {
       state.selectedId = null;
@@ -983,6 +1042,34 @@ export function createProxyProfilesPageModule(dependencies) {
       state.selectedId = null;
       state.message = null;
       renderCurrentContent();
+    });
+
+    documentRef.getElementById("proxy-profile-preview")?.addEventListener("click", () => {
+      const raw = documentRef.getElementById("proxy-profile-template")?.value || "";
+      const output = documentRef.getElementById("proxy-profile-preview-output");
+      if (!output) {
+        return;
+      }
+
+      const trimmed = String(raw).trim();
+      if (!trimmed) {
+        output.textContent = "当前没有填写高级模板 JSON。结构化字段会在保存时自动合并。";
+        output.classList.remove("is-error");
+        output.hidden = false;
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(trimmed);
+        output.textContent = `模板 JSON 语法正确。\n\n${JSON.stringify(parsed, null, 2)}`;
+        output.classList.remove("is-error");
+      } catch (error) {
+        output.textContent = `模板 JSON 解析失败：${
+          error instanceof Error ? error.message : "格式错误"
+        }`;
+        output.classList.add("is-error");
+      }
+      output.hidden = false;
     });
 
     documentRef.querySelectorAll("[data-proxy-profile-edit]").forEach((button) => {

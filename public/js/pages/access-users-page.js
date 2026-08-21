@@ -912,7 +912,7 @@ export function createAccessUsersPageModule(dependencies) {
                 <td>
                   <div class="ops-inline-meta">
                     <strong>${formatDate(user.expires_at)}</strong>
-                    <span class="tiny">${user.updated_at ? `更新于 ${formatRelativeTime(user.updated_at)}` : "未设置到期"}</span>
+                    <span class="tiny">${user.expires_at ? (user.updated_at ? `更新于 ${formatRelativeTime(user.updated_at)}` : "已设置到期") : "未设置到期"}</span>
                   </div>
                 </td>
                 <td title="${escapeHtml(password || uuid || "未填写凭证")}">
@@ -1057,7 +1057,7 @@ export function createAccessUsersPageModule(dependencies) {
                   <label for="access-user-password">Hysteria2 密码</label>
                   <input id="access-user-password" name="password" value="${escapeHtml(draft.password)}" type="password" placeholder="留空则由服务端生成" />
                 </div>
-                <div class="field">
+                <div class="field" id="access-user-alter-id-field">
                   <label for="access-user-alter-id">alterId</label>
                   <input id="access-user-alter-id" name="alter_id" value="${escapeHtml(draft.alter_id)}" placeholder="VMess 常用 0" />
                 </div>
@@ -1159,35 +1159,42 @@ export function createAccessUsersPageModule(dependencies) {
       ).toLowerCase();
       const uuidField = documentRef.getElementById("access-user-uuid-field");
       const passwordField = documentRef.getElementById("access-user-password-field");
+      const alterIdField = documentRef.getElementById("access-user-alter-id-field");
       if (uuidField) {
         uuidField.style.display = protocol === "hysteria2" ? "none" : "";
       }
       if (passwordField) {
         passwordField.style.display = protocol === "hysteria2" ? "" : "none";
       }
+      if (alterIdField) {
+        alterIdField.style.display = protocol === "vmess" ? "" : "none";
+      }
     };
     documentRef.getElementById("access-user-protocol")?.addEventListener("change", syncCredentialFields);
     syncCredentialFields();
 
-    documentRef.getElementById("focus-access-user-form")?.addEventListener("click", () => {
+    const createEmptyUser = () => {
       state.selectedId = null;
       state.message = null;
       clearShareState();
       renderCurrentContent();
       scrollToForm();
-    });
+    };
+    documentRef.getElementById("access-user-create-empty")?.addEventListener("click", createEmptyUser);
+    documentRef.getElementById("focus-access-user-form")?.addEventListener("click", createEmptyUser);
 
     documentRef.getElementById("access-user-filter")?.addEventListener("input", (event) => {
       state.filter = event.currentTarget.value;
-      renderCurrentContent();
-    });
-
-    documentRef.getElementById("access-user-create-empty")?.addEventListener("click", () => {
-      state.selectedId = null;
-      state.message = null;
-      clearShareState();
-      renderCurrentContent();
-      scrollToForm();
+      clearTimeout(state._filterTimer);
+      state._filterTimer = setTimeout(() => {
+        renderCurrentContent();
+        const input = documentRef.getElementById("access-user-filter");
+        if (input) {
+          input.focus();
+          const restoreAt = Math.min(state.filter.length, input.value.length);
+          input.setSelectionRange(restoreAt, restoreAt);
+        }
+      }, 260);
     });
 
     documentRef.getElementById("access-user-form-reset")?.addEventListener("click", () => {

@@ -131,6 +131,10 @@ export function createNodeShellBindingsModule(dependencies) {
         return;
       }
 
+      if (!windowRef.confirm("确认结束当前 Web Shell 会话吗？会话中正在运行的进程可能被终止。")) {
+        return;
+      }
+
       try {
         await closeNodeShellSession(appState.nodeTerminal.sessionId);
         clearNodeShellInputState();
@@ -153,8 +157,12 @@ export function createNodeShellBindingsModule(dependencies) {
       const text = nodeShellView.cleanTerminalScreenOutput(
         appState.nodeTerminal.sessionOutput || nodeShellScreenContent(),
       );
+      const originalLabel = event.currentTarget.textContent;
       const ok = await navigatorRef.clipboard.writeText(text).then(() => true, () => false);
       event.currentTarget.textContent = ok ? "已复制输出" : "复制失败";
+      windowRef.setTimeout(() => {
+        event.currentTarget.textContent = originalLabel;
+      }, 1600);
     });
   }
 

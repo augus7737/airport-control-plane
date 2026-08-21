@@ -11,8 +11,8 @@
   padding: 16px 12px 14px;
   border-right: 1px solid var(--line);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 251, 253, 0.96)),
-    rgba(255, 255, 255, 0.82);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.94), rgba(19, 30, 51, 0.96)),
+    rgba(19, 30, 51, 0.82);
 }
 
 .brand {
@@ -29,14 +29,20 @@
   height: 38px;
   border-radius: 12px;
   background:
-    radial-gradient(circle at 30% 30%, rgba(37, 99, 235, 0.18), transparent 42%),
-    linear-gradient(135deg, rgba(17, 107, 130, 0.14), rgba(183, 129, 43, 0.14));
-  border: 1px solid rgba(71, 85, 105, 0.08);
+    radial-gradient(circle at 30% 30%, rgba(96, 165, 250, 0.18), transparent 42%),
+    linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(240, 179, 92, 0.16));
+  border: 1px solid rgba(148, 163, 184, 0.14);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 8px 18px rgba(15, 23, 42, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 18px rgba(0, 0, 0, 0.39);
   font-weight: 700;
   letter-spacing: 0.08em;
+}
+
+.brand-mark svg {
+  width: 24px;
+  height: 24px;
+  color: var(--cyan);
 }
 
 .brand h1,
@@ -101,19 +107,19 @@
   justify-content: space-between;
   min-height: 40px;
   padding: 0 12px;
-  border: 1px solid rgba(20, 32, 43, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.14);
   border-radius: 13px;
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(19, 30, 51, 0.5);
   font-size: 13px;
   font-weight: 600;
 }
 
 .nav-item.active {
-  border-color: rgba(17, 107, 130, 0.14);
+  border-color: rgba(56, 189, 248, 0.14);
   background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(17, 107, 130, 0.08)),
-    rgba(255, 255, 255, 0.78);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    linear-gradient(135deg, rgba(96, 165, 250, 0.08), rgba(56, 189, 248, 0.08)),
+    rgba(19, 30, 51, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-foot,
@@ -132,8 +138,8 @@
   margin-top: 18px;
   padding: 12px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 245, 238, 0.92)),
-    rgba(255, 255, 255, 0.7);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.84), rgba(19, 30, 51, 0.92)),
+    rgba(13, 21, 36, 0.7);
   box-shadow: none;
 }
 
@@ -163,9 +169,9 @@
   border: 1px solid var(--line);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 253, 0.94)),
-    rgba(255, 255, 255, 0.84);
-  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.04);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.94)),
+    rgba(19, 30, 51, 0.84);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.31);
 }
 
 .topbar-left,
@@ -209,11 +215,11 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 251, 253, 0.94)),
-    rgba(255, 255, 255, 0.7);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.92), rgba(19, 30, 51, 0.94)),
+    rgba(13, 21, 36, 0.7);
   color: var(--muted);
   font-size: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .chip strong,
@@ -234,12 +240,12 @@
   border-radius: 12px;
   border: 1px solid var(--line);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 251, 0.92)),
-    rgba(255, 255, 255, 0.7);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.92)),
+    rgba(13, 21, 36, 0.7);
   color: var(--text);
   font-size: 12.5px;
   font-weight: 600;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
   transition:
     transform 160ms ease,
     border-color 160ms ease,
@@ -248,16 +254,16 @@
 }
 
 .button.primary {
-  border-color: rgba(17, 107, 130, 0.22);
+  border-color: rgba(56, 189, 248, 0.26);
   background:
-    linear-gradient(135deg, rgba(17, 107, 130, 0.98), rgba(37, 99, 235, 0.9)),
-    rgba(17, 107, 130, 0.96);
-  color: #fdfcf8;
-  box-shadow: 0 14px 28px rgba(17, 107, 130, 0.18);
+    linear-gradient(135deg, rgba(56, 189, 248, 0.98), rgba(96, 165, 250, 0.9)),
+    rgba(56, 189, 248, 0.96);
+  color: #062033;
+  box-shadow: 0 14px 28px rgba(56, 189, 248, 0.22);
 }
 
 .button.ghost {
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(148, 163, 184, 0.06);
 }
 
 .button.quiet {
@@ -265,12 +271,12 @@
   padding: 0 10px;
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(240, 247, 252, 0.92)),
-    rgba(255, 255, 255, 0.76);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.92), rgba(19, 30, 51, 0.92)),
+    rgba(13, 21, 36, 0.76);
   box-shadow: none;
   font-size: 11px;
   font-weight: 600;
-  color: #0c4a6e;
+  color: #7dd3fc;
 }
 
 .button:hover,
@@ -281,24 +287,24 @@
 
 .button.ghost:hover,
 .button.ghost:focus-visible {
-  background: rgba(31, 111, 127, 0.08);
-  border-color: rgba(31, 111, 127, 0.18);
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.18);
 }
 
 .button.quiet:hover,
 .button.quiet:focus-visible {
-  background: rgba(3, 105, 161, 0.08);
-  border-color: rgba(3, 105, 161, 0.18);
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.18);
 }
 
 .button.primary:hover,
 .button.primary:focus-visible {
-  border-color: rgba(31, 111, 127, 0.3);
-  box-shadow: 0 12px 24px rgba(31, 111, 127, 0.22);
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 12px 24px rgba(56, 189, 248, 0.22);
 }
 
 .button.primary:visited {
-  color: #fcfaf5;
+  color: #062033;
 }
 
 .button.ghost:visited {
@@ -306,7 +312,7 @@
 }
 
 .button.quiet:visited {
-  color: #0c4a6e;
+  color: #7dd3fc;
 }
 
 .button:disabled,
@@ -318,23 +324,23 @@ button:disabled {
 }
 
 .button.primary:disabled {
-  border-color: rgba(31, 111, 127, 0.12);
+  border-color: rgba(56, 189, 248, 0.12);
   background:
     linear-gradient(135deg, rgba(136, 169, 177, 0.9), rgba(152, 176, 198, 0.88)),
     rgba(136, 169, 177, 0.92);
-  color: rgba(252, 250, 245, 0.94);
+  color: rgba(19, 30, 51, 0.94);
 }
 
 .button.ghost:disabled {
-  border-color: rgba(20, 32, 43, 0.1);
-  background: rgba(20, 32, 43, 0.05);
-  color: #7e8b9b;
+  border-color: rgba(148, 163, 184, 0.12);
+  background: rgba(148, 163, 184, 0.08);
+  color: #8ea2bd;
 }
 
 .button.quiet:disabled {
-  border-color: rgba(3, 105, 161, 0.1);
-  background: rgba(3, 105, 161, 0.05);
-  color: #7ea0b7;
+  border-color: rgba(56, 189, 248, 0.1);
+  background: rgba(56, 189, 248, 0.05);
+  color: #8ea2bd;
 }
 
 .session-indicator {
@@ -343,15 +349,15 @@ button:disabled {
   gap: 8px;
   min-height: 30px;
   padding: 0 11px;
-  border: 1px solid rgba(3, 105, 161, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.12);
   border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 248, 253, 0.94)),
-    rgba(255, 255, 255, 0.82);
-  color: #0c4a6e;
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.94)),
+    rgba(19, 30, 51, 0.82);
+  color: #7dd3fc;
   font-size: 11px;
   font-weight: 600;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .session-indicator-dot {
@@ -364,10 +370,10 @@ button:disabled {
 
 .session-indicator[data-auth-state="authenticated"] {
   border-color: rgba(34, 197, 94, 0.2);
-  color: #166534;
+  color: #4ade80;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 253, 244, 0.96)),
-    rgba(255, 255, 255, 0.86);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.96)),
+    rgba(19, 30, 51, 0.86);
 }
 
 .session-indicator[data-auth-state="authenticated"] .session-indicator-dot {
@@ -376,7 +382,7 @@ button:disabled {
 }
 
 .session-indicator[data-auth-state="disabled"] {
-  color: #475569;
+  color: #94a3b8;
 }
 
 .session-indicator[data-auth-state="disabled"] .session-indicator-dot {
@@ -399,9 +405,9 @@ button:disabled {
   padding: 18px 20px;
   border-radius: var(--radius-xl);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 251, 0.9)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 250, 252, 0.9));
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.07);
+    linear-gradient(135deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.9)),
+    linear-gradient(180deg, rgba(19, 30, 51, 0.94), rgba(19, 30, 51, 0.9));
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.43);
 }
 
 .page-hero::after {
@@ -411,7 +417,7 @@ button:disabled {
   width: 180px;
   height: 180px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(156, 107, 28, 0.1), transparent 60%);
+  background: radial-gradient(circle, rgba(240, 179, 92, 0.14), transparent 60%);
 }
 
 .page-hero-grid,
@@ -458,7 +464,7 @@ button:disabled {
   align-items: center;
   padding: 6px 9px;
   border-radius: 999px;
-  background: rgba(20, 32, 43, 0.06);
+  background: rgba(148, 163, 184, 0.14);
   color: var(--accent);
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -467,7 +473,7 @@ button:disabled {
 }
 
 .guide-step {
-  background: rgba(20, 32, 43, 0.04);
+  background: rgba(148, 163, 184, 0.12);
   color: var(--muted);
   letter-spacing: 0.04em;
 }
@@ -584,7 +590,7 @@ code,
   width: fit-content;
   padding: 3px 7px;
   border-radius: 999px;
-  background: rgba(255, 122, 69, 0.14);
+  background: rgba(251, 146, 60, 0.18);
   color: #ffc1a9;
   font-size: 10px;
   font-weight: 700;
@@ -606,7 +612,7 @@ code,
 .guide-card,
 .hint {
   padding: 10px;
-  background: rgba(247, 250, 252, 0.82);
+  background: rgba(19, 30, 51, 0.82);
 }
 
 .mini-label,
@@ -644,7 +650,7 @@ code,
   height: 4px;
   margin-top: 8px;
   border-radius: 999px;
-  background: rgba(20, 32, 43, 0.08);
+  background: rgba(148, 163, 184, 0.16);
   overflow: hidden;
 }
 
@@ -652,6 +658,36 @@ code,
   display: block;
   height: 100%;
   border-radius: inherit;
+}
+
+.page-loading {
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  min-height: 40vh;
+  padding: 48px 24px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.page-loading p {
+  margin: 0;
+}
+
+.page-loading-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(56, 189, 248, 0.16);
+  border-top-color: var(--cyan);
+  animation: pageLoadingSpin 720ms linear infinite;
+}
+
+@keyframes pageLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .form-grid {

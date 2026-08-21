@@ -5,7 +5,7 @@ export function createShellTemplateModule(dependencies) {
     escapeHtml,
     getPlatformBaseUrl,
     manualModalTemplate,
-    navItems,
+    navGroups,
     platformSshStatusLabel,
     renderBootstrapCommandPair,
     shouldShowBootstrapHero,
@@ -13,15 +13,32 @@ export function createShellTemplateModule(dependencies) {
     tokenModalTemplate,
   } = dependencies;
 
-  function shellTemplate(meta, activeKey) {
-    const navHtml = navItems
-      .map((item) => `
-      <a class="nav-item ${item.key === activeKey ? "active" : ""}" href="${item.href}">
-        <span>${item.label}</span>
-        <span>${item.key === "nodes" ? '<span id="nav-node-count">0</span>' : ""}</span>
-      </a>
-    `)
+  function renderNavGroups(activeKey) {
+    return navGroups
+      .map(
+        (group) => `
+        <div class="nav-group">
+          <div class="nav-label">${group.label}</div>
+          <div class="nav-list">
+            ${group.items
+              .map(
+                (item) => `
+                <a class="nav-item ${item.key === activeKey ? "active" : ""}" href="${item.href}">
+                  <span>${item.label}</span>
+                  <span>${item.key === "nodes" ? '<span id="nav-node-count">0</span>' : ""}</span>
+                </a>
+              `,
+              )
+              .join("")}
+          </div>
+        </div>
+      `,
+      )
       .join("");
+  }
+
+  function shellTemplate(meta, activeKey) {
+    const navHtml = renderNavGroups(activeKey);
 
     const actionsHtml = meta.actions
       .map((action) => {
@@ -57,16 +74,29 @@ export function createShellTemplateModule(dependencies) {
     <div class="app">
       <aside class="sidebar fade-up">
         <div class="brand">
-          <div class="brand-mark">AC</div>
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img">
+              <path
+                d="M4 12.5 9.2 6a2.2 2.2 0 0 1 3.44 0l1.2 1.48 1.77-2.2a2.2 2.2 0 0 1 3.43 0L20 6.4v11.1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"
+                fill="currentColor"
+                opacity=".18"
+              />
+              <path
+                d="m6.6 14.2 3.14-3.9a1.2 1.2 0 0 1 1.87 0l1.85 2.27 2.8-3.48"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.8"
+              />
+            </svg>
+          </div>
           <div>
             <h1>机场控制台</h1>
             <p>节点台账、链路与纳管控制台</p>
           </div>
         </div>
-        <div class="nav-group">
-          <div class="nav-label">控制台</div>
-          <div class="nav-list">${navHtml}</div>
-        </div>
+        ${navHtml}
       </aside>
       <main class="content">
         <div class="topbar fade-up">

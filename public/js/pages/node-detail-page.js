@@ -52,7 +52,11 @@ export function createNodeDetailPageRenderer({
   function renderNodeDetail(nodes) {
     const node = getCurrentNode(nodes);
     if (!node) {
-      return '<div class="empty">当前还没有可查看详情的节点。</div>';
+      return `<div class="empty">${
+        nodes.length > 0
+          ? "没有找到该节点，可能已被删除或链接有误。返回节点清单重新选择。"
+          : "当前还没有节点可查看详情。先执行纳管命令把第一台机器接入平台。"
+      }</div>`;
     }
 
     const viewModel = buildNodeDetailViewModel({

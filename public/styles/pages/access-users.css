@@ -96,8 +96,8 @@ body[data-page="releases"] .ops-check-card {
   border: 1px solid var(--line);
   border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(248, 245, 238, 0.92)),
-    rgba(255, 255, 255, 0.84);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.9), rgba(19, 30, 51, 0.92)),
+    rgba(19, 30, 51, 0.84);
 }
 
 body[data-page="access-users"] .ops-check-card input,
@@ -170,8 +170,8 @@ body[data-page="releases"] .ops-soft-item {
   border: 1px solid var(--line);
   border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 245, 238, 0.92)),
-    rgba(255, 255, 255, 0.84);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.94), rgba(19, 30, 51, 0.92)),
+    rgba(19, 30, 51, 0.84);
   text-align: left;
 }
 
@@ -195,11 +195,11 @@ body[data-page="system-templates"] .ops-focus-strip {
   display: grid;
   gap: 6px;
   padding: 14px 15px;
-  border: 1px solid rgba(31, 111, 127, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.12);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(246, 251, 253, 0.98), rgba(255, 255, 255, 0.95)),
-    rgba(255, 255, 255, 0.9);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.9);
 }
 
 body[data-page="system-users"] .ops-focus-strip strong,
@@ -260,23 +260,41 @@ body[data-page="system-templates"] #system-template-script-body {
   font-family: "JetBrains Mono", "SFMono-Regular", monospace;
 }
 
+body[data-page="system-templates"] .system-template-script-check-output {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(4, 10, 17, 0.9);
+  color: #d8f6ff;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+body[data-page="system-templates"] .system-template-script-check-output.is-error {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.08);
+}
+
 body[data-page="access-users"] .ops-empty-block,
 body[data-page="system-users"] .ops-empty-block,
 body[data-page="system-templates"] .ops-empty-block,
 body[data-page="proxy-profiles"] .ops-empty-block,
 body[data-page="releases"] .ops-empty-block {
   padding: 12px 14px;
-  border: 1px dashed rgba(31, 111, 127, 0.18);
+  border: 1px dashed rgba(56, 189, 248, 0.18);
   border-radius: 14px;
   color: var(--muted);
-  background: rgba(31, 111, 127, 0.04);
+  background: rgba(56, 189, 248, 0.04);
   font-size: 13px;
   line-height: 1.5;
 }
 
 body[data-page="access-users"] tr.is-selected td {
-  background: rgba(17, 107, 130, 0.08);
-  box-shadow: inset 0 1px 0 rgba(17, 107, 130, 0.05);
+  background: rgba(56, 189, 248, 0.08);
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.05);
 }
 
 body[data-page="access-users"] tr[data-access-user-select] {
@@ -284,7 +302,7 @@ body[data-page="access-users"] tr[data-access-user-select] {
 }
 
 body[data-page="access-users"] tr[data-access-user-select]:hover td {
-  background: rgba(17, 107, 130, 0.04);
+  background: rgba(56, 189, 248, 0.07);
 }
 
 body[data-page="access-users"] .share-panel {
@@ -301,11 +319,11 @@ body[data-page="access-users"] .share-empty-card {
   display: grid;
   gap: 8px;
   padding: 18px;
-  border: 1px dashed rgba(31, 111, 127, 0.18);
+  border: 1px dashed rgba(56, 189, 248, 0.18);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 252, 0.92)),
-    rgba(255, 255, 255, 0.9);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.92)),
+    rgba(19, 30, 51, 0.9);
 }
 
 body[data-page="access-users"] .share-empty-card strong,
@@ -332,11 +350,11 @@ body[data-page="access-users"] .share-overview-card {
   display: grid;
   gap: 14px;
   padding: 16px;
-  border: 1px solid rgba(31, 111, 127, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.14);
   border-radius: 20px;
   background:
-    linear-gradient(180deg, rgba(247, 252, 253, 0.98), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.94)),
+    rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-overview-head {
@@ -377,27 +395,27 @@ body[data-page="access-users"] .share-mix-pill {
 }
 
 body[data-page="access-users"] .share-mix-pill-relay {
-  border-color: rgba(13, 148, 136, 0.2);
-  background: rgba(204, 251, 241, 0.9);
-  color: #115e59;
+  border-color: rgba(45, 212, 191, 0.22);
+  background: rgba(19, 30, 51, 0.9);
+  color: #5eead4;
 }
 
 body[data-page="access-users"] .share-mix-pill-direct {
-  border-color: rgba(217, 119, 6, 0.18);
-  background: rgba(254, 243, 199, 0.92);
-  color: #9a3412;
+  border-color: rgba(251, 191, 36, 0.22);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fcd34d;
 }
 
 body[data-page="access-users"] .share-mix-pill-mixed {
-  border-color: rgba(8, 145, 178, 0.18);
-  background: rgba(224, 242, 254, 0.95);
-  color: #0f4c81;
+  border-color: rgba(56, 189, 248, 0.2);
+  background: rgba(19, 30, 51, 0.95);
+  color: #7dd3fc;
 }
 
 body[data-page="access-users"] .share-mix-pill-empty {
-  border-color: rgba(100, 116, 139, 0.12);
-  background: rgba(241, 245, 249, 0.95);
-  color: #475569;
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(19, 30, 51, 0.95);
+  color: #94a3b8;
 }
 
 body[data-page="access-users"] .share-summary-strip {
@@ -411,25 +429,25 @@ body[data-page="access-users"] .share-summary-card {
   gap: 4px;
   min-height: 72px;
   padding: 12px;
-  border: 1px solid rgba(31, 111, 127, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.12);
   border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 251, 253, 0.94)),
-    rgba(255, 255, 255, 0.9);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.94)),
+    rgba(19, 30, 51, 0.9);
 }
 
 body[data-page="access-users"] .share-summary-card-relay {
   border-color: rgba(13, 148, 136, 0.16);
   background:
-    linear-gradient(180deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.9);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.94)),
+    rgba(19, 30, 51, 0.9);
 }
 
 body[data-page="access-users"] .share-summary-card-direct {
   border-color: rgba(217, 119, 6, 0.14);
   background:
-    linear-gradient(180deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.9);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.94)),
+    rgba(19, 30, 51, 0.9);
 }
 
 body[data-page="access-users"] .share-summary-card span,
@@ -455,19 +473,19 @@ body[data-page="access-users"] .share-link-block {
   gap: 10px;
   min-height: 100%;
   padding: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 252, 0.95)),
-    rgba(255, 255, 255, 0.92);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 body[data-page="access-users"] .share-link-block-aggregate {
-  border-color: rgba(31, 111, 127, 0.16);
+  border-color: rgba(56, 189, 248, 0.16);
   background:
-    linear-gradient(180deg, rgba(246, 251, 253, 0.98), rgba(255, 255, 255, 0.95)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.92);
   grid-template-columns: minmax(0, 1fr) 236px;
   gap: 14px 16px;
   align-items: start;
@@ -488,15 +506,15 @@ body[data-page="access-users"] .share-link-block-aggregate .share-qr-shell {
 body[data-page="access-users"] .share-link-block-relay {
   border-color: rgba(13, 148, 136, 0.18);
   background:
-    linear-gradient(180deg, rgba(240, 253, 250, 0.98), rgba(236, 253, 245, 0.95)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-link-block-direct {
   border-color: rgba(217, 119, 6, 0.18);
   background:
-    linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 247, 237, 0.95)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-link-head,
@@ -509,9 +527,9 @@ body[data-page="access-users"] .share-readonly {
   width: 100%;
   min-height: 74px;
   padding: 10px 12px;
-  border: 1px solid rgba(15, 23, 42, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 12px;
-  background: rgba(248, 250, 252, 0.96);
+  background: rgba(19, 30, 51, 0.96);
   color: var(--text);
   font-size: 12px;
   line-height: 1.55;
@@ -529,9 +547,9 @@ body[data-page="access-users"] .share-qr-shell {
   justify-content: center;
   min-height: 168px;
   padding: 10px;
-  border: 1px dashed rgba(31, 111, 127, 0.16);
+  border: 1px dashed rgba(56, 189, 248, 0.16);
   border-radius: 14px;
-  background: rgba(31, 111, 127, 0.03);
+  background: rgba(56, 189, 248, 0.03);
 }
 
 body[data-page="access-users"] .share-qr-svg,
@@ -555,10 +573,10 @@ body[data-page="access-users"] .share-warning-list {
 
 body[data-page="access-users"] .share-warning-item {
   padding: 10px 12px;
-  border: 1px solid rgba(180, 83, 9, 0.16);
+  border: 1px solid rgba(251, 146, 60, 0.22);
   border-radius: 12px;
-  background: rgba(255, 247, 237, 0.9);
-  color: #9a3412;
+  background: rgba(251, 146, 60, 0.08);
+  color: #fdba74;
   font-size: 12.5px;
   line-height: 1.55;
 }
@@ -577,25 +595,25 @@ body[data-page="access-users"] .share-target-section {
   display: grid;
   gap: 14px;
   padding: 18px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 22px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.94)),
+    rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-target-section-relay {
   border-color: rgba(13, 148, 136, 0.16);
   background:
-    linear-gradient(180deg, rgba(240, 253, 250, 0.92), rgba(255, 255, 255, 0.95)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.92), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-target-section-direct {
   border-color: rgba(217, 119, 6, 0.14);
   background:
-    linear-gradient(180deg, rgba(255, 251, 235, 0.92), rgba(255, 255, 255, 0.95)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.92), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-target-section-head {
@@ -633,21 +651,21 @@ body[data-page="access-users"] .share-target-card {
   grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.14fr);
   gap: 16px 18px;
   padding: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 251, 0.95)),
-    rgba(255, 255, 255, 0.92);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-target-card-relay {
   border-color: rgba(13, 148, 136, 0.16);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 body[data-page="access-users"] .share-target-card-direct {
   border-color: rgba(217, 119, 6, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 body[data-page="access-users"] .share-target-head {
@@ -669,7 +687,7 @@ body[data-page="access-users"] .share-target-meta > div {
   min-height: 54px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(248, 250, 252, 0.92);
+  background: rgba(19, 30, 51, 0.92);
 }
 
 body[data-page="access-users"] .share-target-title strong {
@@ -700,15 +718,15 @@ body[data-page="access-users"] .share-mode-pill {
 }
 
 body[data-page="access-users"] .share-mode-pill-relay {
-  border-color: rgba(13, 148, 136, 0.2);
-  background: rgba(204, 251, 241, 0.9);
-  color: #115e59;
+  border-color: rgba(45, 212, 191, 0.22);
+  background: rgba(19, 30, 51, 0.9);
+  color: #5eead4;
 }
 
 body[data-page="access-users"] .share-mode-pill-direct {
-  border-color: rgba(217, 119, 6, 0.18);
-  background: rgba(254, 243, 199, 0.92);
-  color: #9a3412;
+  border-color: rgba(251, 191, 36, 0.22);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fcd34d;
 }
 
 body[data-page="access-users"] .share-link-grid {
@@ -785,8 +803,8 @@ body[data-page="system-users"] .checkbox-row {
   border: 1px solid var(--line);
   border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 245, 238, 0.92)),
-    rgba(255, 255, 255, 0.84);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.92), rgba(19, 30, 51, 0.92)),
+    rgba(19, 30, 51, 0.84);
 }
 
 body[data-page="system-users"] .checkbox-row input {

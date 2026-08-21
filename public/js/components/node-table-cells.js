@@ -135,7 +135,7 @@ export function createNodeTableCellsModule(dependencies = {}) {
 
     return `
       <div class="node-meta">
-        <a class="node-name" href="/node.html?id=${node.id}">${getNodeDisplayName(node)}</a>
+        <a class="node-name" href="/node.html?id=${encodeURIComponent(node.id)}">${escapeHtml(getNodeDisplayName(node))}</a>
         <span class="node-id ${variant === "preview" ? "" : "mono"}">${escapeHtml(subline)}</span>
       </div>
     `;

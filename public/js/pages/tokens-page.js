@@ -54,7 +54,13 @@ export function createTokensPageModule(dependencies) {
             <td><span class="${statusClassName(effectiveStatus)}">${statusText(effectiveStatus)}</span></td>
             <td>${formatTokenUsage(token)}</td>
             <td>${formatDate(token.expires_at)}</td>
-            <td>${token.last_used_at ? formatRelativeTime(token.last_used_at) : "未使用"}</td>
+            <td>
+              <div class="ops-inline-meta">
+                <strong>${token.last_used_at ? formatRelativeTime(token.last_used_at) : "未使用"}</strong>
+                ${token.last_used_node_id ? `<span class="tiny mono">${escapeHtml(token.last_used_node_id)}</span>` : ""}
+              </div>
+            </td>
+            <td>${token.created_at ? formatRelativeTime(token.created_at) : "-"}</td>
             <td>${escapeHtml(token.note || "-")}</td>
             <td>
               <div class="token-actions">
@@ -62,7 +68,7 @@ export function createTokensPageModule(dependencies) {
                 ${
                   canToggle
                     ? `<button class="button quiet token-inline-action" type="button" data-token-toggle="${escapeHtml(token.id)}" data-next-status="${effectiveStatus === "disabled" ? "active" : "disabled"}">${actionLabel}</button>`
-                    : `<span class="tiny">需调整上限或重建令牌</span>`
+                    : `<button class="button quiet token-inline-action" type="button" data-token-edit-limit="${escapeHtml(token.id)}">调整上限</button>`
                 }
               </div>
               <div class="tiny token-inline-note">${escapeHtml(maskTokenValue(token.token))}</div>
@@ -72,7 +78,7 @@ export function createTokensPageModule(dependencies) {
         }).join("")
       : `
       <tr>
-        <td colspan="7">
+        <td colspan="8">
           <div class="empty">当前还没有注册令牌。先创建一条，再把纳管命令发到新机器。</div>
         </td>
       </tr>
@@ -92,16 +98,17 @@ export function createTokensPageModule(dependencies) {
             <div class="table-shell tokens-table-shell">
               <table>
                 <colgroup>
-                  <col style="width:19%">
-                  <col style="width:11%">
+                  <col style="width:17%">
                   <col style="width:10%">
-                  <col style="width:12%">
-                  <col style="width:12%">
-                  <col style="width:16%">
-                  <col style="width:20%">
+                  <col style="width:9%">
+                  <col style="width:11%">
+                  <col style="width:13%">
+                  <col style="width:10%">
+                  <col style="width:13%">
+                  <col style="width:17%">
                 </colgroup>
                 <thead>
-                  <tr><th>用途 / 范围</th><th>状态</th><th>已使用</th><th>到期时间</th><th>最近使用</th><th>备注</th><th>操作</th></tr>
+                  <tr><th>用途 / 范围</th><th>状态</th><th>已使用</th><th>到期时间</th><th>最近使用</th><th>创建时间</th><th>备注</th><th>操作</th></tr>
                 </thead>
                 <tbody>${rows}</tbody>
               </table>
@@ -158,18 +165,26 @@ export function createTokensPageModule(dependencies) {
 
     documentRef.getElementById("copy-primary-token")?.addEventListener("click", async (event) => {
       const token = getPrimaryBootstrapToken();
+      const originalLabel = event.currentTarget.textContent;
       const ok = await navigatorRef.clipboard.writeText(token?.token || "").then(() => true, () => false);
       event.currentTarget.textContent = ok ? "已复制令牌" : "复制失败";
+      windowRef.setTimeout(() => {
+        event.currentTarget.textContent = originalLabel;
+      }, 1600);
     });
 
     documentRef.querySelectorAll("[data-token-copy]").forEach((button) => {
       button.addEventListener("click", async (event) => {
         const tokenId = event.currentTarget.dataset.tokenCopy;
         const token = appState.tokens.find((item) => item.id === tokenId);
+        const originalLabel = event.currentTarget.textContent;
         const ok = await navigatorRef.clipboard
           .writeText(getBootstrapCommand(token?.token || ""))
           .then(() => true, () => false);
         event.currentTarget.textContent = ok ? "已复制三步" : "复制失败";
+        windowRef.setTimeout(() => {
+          event.currentTarget.textContent = originalLabel;
+        }, 1600);
       });
     });
 
@@ -182,6 +197,15 @@ export function createTokensPageModule(dependencies) {
           return;
         }
 
+        if (nextStatus === "disabled") {
+          const confirmed = windowRef.confirm(
+            `确认停用令牌“${token.label || token.id}”吗？停用后该令牌无法再注册新节点，已注册节点不受影响。`,
+          );
+          if (!confirmed) {
+            return;
+          }
+        }
+
         event.currentTarget.disabled = true;
 
         try {
@@ -192,6 +216,53 @@ export function createTokensPageModule(dependencies) {
             },
             body: JSON.stringify({
               status: nextStatus,
+            }),
+          });
+
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.details?.join("，") || result.message || "更新失败");
+          }
+
+          upsertBootstrapToken(result.token);
+          renderCurrentContent();
+        } catch (error) {
+          event.currentTarget.disabled = false;
+          windowRef.alert(error instanceof Error ? error.message : "更新失败");
+        }
+      });
+    });
+
+    documentRef.querySelectorAll("[data-token-edit-limit]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        const tokenId = event.currentTarget.dataset.tokenEditLimit;
+        const token = appState.tokens.find((item) => item.id === tokenId);
+        if (!token) {
+          return;
+        }
+
+        const currentValue = token.max_uses ?? "";
+        const input = windowRef.prompt("输入新的最大使用次数（留空表示不限）：", String(currentValue));
+        if (input === null) {
+          return;
+        }
+
+        const nextMaxUses = input.trim() === "" ? null : Number(input.trim());
+        if (nextMaxUses !== null && (!Number.isFinite(nextMaxUses) || nextMaxUses < 0)) {
+          windowRef.alert("请输入有效的非负整数，或留空表示不限。");
+          return;
+        }
+
+        event.currentTarget.disabled = true;
+
+        try {
+          const response = await fetchImpl(`/api/v1/bootstrap-tokens/${encodeURIComponent(token.id)}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              max_uses: nextMaxUses,
             }),
           });
 

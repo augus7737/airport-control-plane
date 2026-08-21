@@ -11,6 +11,21 @@ body[data-page="releases"] .ops-release-groups-stage {
   margin-top: 18px;
 }
 
+body[data-page="releases"] .ops-release-primary > *,
+body[data-page="releases"] .ops-release-groups-stage > * {
+  min-width: 0;
+}
+
+body[data-page="releases"] .ops-release-primary > .stack,
+body[data-page="releases"] .ops-release-groups-stage > .stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-page="releases"] .ops-release-primary > .stack > *,
+body[data-page="releases"] .ops-release-groups-stage > .stack > * {
+  min-width: 0;
+}
+
 body[data-page="releases"] .ops-release-rail {
   gap: 14px;
 }
@@ -35,10 +50,10 @@ body[data-page="releases"] .release-group-overview-card {
   gap: 4px;
   min-width: 0;
   padding: 12px 13px;
-  border: 1px solid rgba(20, 32, 43, 0.07);
+  border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(245, 249, 252, 0.96));
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.96));
 }
 
 body[data-page="releases"] .release-builder-overview-card span,
@@ -67,11 +82,11 @@ body[data-page="releases"] .release-focus-strip {
   display: grid;
   gap: 6px;
   padding: 14px 15px;
-  border: 1px solid rgba(31, 111, 127, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.12);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(246, 251, 253, 0.98), rgba(255, 255, 255, 0.95)),
-    rgba(255, 255, 255, 0.9);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.95)),
+    rgba(19, 30, 51, 0.9);
 }
 
 body[data-page="releases"] .release-focus-strip strong {
@@ -85,11 +100,11 @@ body[data-page="releases"] .release-group-callout {
   gap: 4px;
   margin-bottom: 14px;
   padding: 14px 16px;
-  border: 1px solid rgba(31, 111, 127, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.14);
   border-radius: 18px;
   background:
-    radial-gradient(circle at top right, rgba(47, 111, 182, 0.1), transparent 40%),
-    linear-gradient(180deg, rgba(248, 251, 254, 0.98), rgba(242, 247, 251, 0.94));
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.1), transparent 40%),
+    linear-gradient(180deg, rgba(19, 30, 51, 0.98), rgba(19, 30, 51, 0.94));
 }
 
 body[data-page="releases"] .release-group-callout strong {
@@ -128,8 +143,8 @@ body[data-page="releases"] .release-picker-section {
   border: 1px solid var(--line);
   border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 253, 0.93)),
-    rgba(255, 255, 255, 0.84);
+    linear-gradient(180deg, rgba(19, 30, 51, 0.96), rgba(19, 30, 51, 0.93)),
+    rgba(19, 30, 51, 0.84);
 }
 
 body[data-page="releases"] .release-picker-section summary {
@@ -160,8 +175,8 @@ body[data-page="releases"] .ops-soft-item {
 
 body[data-page="releases"] .ops-soft-item:hover,
 body[data-page="releases"] .ops-soft-item:focus-visible {
-  border-color: rgba(31, 111, 127, 0.18);
-  background: rgba(31, 111, 127, 0.06);
+  border-color: rgba(56, 189, 248, 0.18);
+  background: rgba(56, 189, 248, 0.06);
 }
 
 body[data-page="releases"] .table-shell table {
@@ -183,6 +198,60 @@ body[data-page="releases"] .ops-release-primary .table-shell td:last-child,
 body[data-page="releases"] .ops-release-groups-stage .table-shell th:last-child,
 body[data-page="releases"] .ops-release-groups-stage .table-shell td:last-child {
   width: 132px;
+}
+
+body[data-page="releases"] .release-detail-row td {
+  background: rgba(148, 163, 184, 0.05);
+}
+
+body[data-page="releases"] .release-detail-body {
+  display: grid;
+  gap: 10px;
+}
+
+body[data-page="releases"] .release-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+body[data-page="releases"] .release-deployments {
+  display: grid;
+  gap: 8px;
+}
+
+body[data-page="releases"] .release-deployment-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(19, 30, 51, 0.6);
+}
+
+body[data-page="releases"] .release-deployment-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+body[data-page="releases"] .release-deployment-main strong {
+  min-width: 0;
+}
+
+body[data-page="releases"] .release-deployment-sub {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+}
+
+body[data-page="releases"] .release-deployment-note {
+  margin: 2px 0 0;
+  color: var(--muted);
 }
 
 @media (max-width: 1180px) {
