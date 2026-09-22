@@ -48,7 +48,7 @@ function artifactFileName(version, target) {
 
 function defaultUpstreamUrl(version, target) {
   const normalizedVersion = normalizeVersion(version);
-  return `https://dl.sing-box.org/releases/latest/${artifactFileName(normalizedVersion, target)}`;
+  return `https://github.com/SagerNet/sing-box/releases/download/${releaseTag(normalizedVersion)}/${artifactFileName(normalizedVersion, target)}`;
 }
 
 function defaultVariant(version, target) {
