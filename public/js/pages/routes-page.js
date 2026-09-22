@@ -4,6 +4,7 @@ import {
   getLocationCoordinates,
   normalizeLocationValue,
 } from "../shared/location-suggestions.js";
+import { splitMappableCountryStats as splitCountryStats } from "../shared/route-helpers.js";
 
 const defaultDocumentRef = typeof document !== "undefined" ? document : null;
 const defaultWindowRef = typeof window !== "undefined" ? window : null;
@@ -194,11 +195,15 @@ export function createRoutesPageModule(dependencies) {
   function renderCountryDistribution(nodes, options = {}) {
     const limit = options.limit ?? 6;
     const compact = options.compact ?? false;
-    const stats = getCountryStats(nodes);
+    const { mapped: stats, unmappedCount } = splitCountryStats(getCountryStats(nodes));
     const max = Math.max(...stats.map((item) => item.total), 1);
+    const moreNote =
+      unmappedCount > 0
+        ? `<div class="country-list-more">另有 ${unmappedCount} 个地域标签未能识别成国家，未计入落地国家。</div>`
+        : "";
 
     if (stats.length === 0) {
-      return '<div class="empty">当前还没有节点分布数据。</div>';
+      return '<div class="empty">当前还没有可识别的节点地域分布，先在节点资产里补全 region 或 country。</div>';
     }
 
     if (compact) {
@@ -218,6 +223,8 @@ export function createRoutesPageModule(dependencies) {
               <div class="country-list-total">${item.total}<span> 台</span></div>
             </article>
           `).join("")}
+          ${stats.length > limit ? `<div class="country-list-more">另有 ${stats.length - limit} 个国家未展示。</div>` : ""}
+          ${moreNote}
         </div>
       `;
     }
@@ -241,6 +248,8 @@ export function createRoutesPageModule(dependencies) {
           </article>
         `).join("")}
       </div>
+      ${stats.length > limit ? `<div class="country-list-more">另有 ${stats.length - limit} 个国家未展示。</div>` : ""}
+      ${moreNote}
     `;
   }
 
@@ -723,6 +732,9 @@ export function createRoutesPageModule(dependencies) {
     const relayEntryLines = model.lines.filter((line) => line.type === "relay-entry").length;
     const relayCountryLines = model.lines.filter((line) => line.type === "relay-country").length;
     const directLines = model.lines.filter((line) => line.type === "direct").length;
+    const { mapped: mappedCountries, unmappedCount: unmappedCountryCount } = splitCountryStats(
+      getCountryStats(nodes),
+    );
 
     return `
       <div class="route-map-shell">
@@ -730,12 +742,17 @@ export function createRoutesPageModule(dependencies) {
           <div class="route-map-copy">
             <div class="route-map-kicker">World Routing View</div>
             <h3>全球链路图</h3>
-            <p>把入口区域、管理好的中转节点和落地国家投到真实世界底图上。橙色代表入口到中转，绿色代表中转到落地，蓝色虚线代表直连。</p>
+            <p>把入口区域、管理好的中转节点和落地国家投到真实世界底图上。橙色代表入口到中转，绿色代表中转到落地，蓝色虚线代表直连。三个计数都是地点数，不是机器数。</p>
           </div>
           <div class="route-map-badges">
-            <span class="route-map-badge is-entry">入口 ${model.entryPoints.length}</span>
-            <span class="route-map-badge is-relay">中转 ${model.relayPoints.length}</span>
-            <span class="route-map-badge is-country">落地 ${model.countryPoints.length}</span>
+            <span class="route-map-badge is-entry">入口区域 ${model.entryPoints.length}</span>
+            <span class="route-map-badge is-relay">中转节点 ${model.relayPoints.length}</span>
+            <span class="route-map-badge is-country">落地国家 ${mappedCountries.length}</span>
+            ${
+              unmappedCountryCount > 0
+                ? `<span class="route-map-badge is-unmapped">未识别地域 ${unmappedCountryCount}</span>`
+                : ""
+            }
           </div>
         </div>
         <div class="route-map-stage">
@@ -912,7 +929,9 @@ export function createRoutesPageModule(dependencies) {
     const relayNodes = nodes.filter((node) => getAccessMode(node) === "relay");
     const directNodes = nodes.filter((node) => getAccessMode(node) !== "relay");
     const relayGroups = buildRelayGroups(nodes);
-    const countryStats = getCountryStats(nodes);
+    const { mapped: mappedCountryStats, unmappedCount: unmappedCountryCount } = splitCountryStats(
+      getCountryStats(nodes),
+    );
 
     const topologyCards = relayGroups.length
       ? relayGroups
@@ -977,7 +996,7 @@ export function createRoutesPageModule(dependencies) {
               <h3>中转链路分组</h3>
               <p>按中转机聚合，把“入口区域 -> 中转机 -> 落地节点”的关系拆开细看。</p>
             </div>
-            <div class="provider-pill">落地国家 ${countryStats.length} 个</div>
+            <div class="provider-pill">落地国家 ${mappedCountryStats.length} 个${unmappedCountryCount > 0 ? ` · 未识别 ${unmappedCountryCount} 个` : ""}</div>
           </div>
           <div class="route-topology">${topologyCards}</div>
         </div>

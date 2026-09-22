@@ -1,4 +1,5 @@
 import { formatLocationDisplay } from "../shared/location-suggestions.js";
+import { splitMappableCountryStats } from "../shared/route-helpers.js";
 
 export function createOverviewPageRenderer({
   daysUntil,
@@ -354,7 +355,7 @@ export function createOverviewPageRenderer({
       .slice(0, 6);
   }
 
-  function renderOverviewControlPanel(nodes, sortedNodes, countryStats) {
+  function renderOverviewControlPanel(nodes, sortedNodes, countryStats, unmappedCountryCount = 0) {
     const sshKey = getPlatformSshKeyState();
     const probeScheduler = buildProbeSchedulerSummary();
     const tokens = Array.isArray(getTokens?.()) ? getTokens() : [];
@@ -494,7 +495,7 @@ export function createOverviewPageRenderer({
           <div class="overview-summary-section">
             <div class="overview-summary-section-head">
               <strong>国家覆盖</strong>
-              <span>${countryStats.length} 个国家</span>
+              <span>${countryStats.length} 个国家${unmappedCountryCount > 0 ? ` · 未识别 ${unmappedCountryCount} 个` : ""}</span>
             </div>
             <div class="overview-country-list">
               ${renderCountryDistribution(nodes, { compact: true, limit: 5 })}
@@ -509,7 +510,9 @@ export function createOverviewPageRenderer({
     const sortedNodes = [...nodes].sort(
       (left, right) => getOverviewNodeTimestamp(right) - getOverviewNodeTimestamp(left),
     );
-    const countryStats = getCountryStats(nodes);
+    const { mapped: countryStats, unmappedCount: unmappedCountryCount } = splitMappableCountryStats(
+      getCountryStats(nodes),
+    );
     const recentPreview = sortedNodes.slice(0, 6);
     const attentionItems = buildOverviewAttentionItems(nodes);
     const previewTable =
@@ -561,7 +564,7 @@ export function createOverviewPageRenderer({
           </div>
         `
         : '<div class="empty">当前没有待优先处理的节点，首页会优先把异常、到期和待初始化节点放在这里。</div>';
-    const controlPanel = renderOverviewControlPanel(nodes, sortedNodes, countryStats);
+    const controlPanel = renderOverviewControlPanel(nodes, sortedNodes, countryStats, unmappedCountryCount);
 
     return `
       ${renderMetrics(nodes)}

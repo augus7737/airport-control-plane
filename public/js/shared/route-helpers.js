@@ -2,6 +2,7 @@ import { getAccessMode, getNodeDisplayName } from "./node-formatters.js";
 import {
   formatLocationDisplay,
   getLocationCode,
+  getLocationCoordinates,
   getLocationCountry,
   normalizeLocationValue,
 } from "./location-suggestions.js";
@@ -147,6 +148,16 @@ export function getCountryStats(nodes = []) {
       regions: item.regions.size,
     }))
     .sort((left, right) => right.total - left.total || left.country.localeCompare(right.country));
+}
+
+// 地域标签只有能映射到世界地图点位时才算一个落地国家，否则会把脏标签数成国家数。
+export function isMapLocatableCountry(country) {
+  return Boolean(getLocationCoordinates(country, { scope: "region" }));
+}
+
+export function splitMappableCountryStats(stats = []) {
+  const mapped = stats.filter((item) => isMapLocatableCountry(item.country));
+  return { mapped, unmappedCount: stats.length - mapped.length };
 }
 
 export function calculateLanePositions(items = [], x) {

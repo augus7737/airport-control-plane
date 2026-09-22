@@ -74,6 +74,14 @@ body[data-page="routes"] .routes-map-panel .panel-body {
   background: rgba(52, 211, 153, 0.12);
 }
 
+.route-map-badge.is-unmapped {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+}
+
 .route-map-stage {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.7fr);
@@ -426,6 +434,19 @@ body[data-page="routes"] .routes-map-panel .panel-body {
 body[data-page="routes"] .country-list {
   display: grid;
   gap: 12px;
+}
+
+body[data-page="routes"] .country-list-more {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+body[data-page="routes"] .country-grid + .country-list-more {
+  margin-top: 10px;
+}
+
+body[data-page="routes"] .country-list-more + .country-list-more {
+  margin-top: 4px;
 }
 
 body[data-page="routes"] .country-list-row {
