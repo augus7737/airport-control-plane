@@ -8,6 +8,9 @@ import {
 } from "../../infrastructure/json-file-store.js";
 
 const SUPPORTED_TARGETS = Object.freeze(["linux-amd64", "linux-arm64"]);
+// 与 curl 兜底路径的 --max-time 保持一致：国内直连 GitHub Release 会长时间挂在低吞吐上，
+// 没有截止时间的 fetch 会把镜像同步请求无限期占住。
+const MIRROR_DOWNLOAD_TIMEOUT_MS = 300_000;
 const DEFAULT_INSTALL_PATH = "/usr/local/bin/sing-box";
 const DEFAULT_VERSION = "1.13.19";
 
@@ -305,6 +308,7 @@ export function createPlatformSingBoxDistributionDomain(dependencies = {}) {
     try {
       const response = await fetch(variant.upstream_url, {
         redirect: "follow",
+        signal: AbortSignal.timeout(MIRROR_DOWNLOAD_TIMEOUT_MS),
         headers: {
           "user-agent": "airport-control-plane",
         },
