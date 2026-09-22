@@ -1,14 +1,31 @@
 # 重复口径统一化审计
 
-更新时间：2026-08-18
+更新时间：2026-09-22
+说明：本文为逐项审计台账。“已完成”指已落到单一来源模块并有测试或代码引用；“待处理”仍是分散口径。
 
-本轮由 3 个子代理分别审计前端、后端、脚本与文档。结论是：币种前端列表已经统一，但系统里仍有多处业务枚举、默认值和示例口径散落，需要逐步抽成单一来源。
+## 当前总览
+
+| 项 | 状态 | 单一来源 |
+| --- | --- | --- |
+| 管理/代理 SSH 默认端口 | ✅ 完成 | `src/domain/nodes/management-defaults.js` + `public/js/shared/management-defaults.js`（统一 `22`；`19822` 仅 `LEGACY_DEFAULT_NODE_SSH_PORT`） |
+| 计费周期选项 | ✅ 完成 | `src/domain/costs/normalize.js` + `public/js/shared/billing-options.js`，validator 走归一化判定 |
+| 币种选项 | ✅ 完成 | `public/js/shared/currency-options.js`（`DEFAULT_CURRENCY="CNY"`）+ 后端 `normalizeCostCurrency` |
+| 任务状态/标题口径 | ✅ 本轮完成 | `public/js/shared/task-helpers.js`（`TASK_STATUS_LABELS`、`taskStatusText/ClassName`、`getTaskDisplayTitle`、`formatTaskRound`） |
+| 探测原因/阶段/耗时口径 | ✅ 本轮完成 | `public/js/shared/probe-formatters.js`（新增 `probeStageLabel`；任务中心已删除页面自造映射） |
+| 代理协议栈与兼容矩阵 | ⬜ 待处理 | 目标 `src/domain/proxy/protocols.js` + `public/js/shared/proxy-options.js`；目前仍分散在 `src/http/validators.js`、`src/domain/releases/sing-box.js`、`proxy-profiles-page.js` |
+| 状态选项与筛选选项 | ⬜ 待处理 | 展示 formatter 已集中在 `core-formatters.js`，但各页表单/筛选选项仍各自写；目标 `public/js/shared/status-options.js` |
+| 初始化模板名与任务类型 | 🟡 部分完成 | 模板覆盖 Alpine / Debian-Ubuntu / RHEL，但任务类型仍叫 `init_alpine`，未引入 `init_node` 别名 |
+| 部署模式口径 | ✅ 完成 | canonical systemd（`scripts/deploy-systemd.sh` + `docs/deployment-systemd.md`），Docker 标注为兼容路径 |
+| 通用 normalize 工具 | ⬜ 待处理 | 仍无 `src/domain/shared/normalize.js` |
+| 前端列表工具 | ⬜ 待处理 | `splitCommaList` 等仍在页面内重复 |
+| 节点组摘要渲染 | ⬜ 待处理 | 发布/系统用户/系统模板/接入用户页各有变体 |
+| 文档示例生成 | 🟡 部分完成 | 文档已改为指向 canonical 枚举；生成式示例检查仍未做 |
 
 ## P0
 
 ### 1. SSH 管理端口默认值
 
-状态：本轮已处理第一阶段。
+状态：已完成。
 
 发现位置：
 
@@ -39,7 +56,7 @@
 
 ### 1. 计费周期选项
 
-状态：本轮已处理第一阶段。
+状态：已完成。
 
 发现位置：
 

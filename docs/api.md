@@ -1,30 +1,49 @@
 # API
 
-## Authentication approach
+更新时间：2026-09-22
+适用范围：当前 `src/server.js` 已实现的全部 HTTP 接口（55 个路由模式）。本文只描述已经存在的行为；路线图中的能力见 `docs/project-assessment-and-roadmap.md`。
 
-Current status:
+## Conventions
 
-- control-plane pages and operator APIs now use same-origin session cookies
-- anonymous access is only kept for `bootstrap.sh`、节点注册、bootstrap 完成回报、健康检查和公开制品下载
-- internal workers still reserve service-credential expansion for later
+- 数据格式统一 JSON，字段命名 `snake_case`。
+- 集合响应统一 `{ "items": [...] }`。
+- 创建成功返回 `201`，多数更新返回 `200`，异步任务受理返回 `202`。
+- 错误响应统一带 `error` 机器码：
+  - `400 { error: "validation_failed", details: ["..."] }` 字段校验失败
+  - `400 { error: "bad_request", message }` JSON 解析失败或业务前置校验失败
+  - `400 { error: "not_found", message }` 目标记录不存在（部分分支返回 `404`）
+  - `403 { error: "bootstrap_token_missing|bootstrap_token_inactive|bootstrap_token_expired|bootstrap_token_exhausted" }`
+  - `404 { error: "not_found" }`
+  - `409 { error: "conflict" }` 引用占用、重复名称、密钥已存在、诊断并发冲突
+  - `413 { error: "payload_too_large" }`
+  - `500 { error: "internal_server_error", message: "internal server error" }` 全局异常边界
+- 请求体上限 1 MiB，超限连接立即销毁（`src/utils/http.js`）。
+- 无法解析的 `Host` 头会回退到 `localhost`，不反射任意主机名（`src/utils/request-handler.js`）。
+- 当前**没有** `/readyz`，也**没有**服务端登录限流；两者记录在 `docs/stability-roadmap.md`。
+
+## Authentication
+
+控制面页面与 operator API 使用同源 session cookie；匿名只保留给 bootstrap 注册、bootstrap 完成回报、`/healthz`、`/bootstrap.sh`、`/bootstrap/enroll.sh`、订阅 `/sub/:token` 和 sing-box 制品下载。
+
+- cookie 名默认 `airport_operator_session`（可用 `CONTROL_PLANE_SESSION_COOKIE_NAME` 覆盖），`Path=/; HttpOnly; SameSite=Lax; Max-Age=TTL`。
+- 会话滑动续期：每次已鉴权请求都会重新 `Set-Cookie`，因此活跃浏览器不会因为 TTL 到期被踢出。
+- `CONTROL_PLANE_SESSION_SECURE=true` 或请求带 `x-forwarded-proto: https` 时追加 `Secure`。
+- 未鉴权访问 `/api/v1/*` 返回 `401 { error: "unauthorized", login_url }`；访问 HTML 页面返回 `302` 到 `/login.html?next=...`。
+- 会话持久化在 `data/operator-sessions.json`，普通重启不需要重新登录；过期会话在启动时清理。
+- 服务端未配置密码时会生成随机密码并输出 WARN 日志，不会使用固定默认口令。
 
 Operator auth env vars:
 
-- `CONTROL_PLANE_AUTH_USERNAME`
-- `CONTROL_PLANE_AUTH_PASSWORD`
-- optional: `CONTROL_PLANE_SESSION_TTL_MS`
-- optional: `CONTROL_PLANE_SESSION_SECURE`
-- optional: `CONTROL_PLANE_SESSION_REFRESH_PERSIST_INTERVAL_MS`
+- `CONTROL_PLANE_AUTH_USERNAME`（别名 `OPERATOR_USERNAME`、`CONTROL_PLANE_USERNAME`，默认 `admin`）
+- `CONTROL_PLANE_AUTH_PASSWORD`（别名 `OPERATOR_PASSWORD`、`CONTROL_PLANE_PASSWORD`）
+- `CONTROL_PLANE_SESSION_COOKIE_NAME`
+- `CONTROL_PLANE_SESSION_TTL_MS`（默认 12 小时，下限 60 秒）
+- `CONTROL_PLANE_SESSION_SECURE`
+- `CONTROL_PLANE_SESSION_REFRESH_PERSIST_INTERVAL_MS`（默认 30000）
 
-Operator sessions are persisted to `data/operator-sessions.json`. This prevents
-ordinary service restarts from forcing all operators to log in again, while still
-discarding expired sessions during startup.
+## Auth
 
-## `GET /api/v1/auth/session`
-
-Returns the current operator session state.
-
-Example response:
+### `GET /api/v1/auth/session`
 
 ```json
 {
@@ -32,121 +51,63 @@ Example response:
   "session": {
     "id": "48ce7e6d-3cb7-4b4d-b4cb-0cfa23f6cdd6",
     "username": "admin",
-    "created_at": "2026-04-15T11:20:00.487Z",
-    "last_seen_at": "2026-04-15T11:20:00.578Z",
-    "expires_at": "2026-04-15T23:20:00.578Z"
+    "created_at": "2026-09-22T11:20:00.487Z",
+    "last_seen_at": "2026-09-22T11:20:00.578Z",
+    "expires_at": "2026-09-22T23:20:00.578Z"
   },
-  "operator": {
-    "username": "admin",
-    "display_name": "admin",
-    "uses_fallback_credentials": false
-  },
-  "auth": {
-    "mode": "session_cookie",
-    "login_url": "/login.html"
-  }
+  "operator": { "username": "admin", "display_name": "admin", "uses_fallback_credentials": false },
+  "auth": { "mode": "session_cookie", "login_url": "/login.html" }
 }
 ```
 
-## `POST /api/v1/auth/login`
+### `POST /api/v1/auth/login`
 
-Creates one operator session and writes an `HttpOnly` cookie.
+公开。请求 `{ "username": "admin", "password": "...", "next": "/nodes.html" }`，成功写入 cookie 并返回 `{ authenticated, session, next_url }`；凭据错误返回 `401 { error: "invalid_credentials" }`。
 
-Request body:
+### `POST /api/v1/auth/logout`
 
-```json
-{
-  "username": "admin",
-  "password": "AirportTest123!",
-  "next": "/nodes.html"
-}
-```
+清除当前会话 cookie，返回 `{ "authenticated": false, "message": "已退出登录。" }`。
 
-Example response:
+## Health and enrollment assets
 
-```json
-{
-  "authenticated": true,
-  "session": {
-    "id": "48ce7e6d-3cb7-4b4d-b4cb-0cfa23f6cdd6",
-    "username": "admin",
-    "created_at": "2026-04-15T11:20:00.487Z",
-    "last_seen_at": "2026-04-15T11:20:00.487Z",
-    "expires_at": "2026-04-15T23:20:00.487Z"
-  },
-  "next_url": "/nodes.html"
-}
-```
+### `GET /healthz`
 
-## `POST /api/v1/auth/logout`
+公开。`{ "ok": true, "service": "airport-control-plane", "time": "2026-09-22T..." }`。仅表示进程存活。
 
-Clears the current operator session cookie.
+### `GET /bootstrap.sh`
 
-Example response:
+公开。返回当前控制面的接入脚本。
 
-```json
-{
-  "authenticated": false,
-  "message": "已退出登录。"
-}
-```
+### `GET /bootstrap/enroll.sh?token=...`
 
-## `GET /healthz`
+公开。返回一次性接入脚本（令牌已内联）；令牌缺失或不合法返回 `403` 文本说明。
 
-Returns basic service health.
+### `GET /api/v1/artifacts/sing-box/:version/:target`
 
-Example response:
+公开。下载控制面镜像仓中的 sing-box 二进制（gzip）。目标平台不存在返回 `404`。
 
-```json
-{
-  "ok": true,
-  "service": "airport-control-plane"
-}
-```
+## Nodes
 
-## `GET /api/v1/nodes`
+### `GET /api/v1/nodes`
 
-Returns the current node inventory.
+返回全量节点。前端一次拉取后在本地派生筛选与拓扑，**没有** `GET /api/v1/nodes/:id`。
 
-Example response:
+### `POST /api/v1/nodes/register`
 
-```json
-{
-  "items": []
-}
-```
-
-## `POST /api/v1/nodes/register`
-
-Registers or refreshes a node.
-
-Notes:
-
-- `facts.public_ipv4` / `facts.public_ipv6` should describe the actual SSH ingress
-  endpoint that the control plane should probe, not only the node's outbound egress IP
-- when bootstrap runs behind NAT, containers, or provider port mapping, prefer passing
-  explicit overrides such as `--public-ipv4` and `--ssh-port`
-- the control plane defaults to SSH port `22` when a node record has no explicit
-  `ssh_port`; `bootstrap.sh` itself keeps the machine's current `sshd` port unless
-  `--ssh-port` is passed explicitly
-- in LXC/NAT/port-mapping scenarios, `ssh_port` must be the external ingress port
-  that the control plane can connect to, not necessarily the container's internal
-  `sshd` listen port
-
-Request body:
+公开，bootstrap token 校验。创建或按 `fingerprint` 更新节点，返回 `{ node, bootstrap, actions[] }`。
 
 ```json
 {
   "bootstrap_token": "token",
   "fingerprint": "sha256:fingerprint",
   "facts": {
-    "hostname": "alpine-hkg-01",
-    "os_name": "Alpine Linux",
-    "os_id": "alpine",
-    "os_family": "",
-    "os_version": "3.21",
+    "hostname": "debian-hkg-01",
+    "os_name": "Debian GNU/Linux",
+    "os_id": "debian",
+    "os_family": "debian",
+    "os_version": "12",
     "arch": "x86_64",
-    "kernel_version": "6.12.0",
+    "kernel_version": "6.1.0",
     "public_ipv4": "203.0.113.10",
     "public_ipv6": "2408:xxxx::10",
     "public_ipv4_source": "cip.cc",
@@ -158,674 +119,29 @@ Request body:
     "disk_gb": 10,
     "ssh_port": 22
   },
-  "labels": {
-    "provider": "example-cloud",
-    "region": "hkg"
-  }
-}
-```
-
-Success response:
-
-```json
-{
-  "node": {
-    "id": "node_123",
-    "status": "new",
-    "bootstrap_token_id": "token_demo"
-  },
-  "bootstrap": {
-    "init_task_id": "task_123",
-    "init_template": "alpine-base"
-  },
-  "actions": [
-    {
-      "type": "install_ssh_key",
-      "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA..."
-    },
-    {
-      "type": "schedule_init",
-      "id": "task_123",
-      "template": "alpine-base"
-    }
-  ]
+  "labels": { "provider": "example-cloud", "region": "hkg" }
 }
 ```
 
 Notes:
 
-- `actions[].install_ssh_key` only appears when the platform already has a usable public key
-- when the platform key is missing, registration still succeeds, but the node will not receive automatic `authorized_keys` injection in this step
+- `facts.public_ipv4` / `public_ipv6` 描述控制面应当连入的 **SSH 入口地址**，不是节点出站 IP。
+- NAT / LXC / 端口映射场景必须显式上报外部入口：`ssh_port` 是控制面可达的映射端口，容器内部 `sshd` 端口写入 `management.ssh_internal_port`。
+- 节点没有显式 `ssh_port` 时控制面使用默认端口 `22`；`bootstrap.sh` 除非传 `--ssh-port`，否则保留机器现有 `sshd` 端口。
+- 初始化模板按 `os_name` / `os_id` / `os_family` / `os_version` 自动选择 `alpine-base`、`debian-base`、`rhel-base`。
+- `actions[].install_ssh_key` 只在平台已有可用公钥时出现。
 
-Validation rules:
+### `POST /api/v1/nodes/manual`
 
-- `bootstrap_token` is required
-- `fingerprint` is required
-- `facts.hostname` is required
-- at least one of `facts.public_ipv4` / `facts.public_ipv6` / `facts.private_ipv4` should exist
-- numeric facts must be non-negative
-- `bootstrap_token` must exist and be active
-- expired / exhausted / disabled tokens are rejected
-- bootstrap initialization auto-selects `alpine-base`, `debian-base`, or `rhel-base` from node OS facts (`os_name`, `os_id`, `os_family`, `os_version`)
+手工录入资产台账，`status` 默认 `active`。请求字段与 `PATCH /nodes/:id/assets` 同一套（见下）。
 
-## `GET /api/v1/bootstrap-tokens`
+### `PATCH /api/v1/nodes/:id/assets`
 
-Returns the current bootstrap token inventory.
-
-Example response:
-
-```json
-{
-  "items": [
-    {
-      "id": "token_demo",
-      "token": "demo-token",
-      "label": "演示令牌",
-      "status": "active",
-      "created_at": "2025-01-01T00:00:00.000Z",
-      "expires_at": "2035-01-01T00:00:00.000Z",
-      "max_uses": 200,
-      "uses": 1,
-      "last_used_at": "2026-04-13T03:35:03.214Z",
-      "last_used_node_id": "node_xxx",
-      "note": "用于 bootstrap.sh 快速启动控制面演示节点"
-    }
-  ]
-}
-```
-
-## `GET /api/v1/platform-context`
-
-Returns the base URL used by bootstrap, the current platform SSH key readiness, and the automatic probe scheduler state.
-
-Example response:
-
-```json
-{
-  "request_origin": "http://control-plane.example:8080",
-  "bootstrap_base_url": "http://192.0.2.10:8080",
-  "detected_lan_ipv4": "192.0.2.10",
-  "detected_lan_base_url": "http://192.0.2.10:8080",
-  "source": "detected_lan",
-  "ssh_key": {
-    "status": "ready",
-    "available": true,
-    "bootstrap_ready": true,
-    "source": "managed",
-    "private_key_path": "/path/to/data/platform-ssh/id_ed25519",
-    "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA...",
-    "note": null,
-    "can_generate": true
-  },
-  "probe_scheduler": {
-    "enabled": true,
-    "running": false,
-    "interval_ms": 3600000,
-    "batch_size": 0,
-    "min_probe_gap_ms": 3600000,
-    "jitter_ms": 10000,
-    "next_run_at": "2026-04-15T05:31:14.317Z",
-    "last_run_at": "2026-04-15T05:16:03.678Z",
-    "last_finished_at": "2026-04-15T05:16:04.317Z",
-    "last_run_summary": {
-      "total": 3,
-      "success": 3,
-      "failed": 0,
-      "skipped": 0,
-      "node_ids": ["node_a", "node_b", "node_c"]
-    },
-    "last_error": null
-  }
-}
-```
-
-Notes:
-
-- `probe_scheduler.enabled` indicates whether the current process will create background `scheduled_probe` tasks
-- `last_run_summary` reflects only the most recent scheduler cycle
-- `next_run_at` is a UI-facing hint and may shift slightly because of scheduler jitter
-
-## `POST /api/v1/platform/ssh-key/generate`
-
-Generate one managed platform SSH key pair for bootstrap injection and control-plane SSH takeover.
-
-Success response:
-
-```json
-{
-  "message": "平台 SSH 密钥已生成，新的 bootstrap 将自动注入这把公钥。",
-  "platform_context": {
-    "ssh_key": {
-      "status": "ready",
-      "source": "managed"
-    }
-  }
-}
-```
-
-Notes:
-
-- when `PLATFORM_SSH_PRIVATE_KEY_PATH` is already provided via environment variable, this endpoint rejects generation and keeps the external key as the single source of truth
-- generation is idempotent at the workflow level; if a managed key already exists, the endpoint returns an error instead of silently replacing it
-
-## `POST /api/v1/bootstrap-tokens`
-
-Creates one bootstrap token for node enrollment.
-
-Request body:
-
-```json
-{
-  "label": "迁移批次 A",
-  "expires_at": "2026-05-20",
-  "max_uses": 3,
-  "note": "用于 4 月新增节点"
-}
-```
-
-Success response:
-
-```json
-{
-  "token": {
-    "id": "token_xxx",
-    "token": "generated-secret",
-    "label": "迁移批次 A",
-    "status": "active"
-  }
-}
-```
-
-## `GET /api/v1/access-users`
-
-Returns the current internal access-user inventory.
-
-Example response:
-
-```json
-{
-  "items": [
-    {
-      "id": "access_user_xxx",
-      "name": "香港入口用户",
-      "protocol": "vmess",
-      "credential": {
-        "uuid": "11111111-2222-3333-4444-555555555555",
-        "alter_id": 0
-      },
-      "status": "active",
-      "expires_at": "2026-06-01T00:00:00.000Z",
-      "profile_id": "profile_xxx",
-      "node_group_ids": ["group_hkg"],
-      "note": "首批入口用户"
-    }
-  ]
-}
-```
-
-## `POST /api/v1/access-users`
-
-Creates one managed access user.
-
-Request body:
-
-```json
-{
-  "name": "日本落地用户",
-  "protocol": "vmess",
-  "profile_id": "profile_xxx",
-  "node_group_ids": ["group_jp"],
-  "status": "active",
-  "expires_at": "2026-07-01",
-  "note": "内部统一发布使用",
-  "credential": {
-    "uuid": "11111111-2222-3333-4444-555555555555",
-    "alter_id": 0
-  }
-}
-```
-
-## `PATCH /api/v1/access-users/:id`
-
-Updates one access user.
-
-Supported fields:
-
-- `name`
-- `credential.uuid`
-- `credential.alter_id`
-- `status`
-- `expires_at`
-- `profile_id`
-- `node_group_ids`
-- `note`
-
-## `DELETE /api/v1/access-users/:id`
-
-Deletes one access user when it is not referenced by historical release records.
-
-## `GET /api/v1/proxy-profiles`
-
-Returns managed protocol templates.
-
-## `POST /api/v1/proxy-profiles`
-
-Creates one protocol template.
-
-Request body:
-
-```json
-{
-  "name": "JP VMess TLS",
-  "protocol": "vmess",
-  "listen_port": 443,
-  "transport": "ws",
-  "security": "tls",
-  "tls_enabled": true,
-  "reality_enabled": false,
-  "server_name": "edge.example.com",
-  "mux_enabled": false,
-  "status": "active",
-  "template": {
-    "transport": {
-      "type": "ws",
-      "path": "/ws"
-    },
-    "tls": {
-      "certificate_path": "/etc/ssl/airport/jp-vmess/fullchain.pem",
-      "key_path": "/etc/ssl/airport/jp-vmess/privkey.pem"
-    }
-  }
-}
-```
-
-## `PATCH /api/v1/proxy-profiles/:id`
-
-Updates one protocol template.
-
-## `DELETE /api/v1/proxy-profiles/:id`
-
-Deletes one protocol template when it is no longer referenced by users or releases.
-
-## `GET /api/v1/node-groups`
-
-Returns current static release groups.
-
-## `POST /api/v1/node-groups`
-
-Creates one static node group.
-
-Request body:
-
-```json
-{
-  "name": "香港入口组",
-  "type": "static",
-  "node_ids": ["node_xxx", "node_yyy"],
-  "note": "先给入口节点小范围试发"
-}
-```
-
-## `PATCH /api/v1/node-groups/:id`
-
-Updates one node group.
-
-## `DELETE /api/v1/node-groups/:id`
-
-Deletes one node group when it is no longer referenced by users or releases.
-
-## `GET /api/v1/config-releases`
-
-Returns the publish history for managed config releases.
-
-## `POST /api/v1/config-releases`
-
-Creates one publish action and reuses the existing task and operation execution pipeline.
-
-Request body:
-
-```json
-{
-  "title": "香港入口 VLESS 首批下发",
-  "profile_id": "profile_xxx",
-  "access_user_ids": ["access_user_xxx"],
-  "node_group_ids": ["group_hkg"],
-  "operator": "console",
-  "note": "先试发入口组"
-}
-```
-
-Success response:
-
-```json
-{
-  "release": {
-    "id": "release_xxx",
-    "status": "success",
-    "operation_id": "op_xxx",
-    "task_ids": ["task_xxx", "task_yyy"]
-  },
-  "operation": {
-    "id": "op_xxx",
-    "status": "success"
-  },
-  "tasks": [
-    {
-      "id": "task_xxx",
-      "type": "publish_proxy_config",
-      "status": "success"
-    }
-  ]
-}
-```
-
-Notes:
-
-- when no target nodes can be resolved from `node_group_ids` or `node_ids`, the endpoint rejects the request
-- current version renders a real `sing-box` config for `VLESS` / `VMess` / `Hysteria2` profiles and reuses the existing task / operation pipeline
-- inactive or expired access users are skipped before rendering; if no publishable users remain, the request is rejected
-- when `security` is `tls`, the template JSON should provide `template.tls.certificate_path` and `template.tls.key_path`
-- when `security` is `reality`, the template JSON should provide `template.reality.private_key_path` and `template.reality.short_id`; private key content should stay on the node and is not accepted inline
-- `vmess` currently supports `tls` or `none`, not `reality`
-- `hysteria2` requires `tls`, uses `udp`/QUIC semantics, and authenticates each access user with `credential.password`
-- Hysteria2 share results use `hysteria2://password@host:port` and include SNI, ALPN and optional `obfs=salamander` parameters
-- built-in system template `Alpine ACME 证书申请` can generate files under `/etc/ssl/airport/<cert_name>/fullchain.pem` and `/etc/ssl/airport/<cert_name>/privkey.pem`
-- node-side publish now attempts: write manifest -> render sing-box config -> `sing-box check` -> replace config -> restart service -> rollback on failure
-
-## `GET /api/v1/tasks`
-
-返回当前平台记录的真实任务流，当前已接入初始化任务。
-
-Example response:
-
-```json
-{
-  "items": [
-    {
-      "id": "task_xxx",
-      "node_id": "node_xxx",
-      "type": "init_alpine",
-      "title": "初始化 Alpine",
-      "status": "new",
-      "template": "alpine-base",
-      "attempt": 0,
-      "scheduled_at": "2026-04-13T09:00:00.000Z",
-      "note": "等待节点确认平台 SSH 公钥写入完成，随后自动执行初始化模板。"
-    }
-  ]
-}
-```
-
-Notes:
-
-- `trigger = "scheduled_probe"` means the task was created by the background periodic inspection scheduler
-- current first version already mixes `bootstrap_auto_probe` / `manual_probe` / `scheduled_probe` in the same task stream, and the frontend distinguishes them by `trigger`
-
-## `GET /api/v1/probes`
-
-返回平台最近的探测结果；可通过 `?node_id=` 只看单节点。
-
-Example response:
-
-```json
-{
-  "items": [
-    {
-      "id": "probe_xxx",
-      "node_id": "node_xxx",
-      "task_id": "task_xxx",
-      "probe_type": "ssh_auth",
-      "target": "203.0.113.8:22",
-      "target_host": "203.0.113.8",
-      "target_port": 22,
-      "access_mode": "direct",
-      "transport_kind": "ssh-direct",
-      "transport_label": "SSH 直连",
-      "latency_ms": 42,
-      "latency_source": "management_ssh_e2e",
-      "packet_loss_ratio": null,
-      "success": true,
-      "control_ready": true,
-      "reason_code": "ssh_control_ready",
-      "summary": "SSH 探测成功，平台已经可以接管该节点，端到端耗时 42ms。",
-      "error_stage": null,
-      "error_message": null,
-      "stages": {
-        "tcp": {
-          "success": true,
-          "latency_ms": 18,
-          "error_message": null
-        },
-        "ssh": {
-          "attempted": true,
-          "success": true,
-          "latency_ms": 42,
-          "exit_code": 0,
-          "error_message": null,
-          "skipped_reason": null,
-          "transport_kind": "ssh-direct",
-          "transport_label": "SSH 直连"
-        }
-      },
-      "observed_at": "2026-04-13T10:00:00.000Z"
-    }
-  ]
-}
-```
-
-## `POST /api/v1/tasks/:id/bootstrap-complete`
-
-由 `bootstrap.sh` 在尝试写入平台 SSH 公钥后回报控制面，触发初始化；只有初始化真正成功后，才会自动衔接“自动首探”。
-
-Request body:
-
-```json
-{
-  "bootstrap_token": "demo-token",
-  "installed_ssh_key": true
-}
-```
-
-`installed_ssh_key` may be `false` when the platform has not prepared a public key yet, or when this bootstrap run did not actually write it into `authorized_keys`.
-
-Success response:
-
-```json
-{
-  "task": {
-    "id": "task_xxx",
-    "status": "success"
-  },
-  "node": {
-    "id": "node_xxx",
-    "status": "active"
-  },
-  "operation": {
-    "id": "op_xxx",
-    "status": "success"
-  },
-  "probe_task": {
-    "id": "task_probe_xxx",
-    "type": "probe_node",
-    "status": "success",
-    "trigger": "bootstrap_auto_probe"
-  },
-  "probe": {
-    "id": "probe_xxx",
-    "reason_code": "ssh_control_ready",
-    "summary": "SSH 探测成功，平台已经可以接管该节点，端到端耗时 58ms。"
-  }
-}
-```
-
-Notes:
-
-- when initialization is skipped or failed, `probe_task` and `probe` may be `null`
-- the response also carries `probe_summary`, `transport` and `capability` fields so the bootstrap caller can understand why auto first probe did or did not run
-- repeated callbacks for the same init task will not create duplicate automatic first-probe tasks
-
-## `POST /api/v1/nodes/:id/init`
-
-从控制台手动重试某个节点的初始化模板。
-
-Request body:
-
-```json
-{
-  "template": "debian-base"
-}
-```
-
-Top-level `latency_ms` is the primary latency for the probe type. Check
-`latency_source` and `stages.*.latency_ms` to distinguish raw TCP connect latency
-from SSH end-to-end validation, business-entry TCP, or relay-upstream checks.
-
-If `template` is omitted, the server chooses a built-in baseline from node OS facts:
-
-- `alpine-base` for Alpine
-- `debian-base` for Debian / Ubuntu family
-- `rhel-base` for CentOS / Rocky / Alma / Fedora / RHEL family
-
-## `POST /api/v1/nodes/:id/probe`
-
-从控制台手动触发一次真实探测。默认会先做 TCP 连通性，再尽量补一层 SSH 接管验证。
-
-Request body:
-
-```json
-{
-  "probe_type": "ssh_auth"
-}
-```
-
-Supported `probe_type` values:
-
-- `ssh_auth`: 先做 TCP，再做非交互 SSH 公钥接管验证
-- `tcp_ssh`: 只做 TCP 端口探测
-
-Success response:
-
-```json
-{
-  "task": {
-    "id": "task_xxx",
-    "type": "probe_node",
-    "title": "手动复探",
-    "status": "success",
-    "trigger": "manual_probe"
-  },
-  "node": {
-    "id": "node_xxx",
-    "status": "active",
-    "health_score": 90
-  },
-  "probe": {
-    "id": "probe_xxx",
-    "probe_type": "ssh_auth",
-    "target": "203.0.113.10:22",
-    "latency_ms": 58,
-    "success": true,
-    "control_ready": true,
-    "reason_code": "ssh_control_ready",
-    "summary": "SSH 探测成功，平台已经可以接管该节点，端到端耗时 58ms。"
-  },
-  "transport": {
-    "kind": "ssh-direct",
-    "label": "SSH 直连",
-    "note": "已尝试使用平台 SSH 密钥连接该节点。"
-  },
-  "summary": "SSH 探测成功，平台已经可以接管该节点，端到端耗时 58ms。",
-  "capability": {
-    "tcp_reachable": true,
-    "ssh_reachable": true,
-    "relay_used": false
-  }
-}
-```
-
-Validation rules:
-
-- `status` if present must be `active` or `disabled`
-- `max_uses` must be a non-negative integer
-- `expires_at` must be a valid timestamp/date
-
-## `PATCH /api/v1/bootstrap-tokens/:id`
-
-Updates the control fields of one bootstrap token.
-
-Request body:
-
-```json
-{
-  "status": "disabled"
-}
-```
-
-Supported fields:
-
-- `status`: `active` or `disabled`
-- `expires_at`
-- `max_uses`
-- `label`
-- `note`
-
-## Future endpoints
-
-- `GET /api/v1/nodes/:id`
-- `POST /api/v1/nodes/:id/actions`
-- `GET /api/v1/tasks`
-- `POST /api/v1/probes/report`
-- `POST /api/v1/providers/:provider/provision`
-
-## `POST /api/v1/nodes/manual`
-
-手工录入一个节点，适用于厂商 API 还未接入时先维护资产台账。
-
-Request body:
+更新自动注册或手工录入节点的资产与链路字段。
 
 ```json
 {
   "hostname": "alpine-hkg-04",
-  "provider": "Vultr",
-  "region": "HKG",
-  "public_ipv4": "203.0.113.88",
-  "private_ipv4": "10.0.0.88",
-  "memory_mb": 1024,
-  "bandwidth_mbps": 300,
-  "traffic_quota_gb": 2000,
-  "traffic_used_gb": 320,
-  "expires_at": "2026-05-20",
-  "auto_renew": false,
-  "access_mode": "relay",
-  "entry_region": "中国大陆",
-  "relay_node_id": "node_hkg_01",
-  "relay_label": "alpine-hkg-01",
-  "relay_region": "HKG",
-  "route_note": "中国大陆 -> 香港中转 -> 日本落地",
-  "billing_cycle": "月付",
-  "note": "月底前决定是否续费"
-}
-```
-
-Success response:
-
-```json
-{
-  "node": {
-    "id": "node_xxx",
-    "status": "active"
-  }
-}
-```
-
-## `PATCH /api/v1/nodes/:id/assets`
-
-更新一个节点的资产字段，适用于自动注册节点和手工录入节点。
-
-Request body:
-
-```json
-{
   "public_ipv4": "203.0.113.88",
   "public_ipv6": "2408:xxxx::88",
   "private_ipv4": "10.0.0.88",
@@ -833,14 +149,22 @@ Request body:
   "provider": "Vultr",
   "region": "HKG",
   "role": "edge",
+  "provider_id": "provider_xxx",
   "expires_at": "2026-05-20",
   "auto_renew": true,
   "billing_cycle": "月付",
+  "billing_amount": 6.5,
+  "billing_currency": "USD",
   "bandwidth_mbps": 300,
   "traffic_quota_gb": 2000,
   "traffic_used_gb": 320,
   "access_mode": "relay",
+  "route_direction": "international_egress",
   "entry_region": "中国大陆",
+  "entry_host": "203.0.113.88",
+  "entry_port": 8443,
+  "internal_host": "10.0.0.41",
+  "internal_port": 443,
   "relay_node_id": "node_hkg_01",
   "relay_label": "alpine-hkg-01",
   "relay_region": "HKG",
@@ -849,210 +173,139 @@ Request body:
 }
 ```
 
-Success response:
+字段语义：
 
-```json
-{
-  "node": {
-    "id": "node_xxx",
-    "commercial": {
-      "expires_at": "2026-05-20",
-      "auto_renew": true
-    },
-    "networking": {
-      "access_mode": "relay",
-      "entry_region": "中国大陆",
-      "relay_node_id": "node_hkg_01"
-    }
-  }
-}
-```
+- `public_ipv4` / `public_ipv6` / `private_ipv4` / `ssh_port`：管理链路的真实入口，改写后 IP 来源记为 `manual_override`。
+- `access_mode`：`direct` 或 `relay`（业务链路语义）。
+- `route_direction`：`international_egress` / `return_to_china` / `regional_transit`，缺省时按入口与落地地域推断，并在解析结果里标注 `route_direction_source`。
+- `entry_host` / `entry_port`：用户流量真实公网入口；`internal_host` / `internal_port`：节点内部监听。**两者必须分开**，订阅只使用前者。
+- `relay_node_id` / `relay_label` / `relay_region`：单级中转描述。
+- `billing_cycle` 接受 `月付/季付/年付/周付/日付/小时付/一次性` 及英文别名；`billing_currency` 为 3–10 位大写代码，默认 `CNY`。
 
-Supported route fields for `POST /api/v1/nodes/manual` and `PATCH /api/v1/nodes/:id/assets`:
+### `POST /api/v1/nodes/:id/init`
 
-- `public_ipv4`: override the SSH ingress IPv4 used by probes / operations
-- `public_ipv6`: override the SSH ingress IPv6 used by probes / operations
-- `private_ipv4`: override the internal IPv4 used for LAN / relay routing decisions
-- `ssh_port`: override the SSH ingress port
-- when `public_ipv4` / `public_ipv6` are changed here, their source is stored as `manual_override`
-- `access_mode`: `direct` or `relay`
-- `entry_region`: entry area for the route
-- `relay_node_id`: optional internal node ID of the relay/jump node
-- `relay_label`: optional human-readable relay node name
-- `relay_region`: optional relay node region
-- `route_note`: free-form route description
+手动重跑初始化模板，返回 `201`。请求 `{ "template": "debian-base" }`，或 `{ "system_template_id": "...", "template_snapshot": { "script_name": "...", "script_body": "..." } }`；省略时按节点 OS 事实选择内置基线。
 
-## `GET /api/v1/operations`
+> 该动作会重写节点上的 `/etc/airport/node.env` 并可能重启 `sshd`，前端已加二次确认。
 
-Returns recent batch execution history for the web terminal page.
+### `POST /api/v1/nodes/:id/probe`
 
-Example response:
+手动触发一次真实探测，返回 `201`。请求 `{ "probe_type": "full_stack" }`。
 
-```json
-{
-  "items": [
-    {
-      "id": "op_xxx",
-      "mode": "command",
-      "title": "批量安装基础依赖",
-      "status": "partial"
-    }
-  ]
-}
-```
+支持的 `probe_type`：
 
-## `POST /api/v1/operations/execute`
+- `ssh_auth`：TCP 连通 + 非交互 SSH 公钥接管
+- `business_entry_tcp`：业务公网入口 TCP 可达
+- `relay_upstream_tcp`：从中转机验证到落地的上游连通
+- `full_stack`：默认，按节点角色依次执行上述适用阶段
 
-Creates one batch shell/script execution record and returns per-node output.
+响应包含 `task`、`node`、`probe`、`summary`、`transport`、`capability`。旧的 `tcp_ssh` 类型已不存在，仅在历史探测记录里作为标签保留。
 
-Request body for command mode:
+### `POST /api/v1/nodes/:id/diagnostics`
 
-```json
-{
-  "mode": "command",
-  "title": "批量安装基础依赖",
-  "node_ids": ["node_a", "node_b"],
-  "command": "apk update && apk add curl bash"
-}
-```
+请求 `{ "profile": "light" }`（或 `deep`），返回 `202 { task, diagnostic }`。同一节点已有诊断、或同一公网入口宿主已有深度诊断时返回 `409`。
 
-Request body for script mode:
+### `GET /api/v1/diagnostics?node_id=`
 
-```json
-{
-  "mode": "script",
-  "title": "批量初始化目录",
-  "node_ids": ["node_a"],
-  "script_name": "Alpine 目录初始化",
-  "script_body": "#!/bin/sh\nset -e\nmkdir -p /opt/airport/bin\n"
-}
-```
+返回节点质量诊断记录（`data/diagnostics.json`，上限 200 条）。
 
-Success response:
+### `DELETE /api/v1/nodes/:id`
 
-```json
-{
-  "operation": {
-    "id": "op_xxx",
-    "started_at": "2026-04-13T03:53:04.953Z",
-    "finished_at": "2026-04-13T03:53:04.970Z",
-    "duration_ms": 17,
-    "status": "success",
-    "summary": {
-      "total": 2,
-      "success": 2,
-      "failed": 0
-    },
-    "targets": [
-      {
-        "node_id": "node_a",
-        "status": "success",
-        "transport_kind": "ssh-direct",
-        "transport_label": "SSH 直连",
-        "exit_code": 0,
-        "finished_at": "2026-04-13T03:53:04.970Z",
-        "duration_ms": 16,
-        "output": ["[01:45:48] 建立连接 node-a (直连)"]
-      }
-    ]
-  }
-}
-```
+删除节点并级联清理其任务、探测、诊断、操作与节点组引用，返回 `{ summary }`。
 
-Returned target metadata now includes:
+## Tasks and probes
 
-- `output_text`: string version of the full output
-- `exit_code`
-- `signal`
-- `timed_out`
-- `transport_kind`
-- `transport_label`
-- `transport_note`
-- `started_at`
-- `finished_at`
-- `duration_ms`
+### `GET /api/v1/tasks`
 
-## `POST /api/v1/shell/sessions`
+返回真实任务流。任务状态 `new|queued|running|success|failed|partial`；类型 `init_alpine|probe_node|node_diagnostic|publish_proxy_config|apply_system_template|apply_system_users`；触发方式含 `bootstrap_register|bootstrap_refresh|bootstrap_auto_probe|manual_probe|manual_diagnostic|manual_retry|manual_release|scheduled_probe`。
 
-为某台节点创建一个会话型 Web Shell。当前实现会优先尝试 SSH；若没有配置 `PLATFORM_SSH_PRIVATE_KEY_PATH` 或节点缺少可用 SSH 条件，则会自动退回控制面本机演示模式。
+> `init_alpine` 是历史任务类型名，实际覆盖 Alpine / Debian / Ubuntu / RHEL 家族。
 
-Request body:
+### `POST /api/v1/tasks/:id/bootstrap-complete`
 
-```json
-{
-  "node_id": "node_xxx"
-}
-```
+公开（需 `bootstrap_token`）。`bootstrap.sh` 写入公钥后回报，触发初始化；只有初始化真正成功后才自动衔接自动首探。重复回调同一任务不会重复创建首探任务（原子认领 + owner 终态保护）。
 
-Success response:
+### `GET /api/v1/probes?node_id=`
 
-```json
-{
-  "session": {
-    "id": "shell_xxx",
-    "node_id": "node_xxx",
-    "status": "open",
-    "transport_kind": "local-demo",
-    "transport_label": "控制面本机演示",
-    "transport_note": "未配置 PLATFORM_SSH_PRIVATE_KEY_PATH，当前会话运行在控制面宿主机。",
-    "output": "[control-plane] 已创建 Web Shell 会话..."
-  }
-}
-```
+返回最近探测结果（上限 500 条）。顶层 `latency_ms` 是该探测类型的主耗时，必须结合 `latency_source`（`management_tcp` / `management_ssh_e2e` / `business_entry_tcp` / `relay_upstream_tcp` / `ssh_auth`）判断口径；SSH 接管耗时不代表业务网络 RTT。`reason_code` 与失败阶段的中文口径统一在 `public/js/shared/probe-formatters.js`。
 
-## `GET /api/v1/shell/sessions/:id`
+## Operations and Web Shell
 
-获取某个 Web Shell 会话的当前状态与累计输出。
+### `GET /api/v1/operations`
 
-Success response:
+批量执行历史（上限 `OPERATION_HISTORY_LIMIT`，默认 1000）。
 
-```json
-{
-  "session": {
-    "id": "shell_xxx",
-    "status": "open",
-    "updated_at": "2026-04-13T03:00:00.000Z",
-    "closed_at": null,
-    "output": "..."
-  }
-}
-```
+### `POST /api/v1/operations/execute`
 
-## `POST /api/v1/shell/sessions/:id/input`
+`201`。请求 `mode: "command"` + `command`，或 `mode: "script"` + `script_name` + `script_body`，附 `node_ids[]`。响应含 `summary` 与逐目标 `targets[]`（`status`、`exit_code`、`signal`、`timed_out`、`transport_kind/label/note`、`output`、`output_text`、`duration_ms`）。
 
-向某个打开中的 Web Shell 会话写入原始输入。
+并发与输出保护：目标级并发 `OPERATION_TARGET_CONCURRENCY`（默认 3）、单目标输出 `OPERATION_OUTPUT_LIMIT_BYTES`（默认 128000）、整体超时 `OPERATION_EXECUTION_TIMEOUT_MS`（默认 300000）。
 
-Request body:
+> SSH 不可用时**不会**回退到控制面本机执行；`local-demo` 传输只在显式设置 `AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT=true` 的开发环境可用，生产禁用。
 
-```json
-{
-  "data": "pwd\n"
-}
-```
+### `POST /api/v1/shell/sessions` · `GET /api/v1/shell/sessions/:id` · `POST .../input` · `DELETE .../:id`
 
-Success response:
+轮询式交互式 SSH 会话（vendored xterm 前端）。`status` 为 `open` / `closed`，空闲超时关闭原因 `idle_timeout`，输出缓冲有上限；向已关闭会话写入返回 `409 { error: "session_not_writable" }`。会话仅存于进程内存，重启即丢失。当前没有单用户/单节点会话数上限。
 
-```json
-{
-  "session": {
-    "id": "shell_xxx",
-    "status": "open"
-  }
-}
-```
+## Bootstrap tokens
 
-## `DELETE /api/v1/shell/sessions/:id`
+- `GET /api/v1/bootstrap-tokens`
+- `POST /api/v1/bootstrap-tokens`：`{ label, expires_at, max_uses, note }`，`201 { token }`
+- `PATCH /api/v1/bootstrap-tokens/:id`：仅 `status`（`active|disabled`）、`expires_at`、`max_uses`、`label`、`note`；提交 `token` 字段会被拒绝
+- 没有 `DELETE`；令牌明文当前仍存于 JSON（哈希化在 `docs/stability-roadmap.md` P2）
 
-关闭某个 Web Shell 会话，并保留一段时间的最终输出供前端查看。
+## Access users, profiles, groups
 
-Success response:
+- `GET|POST /api/v1/access-users`，`PATCH|DELETE /api/v1/access-users/:id`
+- `GET /api/v1/access-users/:id/share`：按当前生效发布返回订阅条目、二维码与告警
+- `POST /api/v1/access-users/:id/share-token/regenerate`
+- `GET|POST /api/v1/proxy-profiles`，`PATCH|DELETE /api/v1/proxy-profiles/:id`
+- `GET|POST /api/v1/node-groups`，`PATCH|DELETE /api/v1/node-groups/:id`
+- `GET|HEAD /sub/:shareToken`：公开订阅输出，可选 `?node_id=` 只取单节点
 
-```json
-{
-  "session": {
-    "id": "shell_xxx",
-    "status": "closed",
-    "closed_at": "2026-04-13T03:01:00.000Z"
-  }
-}
-```
+协议兼容：`hysteria2` 必须 `tls` + UDP/QUIC，凭证取 `credential.password`；`vmess` 支持 `tls` 或 `none`，不支持 `reality`；`reality` 要求节点本地 `template.reality.private_key_path`（私钥内容不接受 inline 提交）；`tls` 需要 `template.tls.certificate_path` 与 `key_path`。被发布记录引用的用户、模板、节点组删除时返回 `409`。
+
+## Config releases
+
+### `GET /api/v1/config-releases`
+
+### `POST /api/v1/config-releases`
+
+`201 { release, task, operation }`。请求 `{ title, profile_id, access_user_ids[], node_group_ids[], node_ids[], operator, note }`。
+
+- 无法解析目标节点，或过滤掉失效用户后没有可发布用户时拒绝请求。
+- 节点侧流程：写 manifest → 渲染 sing-box 配置 → `sing-box check` → 替换配置 → 重启服务 → 失败回滚。
+- 发布成功状态按校验后的实际结果判定，`rendered_only` 不计为成功；Hysteria2 发布要求 UDP/QUIC 复检通过。
+
+## System users and templates
+
+- `GET|POST /api/v1/system-users`，`PATCH|DELETE /api/v1/system-users/:id`
+- `POST /api/v1/system-users/apply`：`{ system_user_ids[], node_group_ids[], node_ids[], title, operator, note, dry_run }` → `201 { release, operation }`
+- `GET /api/v1/system-user-releases`
+- `GET|POST /api/v1/system-templates`，`PATCH|DELETE /api/v1/system-templates/:id`（`category` 默认 `baseline`）
+- `POST /api/v1/system-templates/apply`：`{ template_id, node_group_ids[], node_ids[], title, operator, note, dry_run }` → `201 { release, operation }`
+- `GET /api/v1/system-template-releases`
+
+## Providers and costs
+
+- `GET|POST /api/v1/providers`，`PATCH|DELETE /api/v1/providers/:id`（重名返回 `409`）
+  - 字段：`name`、`account_name`、`website`、`api_endpoint`、`regions[]`、`auto_provision_enabled`、`default_currency`、`monthly_budget`、`budget_alert_threshold`、`default_overage_price_per_gb`、`billing_contact`、`status`、`cost_note`、`note`
+- 成本视图全部只读，按当前台账实时派生：`GET /api/v1/costs/summary`、`/nodes`、`/providers`、`/releases`、`/access-users`
+- 厂商“同步云资源”在前端是显式占位，没有对应的自动建机接口
+
+## Platform settings
+
+- `GET /api/v1/platform-context`：bootstrap 基址、请求来源、局域网探测地址、平台 SSH 密钥状态、sing-box 分发配置、`probe_scheduler` 状态
+- `GET|PATCH /api/v1/platform/sing-box-distribution`：`{ enabled, version, default_version, install_path, variants }`，`variants.<target>` 支持 `enabled` / `upstream_url` / `upstream_sha256`
+- `POST /api/v1/platform/sing-box-distribution/mirror` 与 `.../sync`：同一处理逻辑，请求 `{ target }`，`201`
+- `POST /api/v1/platform/ssh-key/generate`：生成受管密钥；已存在返回 `409`，外部 `PLATFORM_SSH_PRIVATE_KEY_PATH` 优先
+
+`probe_scheduler` 只读：开关、间隔、批量与最小间隔来自环境变量和启动装配，没有对外切换接口。
+
+## Env variables
+
+`PORT`(8080)、`PLATFORM_PUBLIC_KEY`、`PLATFORM_SSH_PRIVATE_KEY_PATH`、`PLATFORM_PUBLIC_BASE_URL`、`CLIENT_PUBLIC_BASE_URL`、`NODE_SSH_USER`(root)、`DEMO_SHELL_BINARY`、`OPERATION_HISTORY_LIMIT`(1000)、`OPERATION_EXECUTION_TIMEOUT_MS`(300000)、`OPERATION_OUTPUT_LIMIT_BYTES`(128000)、`OPERATION_TARGET_CONCURRENCY`(3)、`SSH_CONNECT_TIMEOUT_SECONDS`(15)、`PROBE_TCP_TIMEOUT_MS`(4000)、`PROBE_SSH_TIMEOUT_MS`(12000)、`AUTO_PROBE_ENABLED`(true)、`AUTO_PROBE_INTERVAL_MS`(3600000)、`AUTO_PROBE_MIN_GAP_MS`(3600000)、`AUTO_PROBE_BATCH_SIZE`(0)、`AUTO_PROBE_JITTER_MS`(10000)、`AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT`(未设置)、以及上一节列出的鉴权变量。数据目录固定为仓库内 `data/`，不可通过环境变量改。
+
+## Not implemented
+
+以下能力没有接口，只有前端或文档占位：`GET /api/v1/nodes/:id`、`POST /api/v1/nodes/:id/actions`、`POST /api/v1/probes/report`、`/api/v1/routes*`（中转拓扑页面由 `GET /api/v1/nodes` 客户端派生）、云厂商建机/销毁、NMS/面板适配、外部探测结果上报、登录限流、`/readyz`。

@@ -1,6 +1,32 @@
 # 稳定运行改造路线图
 
-更新时间：2026-08-17
+更新时间：2026-09-22
+文档性质：稳定性与工程质量路线图。逐项状态见下表，代码为最终事实。
+
+## 实施状态
+
+| 项 | 状态 | 依据 |
+| --- | --- | --- |
+| P0.1 JSON 原子写入 | ✅ 已完成 | `src/infrastructure/json-file-store.js`：tmp → fsync → rename + `.bak` + 启动回读 |
+| P0.2 Store 写入串行队列 | ✅ 已完成 | `src/infrastructure/store-persistence.js`，每文件一条队列 |
+| P0.3 请求体上限与 413 | ✅ 已完成 | `src/utils/http.js`：1 MiB、销毁连接、单次 resolve |
+| P0.4 裸机 systemd 加固 | ✅ 已完成，且强于原建议 | `scripts/deploy-systemd.sh`：`Restart=on-failure`、`StartLimitBurst=5`、`MemoryMax=256M`、`NoNewPrivileges`、`PrivateTmp`、`ProtectSystem=strict`、`ReadWritePaths=<data>` |
+| P0.5 自动备份 | ⬜ 未实现 | 只有单文件 `.bak`；无每日/每周备份与一条命令恢复 |
+| P1.0 多系统节点接入 | ✅ 主体完成 | bootstrap 与初始化模板覆盖 Alpine / Debian-Ubuntu / RHEL；发布期按包管理器补装运行时仍待验证 |
+| P1.1 `/readyz` | ⬜ 未实现 | 代码中不存在，`/healthz` 仍只表示进程存活 |
+| P1.2 结构化日志与 `request_id` | ⬜ 未实现 | 仍是零散 `console.*` |
+| P1.3 任务状态机标准化 | 🟡 部分完成 | 遗留 `running` 任务/诊断启动时标 `failed`（非 `interrupted`）；缺 `cancelled`、租约、取消与可靠重试 |
+| P1.4 Web Shell 资源限制 | 🟡 部分完成 | 有输出缓冲上限与空闲超时关闭；缺单用户/单节点会话数上限 |
+| P2.1 登录限流 | ⬜ 未实现 | 服务端无失败计数与锁定，仅前端有分支 |
+| P2.2 Cookie 安全策略 | ✅ 已完成 | `HttpOnly` + `SameSite=Lax` + `CONTROL_PLANE_SESSION_SECURE` / `x-forwarded-proto` 自动 `Secure`，滑动续期 |
+| P2.3 Token 脱敏（哈希化） | ⬜ 未实现 | `bootstrap-tokens.json` 仍存明文以支持一键复制 |
+| P2.4 敏感日志清理 | 🟡 部分完成 | 私钥与 Reality 私钥不落控制面配置；缺统一的日志脱敏与审查 |
+| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 20 个 `node:test` 文件；`npm test` / `npm run check`；核心远程执行端到端仍缺 |
+| P3.2 拆分 `src/server.js` | ⬜ 未开始 | 仍 5763 行，无 `src/routes`、`src/services` |
+| P4.1 SQLite 迁移 | ⬜ 未开始 | 仍是 JSON 文件，无 SQL 依赖 |
+| P4.2 PostgreSQL 预留 | ⬜ 未开始 | repository 层尚未抽出 |
+
+第一批最小改造包（原子写、写队列、413、systemd 加固、测试脚本）已交付；**下一步最高价值是自动备份 + `/readyz` + 结构化日志 + 登录限流，然后进入 SQLite**。
 
 ## 目标
 
@@ -448,6 +474,8 @@ ReadWritePaths=/opt/airport-control-plane/data
 4. 保留备份和回滚路径
 
 ## 当前最小可执行改造包
+
+> 状态：第 1–4 项已交付，第 5 项（每日数据备份）仍未实现。以下保留原始清单作为验收记录。
 
 如果只做一次短平快稳定化，优先做：
 

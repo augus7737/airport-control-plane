@@ -1,10 +1,24 @@
-# 生产部署
+# 生产部署（Docker / Compose 兼容路径）
 
-更新时间：2026-04-15
+更新时间：2026-09-22
+
+> 本文是可选的容器化部署路径。低配单机的推荐形态是裸机 systemd，见
+> [`docs/deployment-systemd.md`](deployment-systemd.md)。两者写的是同一份数据目录，
+> 不要同时启用；环境变量口径以 systemd 文档为准。
+
+## 适用场景
+
+仍然适合走这条路径的情况：
+
+- 主机已经统一用 Docker / 1Panel / 宝塔容器管理，不希望额外装 Node 运行时
+- 需要在多台机器之间快速搬迁整套运行环境
+- 只需要内网演示或临时实例，不追求极致内存占用
+
+不适合的情况：内存 ≤ 1G 且需要长期稳定运行（systemd 路径的资源限制与回滚更完整）。
 
 ## 当前推荐方式
 
-现阶段最适合本项目的上线方式是：
+容器路径的推荐形态：
 
 - 单机部署
 - Docker 容器运行控制面
@@ -13,7 +27,7 @@
 
 原因很直接：
 
-- 现在数据层仍是 JSON 文件，不适合多实例并发写入
+- 现在数据层仍是单机 JSON 文件，不适合多实例并发写入
 - Web Shell / 任务 / 探测都默认按单进程模型设计
 - 先把单机版本跑稳，比过早拆成多组件更符合你当前项目阶段
 
@@ -70,6 +84,7 @@ CONTROL_PLANE_SESSION_SECURE=true
 - `CONTROL_PLANE_AUTH_PASSWORD` 不能保留为示例值 `CHANGE_ME`，部署脚本会直接拒绝上线。
 - 默认一键部署只挂载 `data-prod/ -> /app/data`。
 - 如果你设置 `PLATFORM_SSH_PRIVATE_KEY_PATH` 指向 `/run/secrets/...` 这类自定义位置，请确认你已经额外挂载了对应文件；否则容器内看不到这把私钥。
+- `AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT` 必须保持 `false`（默认值）。打开后 SSH 传输层会在连接失败时退化到控制面本机执行命令，那是离线演示专用开关，生产环境等于把节点命令在自己的服务器上跑。
 
 然后重新执行：
 
@@ -91,21 +106,14 @@ bash install.sh
 
 ## 数据持久化
 
-当前必须备份的目录：
-
-- `data-prod/nodes.json`
-- `data-prod/tasks.json`
-- `data-prod/probes.json`
-- `data-prod/operations.json`
-- `data-prod/bootstrap-tokens.json`
-- `data-prod/platform-ssh/`
-- `data-prod/artifacts/`
-
-最简单的备份方式：
+备份对象是整个数据目录（默认 `data-prod/`，systemd 路径为 `/opt/airport-control-plane/data`），
+而不是单个文件：里面除各 store 的 JSON 台账外，还有平台 SSH 私钥、订阅制品和 `.bak` 副本。
 
 ```bash
 tar -czf airport-backup-$(date +%F).tar.gz data-prod
 ```
+
+清单式的文件与枚举定义见 [`docs/data-model.md`](data-model.md)。
 
 ## 升级方式
 
@@ -128,9 +136,13 @@ bash install.sh
 
 原因：
 
-- 管理员 session 已持久化到数据目录，但仍按单机模型设计，不适合多实例共享
-- JSON 文件没有并发写保护，不适合多实例
-- 平台托管 SSH 密钥默认也存放在数据目录里
+- 数据虽然已经做了原子写入（`tmp -> fsync -> rename` + `.bak`）和同文件串行写队列，
+  但进程内仍持有整份内存态 store，多实例之间不会互相感知写入，会互相覆盖
+- 管理员 session、平台托管 SSH 密钥、订阅制品都默认存放在同一个数据目录里
+- Web Shell 与巡检调度器都是单进程语义，多实例会出现重复调度
+
+换句话说，阻挡多实例的已经不是"JSON 会不会写坏"，而是"内存态没有共享与失效机制"。
+真正的解法是存储迁移（见 [`docs/stability-roadmap.md`](stability-roadmap.md) 的 SQLite 阶段）。
 
 ## 正式生产前你还应做的事
 

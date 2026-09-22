@@ -1,454 +1,219 @@
-# Data Model
+# 数据模型
+
+更新时间：2026-09-22
+适用范围：当前代码实际持久化的实体与字段（`src/server.js` + `src/domain/**`）。文中字段均以代码构造为准。
+
+## 持久化形态
+
+- 没有 SQL、没有 SQLite。每个 store 一个 JSON 文件，路径固定为仓库内 `data/`，无环境变量可改。
+- 除 `platform-sing-box.json` 是对象外，所有文件形状都是 `{ "items": [ ... ] }`。
+- 写入流程：临时文件 → `fsync` → 原子 `rename` → 保留上一版 `.bak`；主文件损坏时启动阶段回读备份（`src/infrastructure/json-file-store.js`）。
+- 每个文件一条串行写队列，避免并发覆盖（`src/infrastructure/store-persistence.js`）。
+- 没有迁移表。“迁移”是启动时幂等修复函数：管理链路字段迁移、厂商地域归一、节点-厂商关联迁移、内置系统模板种子、bootstrap 初始化任务补齐。
+- 启动修复会把遗留的 `running` 任务、`running|queued` 诊断标记为 `failed`，因此控制面重启不会留下永久运行态。
+- 一致性局限：跨文件写入没有事务，历史统计口径依赖最近 N 条记录。**这是 SQLite 迁移的主要动因**（见 `docs/stability-roadmap.md` P4）。
+
+## Store 清单
+
+| 文件 | 实体 | 构造位置 | 上限 |
+| --- | --- | --- | --- |
+| `nodes.json` | Node | `src/domain/nodes/records.js` | 无 |
+| `tasks.json` | Task | `src/domain/tasks/store.js` | 200 |
+| `probes.json` | ProbeResult | `src/domain/probes/executor.js` | 500 |
+| `diagnostics.json` | NodeDiagnostic | `src/domain/diagnostics/node-quality.js` | 200 |
+| `operations.json` | OperationRun | `src/domain/operations/executor.js` | `OPERATION_HISTORY_LIMIT`，默认 1000 |
+| `bootstrap-tokens.json` | BootstrapToken | `src/domain/bootstrap/tokens.js` | 无 |
+| `operator-sessions.json` | OperatorSession | `src/domain/auth/session.js` | 过期即清理 |
+| `access-users.json` | AccessUser | `src/server.js` | 无 |
+| `proxy-profiles.json` | ProxyProfile | `src/server.js` | 无 |
+| `node-groups.json` | NodeGroup | `src/server.js` | 无 |
+| `providers.json` | Provider | `src/server.js` | 无 |
+| `config-releases.json` | ConfigRelease | `src/server.js` | 无 |
+| `system-users.json` / `system-templates.json` | SystemUser / SystemTemplate | `src/server.js` | 无 |
+| `system-user-releases.json` / `system-template-releases.json` | 下发记录 | `src/server.js` | 无 |
+| `platform-sing-box.json` | sing-box 分发配置（对象，非 `items`） | `src/domain/platform/sing-box-distribution.js` | — |
+| `artifacts/sing-box/` | 已镜像的二进制文件 | `src/server.js` | — |
+
+不入库的运行态：Web Shell 会话（仅进程内存）、sing-box 镜像与制品下载中间态。订阅不是实体，它是 `AccessUser.share_token` 加上当前生效发布派生出的输出。
 
 ## Node
 
-Represents one managed VPS.
+```
+{
+  id, fingerprint, status, source,
+  registered_at, last_seen_at, last_probe_at, health_score,
+  labels{ provider, region, role },
+  provider_id, bootstrap_token_id,
+  facts{...}, commercial{...}, networking{...}, management{...}, endpoints{...}
+}
+```
 
-Core fields:
+- `status`：`new | active | degraded | failed`（`disabled` / `retired` 在代码里没有写入路径）。
+- `source`：`bootstrap | manual`。手工录入默认 `active`。
+- `fingerprint` 唯一，用于注册去重。
 
-- `id`
-- `fingerprint`
-- `hostname`
-- `status`
-- `provider`
-- `provider_node_id`
-- `region`
-- `public_ipv4`
-- `public_ipv6`
-- `private_ipv4`
-- `public_ipv4_source`
-- `public_ipv6_source`
-- `public_ipv4_location`
-- `public_ipv6_location`
-- `public_ipv4_owner`
-- `public_ipv6_owner`
-- `os_name`
-- `os_version`
-- `arch`
-- `kernel_version`
-- `cpu_cores`
-- `memory_mb`
-- `disk_gb`
-- `ssh_port`
-- `registered_at`
-- `last_seen_at`
-- `last_probe_at`
-- `health_score`
-- `bootstrap_token_id`
-- `commercial.expires_at`
-- `commercial.auto_renew`
-- `commercial.bandwidth_mbps`
-- `commercial.traffic_quota_gb`
-- `commercial.traffic_used_gb`
-- `commercial.billing_cycle`
-- `commercial.note`
-- `networking.access_mode`
-- `networking.entry_region`
-- `networking.route_direction`
-- `networking.relay_node_id`
-- `networking.relay_label`
-- `networking.relay_region`
-- `networking.entry_host`
-- `networking.entry_port`
-- `networking.internal_host`
-- `networking.internal_port`
-- `networking.topology`
-- `networking.nat_mode`
-- `networking.route_note`
-- `endpoints.management`
-- `endpoints.business_ingress`
-- `endpoints.service_listen`
+### facts（节点自报或人工覆盖的机器事实）
 
-Notes:
+`hostname, os_name, os_id, os_family, os_version, arch, kernel_version, public_ipv4, public_ipv6, private_ipv4, public_ipv4_source, public_ipv4_location, public_ipv4_owner, public_ipv6_source, public_ipv6_location, public_ipv6_owner, machine_id, primary_mac, cpu_cores, memory_mb, disk_gb, ssh_port`
 
-- `last_probe_at` is refreshed by both automatic first probes and later manual re-probes
-- `health_score` and `status` may be updated after each probe result is written back
+IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`，人工覆盖不会被下次上报悄悄冲掉。
 
-### Networking fields
+### commercial（成本与商务）
 
-When a node cannot be reached directly from the target entry region, record the upstream route explicitly:
+`expires_at, auto_renew, bandwidth_mbps, traffic_quota_gb, traffic_used_gb, billing_cycle, billing_amount, billing_currency, amortization_months, overage_price_per_gb, extra_fixed_monthly_cost, billing_started_at, cost_note, note`
 
-- `networking.access_mode`: `direct` or `relay`
-- `networking.entry_region`: where the user first enters the network, such as `中国大陆` or `香港`
-- `networking.route_direction`: optional explicit traffic direction, normalized to `international_egress`, `return_to_china`, or `regional_transit`
-- `networking.relay_node_id`: optional internal node ID of the relay/jump node
-- `networking.relay_label`: human-readable relay node name when the internal node ID is not known yet
-- `networking.relay_region`: relay node region such as `HKG`
-- `networking.entry_host`: optional public business ingress host
-- `networking.entry_port`: optional public entry port; for NAT/LXC port mapping this is the externally reachable port and may differ from the profile listen port
-- `networking.internal_host`: optional internal service target host behind a NAT/LXC mapping
-- `networking.internal_port`: optional internal service target port behind a NAT/LXC mapping
-- `networking.topology`: optional endpoint topology hint such as `direct`, `nat`, or `lxc`
-- `networking.nat_mode`: optional NAT hint such as `port_mapping`
-- `networking.route_note`: free-form note for the route, such as `中国大陆 -> 香港中转 -> 日本落地`
+`billing_cycle` 归一化为 `月付|季付|年付|周付|日付|小时付|一次性`（接受英文别名）；`billing_currency` 校验为 3–10 位大写代码，默认 `CNY`，厂商可带 `default_currency` 参与继承。
 
-### Endpoint fields
+### networking 与 management：两条链路不能混用
 
-Nodes serialize three endpoint records so NAT/LXC mappings do not overload a
-single port field:
+`networking.*` 只描述**业务流量**：
+`access_mode(direct|relay), relay_node_id, relay_label, relay_region, entry_region, entry_host, entry_port, internal_host, internal_port, topology, route_note, route_direction, nat_mode`
 
-- `endpoints.management`: the control-plane management endpoint. `host` / `port`
-  and `external_host` / `external_port` describe the address the control plane
-  should dial for SSH. `internal_host` / `internal_port` describe the SSH service
-  as it listens inside the node or container.
-- `endpoints.business_ingress`: the public customer/proxy ingress endpoint.
-  `external_host` / `external_port` may differ from `internal_host` /
-  `internal_port` when a cloud firewall, NAT gateway, LXC mapping, or relay
-  forwards traffic.
-- `endpoints.service_listen`: the node-local proxy service listen endpoint.
-  This is populated only from explicit listen fields, such as
-  `endpoints.service_listen.port` or `listen_port`; it is never inferred from
-  the SSH mapping port.
+`management.*` 只描述**控制面如何 SSH 接管**：
+`access_mode, relay_strategy(auto|tcp_forward|exec_nc), relay_node_id, relay_label, relay_region, proxy_host, proxy_port, proxy_user, proxy_label, ssh_host, ssh_port, ssh_internal_host, ssh_internal_port, topology, allow_ipv6, ssh_user, route_note`
 
-Compatibility fields remain valid:
+核心不变量：**公网入口端口 ≠ 节点内部监听端口**。NAT/LXC 场景下 `entry_*` / `ssh_*` 是外部可达值，`internal_*` 是容器内监听值；订阅与分享只能输出公网入口。
 
-- `management.ssh_host` and `management.ssh_port` continue to mean the external
-  SSH management ingress used by probes, shell, and operations.
-- `facts.ssh_port` remains the node-reported SSH daemon port. In LXC/NAT
-  deployments this is usually the internal port, often `22`.
-- `networking.entry_port` remains the legacy business ingress port and is
-  serialized into `endpoints.business_ingress.port`.
+### endpoints（拆分的三类端点）
 
-Endpoint topology values are intentionally small and descriptive:
+`endpoints.management`、`endpoints.business_ingress`、`endpoints.service_listen`，每个形如
+`{ kind, protocol, host, port, external_host, external_port, internal_host, internal_port, family, topology, source }`（management 额外带 `ssh_user`）。
 
-- `direct`: external and internal endpoint are the same.
-- `nat`: external and internal host or port differ.
-- `lxc`: container or LXC host-port mapping.
-- `mapped`: generic mapping when the operator does not want to classify it.
-- `relay`: reachable through a relay.
-- `unknown`: recorded but not classified yet.
-- `internal`: node-local service listen endpoint.
+`topology` 枚举：`direct | nat | lxc | mapped | relay | unknown | internal`。
 
-## TrafficRoute
+### 派生的业务身份
 
-`resolveTrafficRoute` returns a backward-compatible runtime route object for publish and share generation. It now also carries stable fields for future RoutePool health input:
-
-- `route_direction`: normalized direction, inferred when the node does not explicitly set one
-- `requested_route_direction`: original operator-supplied value when present
-- `route_id`
-- `route_key`
-- `route_identity`
-- `health_input`
-
-Direction inference keeps the first-hop region and landing region separate:
-
-- mainland China entry to non-mainland landing defaults to `international_egress`
-- non-mainland entry to mainland China landing defaults to `return_to_china`
-- other relay or regional paths default to `regional_transit`
-
-Invalid explicit directions add `route_direction_invalid` to `problems` and keep the route unpublished.
-
-## BootstrapToken
-
-Controls who may enroll nodes.
-
-Core fields:
-
-- `id`
-- `token`
-- `label`
-- `status`
-- `expires_at`
-- `max_uses`
-- `uses`
-- `created_at`
-- `last_used_at`
-- `last_used_node_id`
-- `note`
-
-## AccessUser
-
-Represents one internal proxy access identity managed by the control plane.
-
-Core fields:
-
-- `id`
-- `name`
-- `protocol`
-- `credential.uuid`
-- `credential.password` (for `hysteria2`)
-- `credential.alter_id` (for `vmess`)
-- `status`
-- `expires_at`
-- `profile_id`
-- `node_group_ids[]`
-- `note`
-- `created_at`
-- `updated_at`
-
-Notes:
-
-- current version supports internal `vless` / `vmess` / `hysteria2` access identities
-- Hysteria2 uses a generated or operator-supplied password; it does not use a UUID
-- `profile_id` points to one `ProxyProfile`
-- `node_group_ids` describes the default release scope for this user
-
-## ProxyProfile
-
-Represents one reusable protocol template.
-
-Core fields:
-
-- `id`
-- `name`
-- `protocol`
-- `listen_port`
-- `transport`
-- `security`
-- `tls_enabled`
-- `reality_enabled`
-- `server_name`
-- `flow`
-- `mux_enabled`
-- `tag`
-- `template`
-- `status`
-- `note`
-- `created_at`
-- `updated_at`
-
-Notes:
-
-- current version supports `vless`, `vmess` and `hysteria2`
-- Hysteria2 is rendered as TLS + UDP/QUIC and may carry `template.hysteria2.obfs` for `salamander`
-- `template` stores the managed profile payload that later renders into node-side config
-
-## NodeGroup
-
-Represents one managed release scope.
-
-Core fields:
-
-- `id`
-- `name`
-- `type`
-- `status`
-- `node_ids[]`
-- `filters`
-- `note`
-- `created_at`
-- `updated_at`
-
-Notes:
-
-- current MVP only supports static groups
-- future versions may add rule-based groups by country, provider, route, or health
-
-## ConfigRelease
-
-Represents one publish action that binds users, template, and nodes together.
-
-Core fields:
-
-- `id`
-- `type`
-- `title`
-- `status`
-- `operator`
-- `access_user_ids[]`
-- `profile_id`
-- `node_group_ids[]`
-- `node_ids[]`
-- `operation_id`
-- `task_ids[]`
-- `version`
-- `summary.total_nodes`
-- `summary.success_nodes`
-- `summary.failed_nodes`
-- `summary.access_user_count`
-- `summary.active_user_count`
-- `summary.skipped_user_count`
-- `summary.profile_name`
-- `summary.engine`
-- `summary.action_type`
-- `summary.delivery_mode`
-- `summary.rollbackable`
-- `summary.based_on_release_id`
-- `summary.rollback_target_release_id`
-- `summary.config_digest_before`
-- `summary.config_digest_after`
-- `summary.change_summary`
-- `summary.apply_summary.total`
-- `summary.apply_summary.success`
-- `summary.apply_summary.failed`
-- `summary.apply_summary.applied`
-- `summary.apply_summary.rendered_only`
-- `summary.apply_summary.rolled_back`
-- `summary.failed_nodes_sample[]`
-- `note`
-- `created_at`
-- `started_at`
-- `finished_at`
-
-Notes:
-
-- each release reuses the existing batch `OperationRun`
-- node-level publish progress is tracked through `Task` records linked by `task_ids`
-- first real engine is `sing-box`, focused on `VLESS`
-- release digests are used to tell whether the rendered config changed between versions
+节点身份不止 `labels`。发布与订阅会解析 `AccessUser + ProxyProfile + networking + endpoints` 得到入口/落地/中转三元组，因此节点没有“业务角色”字段也能表达入口机与落地机。这是当前实现的关键设计选择，也是后续 Route 实体化的迁移起点。
 
 ## Task
 
-Represents an asynchronous operation initiated by the platform.
+```
+{ id, node_id, type, title, status, template, trigger, payload,
+  attempt, scheduled_at, created_at, started_at, finished_at,
+  operation_id, note, log_excerpt }
+```
 
-Core fields:
-
-- `id`
-- `node_id`
-- `type`
-- `title`
-- `status`
-- `template`
-- `trigger`
-- `payload`
-- `attempt`
-- `created_at`
-- `scheduled_at`
-- `updated_at`
-- `started_at`
-- `finished_at`
-- `operation_id`
-- `note`
-- `log_excerpt`
-
-Examples:
-
-- `bootstrap_finalize`
-- `init_alpine`
-- `probe_node`
-- `publish_proxy_config`
-- `restart_service`
-- `panel_enroll`
-- `provider_replace`
-
-Typical `trigger` values:
-
-- `bootstrap_register`: created automatically when a node first enrolls
-- `bootstrap_refresh`: reused or refreshed when an existing node reports again
-- `bootstrap_auto_probe`: automatic first probe chained after successful init
-- `scheduled_probe`: background periodic inspection created by the control plane scheduler
-- `manual_probe`: operator-triggered manual re-probe from the console
-
-## OperationRun
-
-Represents one batch shell or script execution initiated from the web console.
-
-Core fields:
-
-- `id`
-- `created_at`
-- `started_at`
-- `finished_at`
-- `duration_ms`
-- `operator`
-- `mode`
-- `title`
-- `command`
-- `script_name`
-- `script_body`
-- `status`
-- `summary.total`
-- `summary.success`
-- `summary.failed`
-- `node_ids`
-- `targets[].node_id`
-- `targets[].hostname`
-- `targets[].provider`
-- `targets[].region`
-- `targets[].access_mode`
-- `targets[].summary`
-- `targets[].status`
-- `targets[].output[]`
-- `targets[].output_text`
-- `targets[].exit_code`
-- `targets[].signal`
-- `targets[].timed_out`
-- `targets[].transport_kind`
-- `targets[].transport_label`
-- `targets[].transport_note`
-- `targets[].started_at`
-- `targets[].finished_at`
-- `targets[].duration_ms`
+- `id = task_<uuid>`，初始 `status = "new"`。
+- `status`：`new → queued → running → success | failed | partial`。
+- `type`：`init_alpine | probe_node | node_diagnostic | publish_proxy_config | apply_system_template | apply_system_users`。`init_alpine` 只是历史名字，实际覆盖 Alpine / Debian-Ubuntu / RHEL 家族。
+- `trigger`：`bootstrap_register | bootstrap_refresh | bootstrap_auto_probe | manual_probe | manual_diagnostic | manual_retry | manual_release | scheduled_probe`。
+- 认领是原子的：同一任务并发执行只有一个 owner 能推进终态。
+- 任务→节点状态映射：`success → active`，`failed → degraded`。
+- 历史裁剪会保留活跃任务，不会把正在跑的任务裁掉。
 
 ## ProbeResult
 
-Stores network and service quality observations.
+```
+{ id, node_id, task_id, probe_type, target, target_host, target_port,
+  access_mode, transport_kind, transport_label,
+  success, control_ready, reason_code, summary,
+  latency_ms, latency_source, packet_loss_ratio, health_score,
+  error_stage, error_message, stages{...}, observed_at }
+```
 
-Core fields:
+- `probe_type`：`ssh_auth | business_entry_tcp | relay_upstream_tcp | full_stack`。
+- `latency_source`：`management_tcp | management_ssh_e2e | business_entry_tcp | relay_upstream_tcp | ssh_auth | relay_direct_tcp_skipped`。
+- `reason_code` 是稳定枚举（如 `probe_target_missing`、`business_route_unpublished`、`relay_udp_not_supported`、`udp_timeout`），中文文案只在 `public/js/shared/probe-formatters.js` 维护一份，前端不再各自硬编码。
+- 探测完成只更新健康字段，不用旧节点快照回写资产字段。
 
-- `id`
-- `node_id`
-- `task_id`
-- `probe_type`
-- `target`
-- `target_host`
-- `target_port`
-- `access_mode`
-- `transport_kind`
-- `transport_label`
-- `latency_ms`
-- `latency_source`
-- `packet_loss_ratio`
-- `success`
-- `control_ready`
-- `reason_code`
-- `summary`
-- `error_stage`
-- `error_message`
-- `stderr_excerpt`
-- `stages.tcp`
-- `stages.ssh`
-- `observed_at`
+## NodeDiagnostic
 
-`latency_source` identifies which stage supplied top-level `latency_ms`; stage-level
-latencies remain available under `stages`.
+```
+{ id, node_id, task_id, profile(light|deep), provider: "nodequality",
+  status, result_quality(failed|partial|null), summary,
+  host_group_key, guard{static_blockers, runtime_blockers, warnings},
+  preflight, transport, reports{hardware, ip, net},
+  created_at, started_at, finished_at, updated_at }
+```
 
-Examples:
+深度诊断按 `host_group_key`（同一公网入口宿主）互斥，避免在同一台物理机上并发压测。
 
-- `tcp_ssh`
-- `ssh_auth`
+## OperationRun
 
-Notes:
+```
+{ id, mode, title, status, summary{total, success, failed},
+  started_at, finished_at, duration_ms,
+  targets[{ node_id, status, transport_kind, transport_label, transport_note,
+            exit_code, signal, timed_out, output[], output_text,
+            started_at, finished_at, duration_ms }] }
+```
 
-- `ProbeResult.reason_code` is the compact reason used by the UI to map health status and recommendations
-- `stages.tcp` records the first-hop TCP result, while `stages.ssh` records the SSH takeover verification result or the reason it was skipped
+目标状态 `pending → running → success | failed`；整体 `success | partial | failed`。
 
-## PanelBinding
+## AccessUser
 
-Tracks an external system enrollment.
+```
+{ id: access_user_<uuid>, name, protocol(vless|vmess|hysteria2),
+  credential{ uuid | alter_id | password },
+  status(active|disabled|...), expires_at, profile_id, node_group_ids[],
+  share_token, share_token_created_at, share_token_updated_at, note,
+  created_at, updated_at }
+```
 
-Core fields:
+凭证按协议分支：`vless/vmess` 用 `uuid`（`vmess` 另有 `alter_id`），`hysteria2` 用 `password`。被发布记录引用的用户不能删除。
 
-- `id`
-- `node_id`
-- `panel_type`
-- `remote_id`
-- `status`
-- `synced_at`
+## ProxyProfile
 
-## ProviderBinding
+```
+{ id, name, protocol, listen_port, transport, security(reality|tls|none),
+  tls_enabled, reality_enabled, sni/server_name, flow, mux_enabled,
+  status(active|draft|...), template{...}, note, created_at, updated_at }
+```
 
-Tracks cloud provider metadata.
+默认 `protocol=vless`、`listen_port=443`、`flow=xtls-rprx-vision`，`security` 在 `vless` 下默认 `reality`，`vmess/hysteria2` 回落 `tls`。兼容矩阵（HY2 必须 `tls`+UDP；`vmess` 不支持 `reality`）目前仍分散在校验器与 sing-box 渲染器中，是 `docs/duplication-audit.md` 的待办项。
 
-Core fields:
+## NodeGroup
 
-- `id`
-- `node_id`
-- `provider`
-- `account_name`
-- `region`
-- `instance_type`
-- `billing_cycle`
-- `expires_at`
-- `remote_id`
+`{ id, name, type: "static", node_ids[], note, created_at, updated_at }`。被用户或发布引用时删除返回 `409`。
 
-## State transitions
+## Provider
 
-Recommended initial node states:
+`{ id: provider_<uuid>, name, account_name, website, api_endpoint, regions[], auto_provision_enabled, default_currency, monthly_budget, budget_alert_threshold, default_overage_price_per_gb, billing_contact, status, cost_note, note, created_at, updated_at }`
 
-- `new`
-- `active`
-- `degraded`
-- `failed`
-- `disabled`
-- `retired`
+节点通过 `node.provider_id` 关联厂商；`instance_type` / `remote_id` / `PanelBinding` / `ProviderBinding` 这类字段在代码中不存在。
+
+## ConfigRelease
+
+```
+{ id, type: "publish_proxy_config", version: rel_<ts>, title, status,
+  profile_id, access_user_ids[], node_ids[], node_group_ids[],
+  routes[序列化后的 TrafficRoute], deployments[逐节点结果],
+  operation_id, task_ids[], created_by, note, created_at, updated_at }
+```
+
+`status` 起始 `running`，由 `src/domain/releases/verification.js` 的复检结果收敛；成功集合与失败集合是显式枚举（`success|passed|ok|ready|healthy|running|applied` / `failed|failure|error|errored|timeout|rolled_back`），逐目标检查记录 `passed|skipped|missing`。
+
+## SystemUser / SystemTemplate 与下发记录
+
+- SystemUser：`{ id, name, username, uid, groups[], sudo_enabled, shell, home_dir, ssh_authorized_keys[], status, node_group_ids[], note, created_at, updated_at }`
+- SystemTemplate：`{ id, name, category(baseline|...), script_name, script_body, status, node_group_ids[], tags[], note, created_at, updated_at }`；内置种子 `alpine-base`、`debian-base`、`rhel-base`（+ ACME 证书模板）。
+- 两类 release 记录：`{ id, ..._id, target_node_ids, status, operation_id, created_at }`。
+
+## BootstrapToken
+
+`{ id, token, label, status(active|disabled|expired|exhausted), created_at, expires_at, max_uses, uses, last_used_at, last_used_node_id, note }`
+
+令牌目前**明文**存储以支持一键复制；哈希化改造在 `docs/stability-roadmap.md` P2。
+
+## OperatorSession
+
+`{ id: <uuid>, username, created_at, last_seen_at, expires_at_ms }`
+
+## 枚举总表
+
+| 语义 | 取值 | 权威位置 |
+| --- | --- | --- |
+| 节点状态 | `new active degraded failed` | `src/domain/nodes/records.js`、`src/domain/tasks/lifecycle.js` |
+| 任务状态 | `new queued running success failed partial` | `src/domain/tasks/store.js` |
+| 任务类型 | `init_alpine probe_node node_diagnostic publish_proxy_config apply_system_template apply_system_users` | `src/server.js` |
+| 探测类型 | `ssh_auth business_entry_tcp relay_upstream_tcp full_stack` | `src/domain/probes/executor.js` |
+| 耗时口径 | `management_tcp management_ssh_e2e business_entry_tcp relay_upstream_tcp ssh_auth relay_direct_tcp_skipped` | `src/domain/probes/executor.js`、`public/js/shared/probe-formatters.js` |
+| 链路方向 | `international_egress return_to_china regional_transit` | `src/domain/routes/traffic.js` |
+| 接入模式 | `direct relay` | `src/http/validators.js` |
+| 拓扑 | `direct nat lxc mapped relay unknown internal` | `src/domain/nodes/records.js` |
+| 管理中转策略 | `auto tcp_forward exec_nc` | `src/domain/routes/management-strategies.js` |
+| SSH 传输种类 | `ssh-direct ssh-relay-tcp-forward ssh-relay-exec-nc ssh-proxy local-demo` | `src/domain/platform/ssh.js` |
+| 协议 / 安全 / 传输 | `vless vmess hysteria2` / `reality tls none` / `tcp udp ws grpc http httpupgrade` | `src/http/validators.js`、`src/domain/releases/sing-box.js` |
+| 计费周期 | `月付 季付 年付 周付 日付 小时付 一次性` | `src/domain/costs/normalize.js`、`public/js/shared/billing-options.js` |
+| 币种 | `^[A-Z][A-Z0-9_-]{1,9}$`，默认 `CNY` | `src/domain/costs/normalize.js`、`public/js/shared/currency-options.js` |
+| 管理 SSH 默认端口 | `22`（`19822` 仅作为 legacy 常量保留） | `src/domain/nodes/management-defaults.js`、`public/js/shared/management-defaults.js` |

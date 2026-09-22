@@ -1,100 +1,91 @@
 # Architecture
 
+更新时间：2026-09-22
+
+本文分两部分：**当前实现**（可以依赖的事实）与**目标形态**（尚未实现的方向）。两者刻意分开写，避免把路线图能力误读成现状。
+
 ## Design principles
 
-- Centralized control: scheduling, decision-making, and state live in the control plane.
-- Agentless by default: nodes register once, then the platform uses SSH or one-shot commands.
-- Lightweight edge footprint: Alpine nodes should only need shell, curl, and OpenSSH.
-- Replaceable integrations: cloud providers, probes, and panel adapters should be pluggable.
-- Event-friendly core: node state changes should trigger follow-up actions without tight coupling.
+- 控制面集中：调度、决策、状态都在控制面进程内。
+- 节点侧无常驻 Agent：一次 bootstrap 接入，之后靠 SSH 与一次性脚本。
+- 边缘足迹极小：节点只需 shell、curl、OpenSSH，Alpine / Debian-Ubuntu / RHEL 家族均可接入。
+- 管理链路与业务链路分离：SSH 接管路径与用户流量路径是两套字段、两套探测。
+- 数据面不由控制面进程承载：转发由节点侧 sing-box 等成熟组件承担。
 
-## Core components
+## Current implementation
 
-### 1. API server
+### 进程形态
 
-Responsibilities:
+单个 Node.js 进程（`node:http`，无 Web 框架）承载 API、任务执行、周期巡检、配置发布、订阅生成与 Web Shell 会话。前端是无打包链的静态多页面控制台，业务后端依赖只有 `qrcode`。
 
-- receive bootstrap registrations
-- expose node and task APIs
-- validate and normalize incoming facts
-- return next actions to bootstrap clients
+```
+src/server.js            启动装配 + 55 个路由模式 + 实体构造（5.7k 行，待拆分）
+src/domain/              领域逻辑：auth bootstrap costs diagnostics nodes operations
+                         platform probes releases routes shares shell system tasks
+src/http/validators.js   入站 payload 校验
+src/infrastructure/      json-file-store（原子写 + .bak）、store-persistence（写队列、启动修复）
+src/runtime/             startup（load + 幂等迁移 + 修复）、probe-scheduler
+src/utils/               http、request-handler（全局异常边界）、static-assets
+public/                  15 个 HTML 页面 + js/{pages,modals,cells,layout,store,shared,auth}
+data/                    每 store 一个 JSON 文件（gitignore）
+scripts/                 bootstrap.sh、deploy-systemd.sh、deploy-production.sh、seed-local-demo.js
+test/                    20 个 node:test 文件
+```
 
-### 2. Inventory service
+### 请求边界
 
-Responsibilities:
+`createSafeRequestHandler` 包裹全部请求：请求体上限 1 MiB（超限 `413` 并销毁连接）、无法解析的 `Host` 回退 `localhost`、未捕获异常统一 `500 { error: "internal_server_error" }`。鉴权与公开接口的白名单在 `src/server.js` 集中判定，详见 `docs/api.md`。
 
-- store node records
-- deduplicate by fingerprint and provider identifiers
-- track lifecycle state, labels, and ownership
-- attach provider and panel metadata
+### 三个平面（现状）
 
-### 3. Task orchestrator
+```
+控制平面  API + 实体构造 + 发布计划 + 任务编排           已实现，单进程
+数据平面  节点侧 sing-box / HAProxy / TCP 转发            已实现，由发布写入并重启
+观测平面  周期巡检 + 手动复探 + 节点诊断 + 健康分          已实现，无告警
+```
 
-Responsibilities:
+### 关键数据事实
 
-- queue initialization and maintenance jobs
-- schedule SSH-based execution
-- track run logs and retries
-- emit state transition events
+- 持久化是每实体一个 JSON 文件，原子写 + 单文件串行写队列 + 启动期修复；**没有事务、没有跨文件一致性**。
+- “迁移”是启动时幂等修复函数，没有 migration 账本。
+- 业务路由当前由 `node.networking.*` + `node.endpoints.*` + `AccessUser/ProxyProfile/NodeGroup` 在读取时解析成 `TrafficRoute`，序列化后随 `ConfigRelease.routes[]` 落库；独立的 `Endpoint / Link / Route / RoutePool` 实体仍是设计目标。
 
-### 4. Probe service
+### 当前架构的硬边界
 
-Responsibilities:
+- 只适合单机部署，不支持多实例并发写。
+- Web Shell 会话与内存态运行信息重启即丢失（管理员会话已落盘）。
+- 没有正式队列中间件、告警、审计与自动回滚控制面。
+- API、执行、探测、发布同进程，压力与故障域集中。
 
-- trigger active probes from the control plane
-- ingest external probe results
-- compute node health summaries
-- raise action suggestions for unhealthy nodes
+## Target shape（未实现）
 
-### 5. Provider adapters
+### 组件分解（目标，非现状）
 
-Responsibilities:
+| 组件 | 状态 |
+| --- | --- |
+| API server | 已实现（与下述组件同进程） |
+| Inventory / 事实与资产管理 | 已实现 |
+| Task orchestrator | 已实现原子认领；缺租约、取消、可靠重试 |
+| Probe service | 已实现主动探测；**外部探测结果上报接口不存在** |
+| Provider adapters（建机/销毁） | 未实现，厂商模块只有台账与成本 |
+| Panel / NMS adapters | 未实现 |
+| postgres / redis / blackbox_exporter / prometheus | 未采用；近期路线是 SQLite 而非 PG/Redis |
 
-- create and destroy VPS instances
-- attach metadata and tags
-- return provider-specific identifiers
-- surface provisioning failures
+### 内部边界拆分顺序
 
-### 6. Panel adapters
+1. HTTP 路由层（`src/routes/*`，目前不存在）
+2. 节点与 Endpoint 服务
+3. 任务执行与租约
+4. 探测与质量评分
+5. Route / RoutePolicy 解析器
+6. 发布计划与执行器
+7. 订阅与分享生成器
+8. repository 与事务层
 
-Responsibilities:
+### 部署形态
 
-- enroll nodes into external systems
-- push or sync node metadata
-- update platform records with remote IDs
+当前 canonical：裸机 systemd（专用 `airport` 用户、`/opt/airport-control-plane`、`MemoryMax=256M`、`ProtectSystem=strict`、`ReadWritePaths=<data>`、HTTPS 由反向代理终结），见 `docs/deployment-systemd.md`。Docker/Compose 保留为兼容路径，不是低配主路径。横向扩展、多实例 HA 不在近期范围。
 
-## Control flow
+## Historical notes
 
-### Bootstrap registration
-
-1. operator runs one bootstrap command on a node
-2. node collects local facts
-3. node posts to `/api/v1/nodes/register`
-4. platform deduplicates and creates or updates the node record
-5. platform returns `node_id`, SSH material instructions, and next actions
-6. orchestrator schedules initialization tasks
-
-### Ongoing operations
-
-1. probe service updates health data
-2. health score changes node status
-3. task orchestrator decides whether to retry, repair, or disable
-4. provider adapters may create replacement nodes later
-
-## Suggested future deployment topology
-
-- `api`: core HTTP API
-- `worker`: async task execution
-- `postgres`: system of record
-- `redis`: queue and transient coordination
-- `blackbox_exporter`: remote probe executor
-- `grafana/prometheus`: external observability stack
-
-## Suggested v1 implementation shape
-
-Even if production later moves to Go, the domain boundaries should stay the same:
-
-- `src/domain`: entities and policies
-- `src/application`: use cases
-- `src/adapters`: HTTP, SSH, provider, and panel integrations
-- `src/infrastructure`: persistence and queueing
+早期文档设想的 `src/application` + `src/adapters` 目录结构没有采用；实际落地是 `src/domain` + `src/http` + `src/infrastructure` + `src/runtime` + `src/utils`。领域边界的原则保留，目录命名与实现方式已按当前代码记录。

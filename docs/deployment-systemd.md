@@ -1,6 +1,6 @@
 # 裸机 systemd 部署
 
-更新时间：2026-08-21
+更新时间：2026-08-21（2026-09-22 对照 `scripts/deploy-systemd.sh` 与 `src/server.js` 复核，内容无变化）
 
 这条部署链路是低配 Ubuntu/Debian 控制面主机的 canonical 方式：不使用 Docker，不依赖 Compose，直接用专用系统用户和 systemd 运行 Node.js 服务。
 
