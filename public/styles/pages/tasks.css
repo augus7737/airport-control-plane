@@ -4,96 +4,80 @@ body[data-page="tasks"] .aside-stack .panel-body {
   gap: 16px;
 }
 
-body[data-page="tasks"] .tasks-page-head {
+body[data-page="tasks"] .tasks-list-panel {
   margin-top: 0;
 }
 
-body[data-page="tasks"] .tasks-probe-panel .panel-body {
-  gap: 14px;
-}
-
-body[data-page="tasks"] .tasks-probe-title {
-  align-items: flex-start;
-  gap: 12px;
-}
-
-body[data-page="tasks"] .tasks-probe-badges {
-  display: inline-flex;
+body[data-page="tasks"] .tasks-status-bar {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-body[data-page="tasks"] .tasks-probe-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-body[data-page="tasks"] .tasks-probe-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  justify-content: space-between;
+  gap: 10px 18px;
+  margin-top: 4px;
   padding: 12px 14px;
-  border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.16);
-  background:
-    linear-gradient(180deg, rgba(19, 30, 51, 0.82), rgba(19, 30, 51, 0.72));
+  border-radius: 16px;
+  background: rgba(148, 163, 184, 0.06);
 }
 
-body[data-page="tasks"] .tasks-probe-item span {
+body[data-page="tasks"] .tasks-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 16px;
+}
+
+body[data-page="tasks"] .tasks-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   color: var(--muted);
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
+  font-size: 0.82rem;
 }
 
-body[data-page="tasks"] .tasks-probe-item strong {
-  font-size: 0.96rem;
-  line-height: 1.4;
+body[data-page="tasks"] .tasks-count strong {
   color: var(--text);
+  font-size: 1.02rem;
+  font-variant-numeric: tabular-nums;
 }
 
-body[data-page="tasks"] .tasks-probe-item small {
-  color: color-mix(in srgb, var(--muted) 88%, white);
-  font-size: 0.74rem;
-  line-height: 1.5;
+body[data-page="tasks"] .tasks-count.danger strong {
+  color: var(--danger-text);
 }
 
-body[data-page="tasks"] .tasks-probe-chips {
-  justify-content: flex-start;
+body[data-page="tasks"] .tasks-count.running strong {
+  color: var(--info-text);
+}
+
+body[data-page="tasks"] .tasks-count.success strong {
+  color: var(--success-text);
+}
+
+body[data-page="tasks"] .tasks-scheduler-note {
+  display: flex;
+  min-width: 0;
+  align-items: center;
   gap: 10px;
 }
 
-body[data-page="tasks"] .tasks-probe-chips .pill {
-  max-width: 100%;
+body[data-page="tasks"] .tasks-scheduler-note .tiny {
+  color: var(--muted);
 }
 
-body[data-page="tasks"] .tasks-probe-chips .pill strong {
-  max-width: 32ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-body[data-page="tasks"] .tasks-probe-chips .pill.danger {
-  border-color: rgba(239, 68, 68, 0.18);
-  background: rgba(19, 30, 51, 0.92);
-}
-
-body[data-page="tasks"] .tasks-list-panel {
-  margin-top: 16px;
+body[data-page="tasks"] .tasks-scheduler-note .badge {
+  flex: none;
 }
 
 body[data-page="tasks"] .tasks-filter-toolbar {
   position: sticky;
   top: 16px;
-  z-index: 2;
+  z-index: 3;
   display: grid;
-  grid-template-columns: minmax(280px, 1.5fr) repeat(2, minmax(140px, 0.6fr)) auto auto;
+  grid-template-columns: minmax(240px, 1.5fr) repeat(2, minmax(140px, 0.6fr)) auto auto;
   gap: 10px;
   align-items: end;
+  margin-top: 12px;
   margin-bottom: 12px;
   padding: 14px;
   border: 1px solid rgba(148, 163, 184, 0.16);
@@ -127,9 +111,23 @@ body[data-page="tasks"] .tasks-filter-toolbar-actions {
   flex-wrap: wrap;
 }
 
-body[data-page="tasks"] .tasks-filter-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: end;
+body[data-page="tasks"] .tasks-refresh-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+body[data-page="tasks"] .tasks-auto-refresh-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  cursor: pointer;
 }
 
 body[data-page="tasks"] .tasks-actionable-toggle {
@@ -149,10 +147,6 @@ body[data-page="tasks"] .tasks-actionable-toggle input {
   margin: 0;
 }
 
-body[data-page="tasks"] .tasks-filter-summary {
-  justify-content: flex-start;
-}
-
 body[data-page="tasks"] tr[data-task-select] {
   cursor: pointer;
 }
@@ -165,17 +159,24 @@ body[data-page="tasks"] .tasks-workspace {
 }
 
 body[data-page="tasks"] .tasks-workspace.has-selection {
-  grid-template-columns: minmax(0, 1.52fr) minmax(320px, 0.78fr);
+  grid-template-columns: minmax(0, 1.52fr) minmax(300px, 0.78fr);
   align-items: start;
 }
 
 body[data-page="tasks"] .tasks-detail-rail {
   align-self: start;
+  min-width: 0;
+}
+
+body[data-page="tasks"] .tasks-detail-rail .panel {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 body[data-page="tasks"] .tasks-detail-rail > .panel:first-child {
   position: sticky;
-  top: 16px;
+  top: 132px;
+  background-color: #111a2c;
 }
 
 body[data-page="tasks"] .tasks-table-shell {
@@ -183,36 +184,151 @@ body[data-page="tasks"] .tasks-table-shell {
 }
 
 body[data-page="tasks"] .tasks-table-shell table {
-  min-width: 980px;
+  min-width: 576px;
   table-layout: fixed;
+}
+
+body[data-page="tasks"] .task-col-task {
+  width: 18%;
+}
+
+body[data-page="tasks"] .task-col-node {
+  width: 15%;
+}
+
+body[data-page="tasks"] .task-col-status {
+  width: 16%;
+}
+
+body[data-page="tasks"] .task-col-time {
+  width: 14%;
+}
+
+body[data-page="tasks"] .task-col-summary {
+  width: 21%;
+}
+
+body[data-page="tasks"] .task-col-action {
+  width: 16%;
+}
+
+/* With the detail rail open, the list column is ~600px: the rail already carries
+   the diagnosis, so the summary column yields its width to the scan columns.
+   Below 1101px the rail stacks under the list and the table has room again. */
+@media (min-width: 1101px) {
+  body[data-page="tasks"] .tasks-workspace.has-selection .task-col-summary {
+    display: none;
+  }
+
+  body[data-page="tasks"] .tasks-workspace.has-selection .task-col-task {
+    width: 25%;
+  }
+
+  body[data-page="tasks"] .tasks-workspace.has-selection .task-col-node {
+    width: 21%;
+  }
+
+  body[data-page="tasks"] .tasks-workspace.has-selection .task-col-status {
+    width: 20%;
+  }
+
+  body[data-page="tasks"] .tasks-workspace.has-selection .task-col-time {
+    width: 16%;
+  }
+
+  body[data-page="tasks"] .tasks-workspace.has-selection .task-col-action {
+    width: 18%;
+  }
 }
 
 body[data-page="tasks"] .tasks-table-shell th,
 body[data-page="tasks"] .tasks-table-shell td {
-  padding: 9px 10px;
+  padding: 10px 8px;
+  vertical-align: top;
 }
 
 body[data-page="tasks"] .tasks-table-shell th {
-  font-size: 11px;
+  font-size: 12px;
 }
 
-body[data-page="tasks"] .tasks-table-shell td:nth-child(7) {
+body[data-page="tasks"] .task-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+body[data-page="tasks"] .task-status-cell > * {
+  max-width: 100%;
+}
+
+body[data-page="tasks"] .tasks-table-shell .node-meta {
+  min-width: 0;
+}
+
+body[data-page="tasks"] .tasks-table-shell .node-meta > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="tasks"] .task-status-cell .badge {
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+body[data-page="tasks"] td.task-node-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="tasks"] td.task-summary-cell {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
+body[data-page="tasks"] td.task-summary-cell .task-summary-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+body[data-page="tasks"] .link-like {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 body[data-page="tasks"] .task-row-selected {
-  background: rgba(14, 116, 144, 0.08);
+  background: rgba(14, 116, 144, 0.14);
 }
 
 body[data-page="tasks"] .task-row-selected td {
-  box-shadow: inset 0 1px 0 rgba(14, 116, 144, 0.08), inset 0 -1px 0 rgba(14, 116, 144, 0.08);
+  box-shadow: inset 0 1px 0 rgba(14, 116, 144, 0.22), inset 0 -1px 0 rgba(14, 116, 144, 0.22);
+}
+
+body[data-page="tasks"] tr[data-task-select]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 body[data-page="tasks"] .task-action-button {
-  min-width: 96px;
+  min-width: 76px;
   justify-content: center;
+}
+
+body[data-page="tasks"] .tasks-table-shell .task-action-button {
+  min-width: 56px;
+  max-width: 100%;
+  padding-inline: 10px;
 }
 
 body[data-page="tasks"] .task-action-button[disabled],
@@ -225,6 +341,7 @@ body[data-page="tasks"] .task-action-button.is-loading::after {
   content: "";
   width: 0.7em;
   height: 0.7em;
+  margin-left: 5px;
   border-radius: 999px;
   background: currentColor;
   opacity: 0.55;
@@ -258,6 +375,11 @@ body[data-page="tasks"] .task-operation-panel .panel-body {
   gap: 14px;
 }
 
+body[data-page="tasks"] .task-probe-evidence {
+  display: grid;
+  gap: 8px;
+}
+
 body[data-page="tasks"] .task-operation-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -268,10 +390,15 @@ body[data-page="tasks"] .task-operation-kv {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(19, 30, 51, 0.72);
+}
+
+body[data-page="tasks"] .task-operation-kv strong {
+  overflow-wrap: anywhere;
 }
 
 body[data-page="tasks"] .task-operation-kv span {
@@ -340,10 +467,6 @@ body[data-page="tasks"] .task-log-list .event p {
 }
 
 @media (max-width: 1100px) {
-  body[data-page="tasks"] .tasks-probe-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   body[data-page="tasks"] .tasks-filter-toolbar,
   body[data-page="tasks"] .tasks-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -360,21 +483,14 @@ body[data-page="tasks"] .task-log-list .event p {
 
   body[data-page="tasks"] .tasks-detail-rail > .panel:first-child {
     position: static;
+    top: auto;
   }
 }
 
 @media (max-width: 720px) {
-  body[data-page="tasks"] .tasks-probe-title {
+  body[data-page="tasks"] .tasks-status-bar {
+    align-items: flex-start;
     flex-direction: column;
-    align-items: stretch;
-  }
-
-  body[data-page="tasks"] .tasks-probe-badges {
-    justify-content: flex-start;
-  }
-
-  body[data-page="tasks"] .tasks-probe-strip {
-    grid-template-columns: 1fr;
   }
 
   body[data-page="tasks"] .tasks-filter-toolbar,
@@ -401,7 +517,11 @@ body[data-page="tasks"] .task-log-list .event p {
   }
 }
 
-html[data-theme="light"] body[data-page="tasks"] .tasks-probe-item,
+html[data-theme="light"] body[data-page="tasks"] .tasks-status-bar {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.03);
+}
+
 html[data-theme="light"] body[data-page="tasks"] .tasks-filter-toolbar,
 html[data-theme="light"] body[data-page="tasks"] .tasks-actionable-toggle,
 html[data-theme="light"] body[data-page="tasks"] .task-operation-kv,
@@ -413,24 +533,25 @@ html[data-theme="light"] body[data-page="tasks"] .task-operation-window {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
-html[data-theme="light"] body[data-page="tasks"] .tasks-probe-item small {
-  color: #64748b;
-}
-
-html[data-theme="light"] body[data-page="tasks"] .tasks-probe-chips .pill.danger {
-  border-color: rgba(220, 38, 38, 0.18);
-  background: rgba(254, 242, 242, 0.9);
+html[data-theme="light"] body[data-page="tasks"] .tasks-detail-rail > .panel:first-child {
+  background-color: #ffffff;
 }
 
 html[data-theme="light"] body[data-page="tasks"] .task-row-selected {
-  background: rgba(14, 165, 233, 0.08);
+  background: rgba(14, 165, 233, 0.16);
 }
 
 html[data-theme="light"] body[data-page="tasks"] .task-row-selected td {
-  box-shadow: inset 0 1px 0 rgba(14, 116, 144, 0.08), inset 0 -1px 0 rgba(14, 116, 144, 0.08);
+  box-shadow: inset 0 1px 0 rgba(14, 116, 144, 0.24), inset 0 -1px 0 rgba(14, 116, 144, 0.24);
 }
 
 html[data-theme="light"] body[data-page="tasks"] .task-operation-window-head {
   border-bottom-color: rgba(15, 23, 42, 0.1);
   background: rgba(14, 165, 233, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="tasks"] .task-action-button.is-loading::after {
+    animation: none;
+  }
 }

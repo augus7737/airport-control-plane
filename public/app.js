@@ -57,6 +57,7 @@ import {
   getProbeTcpStage,
   normalizeProbeCode,
   probeReasonLabel,
+  probeStageLabel,
 } from "./js/shared/probe-formatters.js";
 import {
   buildCurvePath,
@@ -70,12 +71,14 @@ import {
 } from "./js/shared/route-helpers.js";
 import {
   getDiagnosticsForNode,
-  formatTaskAttempt,
+  formatTaskRound,
   getProbesForNode,
   getTaskDisplayTitle,
   getTasksForNode,
   getTaskSummary,
   resolveTaskNode,
+  taskStatusClassName,
+  taskStatusText,
 } from "./js/shared/task-helpers.js";
 import {
   appState,
@@ -488,18 +491,25 @@ const { renderTasksPage, setupTasksPage } = createTasksPageModule({
   documentRef: document,
   escapeHtml,
   fetchImpl: authFetch,
+  formatDateTime,
+  formatDuration,
   formatRelativeTime,
-  formatTaskAttempt,
+  formatTaskRound,
   getNodeDisplayName,
   getTaskDisplayTitle,
   getTaskSummary,
   nodeDetailHref,
   page,
+  probeReasonLabel,
+  probeStageLabel,
   refreshRuntimeData,
   renderCurrentContent,
+  resolveDurationMs,
   resolveTaskNode,
   statusClassName,
   statusText,
+  taskStatusClassName,
+  taskStatusText,
   windowRef: window,
 });
 const { renderProvidersPage, setupProvidersPage } = createProvidersPageModule({
@@ -722,7 +732,7 @@ const { renderNodeDetail } = createNodeDetailPageRenderer({
   formatRelativeTime,
   formatRenewal,
   formatRouteSummary,
-  formatTaskAttempt,
+  formatTaskRound,
   formatTraffic,
   getAccessMode,
   getCurrentNode,

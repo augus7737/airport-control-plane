@@ -128,6 +128,9 @@ export const appState = {
     selectedTaskId: null,
     pendingActionTaskIds: new Set(),
     operationOutputExpanded: false,
+    autoRefresh: true,
+    isRefreshing: false,
+    lastRefreshedAt: null,
     message: null,
   },
   nodeDetail: {

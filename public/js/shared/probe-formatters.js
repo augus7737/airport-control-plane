@@ -90,6 +90,18 @@ function getRelayUpstreamStage(probe) {
   return probe?.stages?.relay_upstream_tcp || null;
 }
 
+export function probeStageLabel(code) {
+  const value = normalizeProbeCode(code);
+  if (!value) return "";
+  if (value === "management_tcp") return "管理链路 TCP 预检";
+  if (value === "management_ssh_e2e") return "管理链路 SSH 端到端";
+  if (value === "ssh_auth") return "SSH 认证";
+  if (value === "business_entry_tcp") return "业务入口 TCP";
+  if (value === "relay_upstream_tcp") return "入口到上游 TCP";
+  if (value === "relay_direct_tcp_skipped") return "中转直连预检";
+  return code;
+}
+
 export function getProbeTcpStage(probe) {
   return getManagementTcpStage(probe) || getBusinessEntryStage(probe) || null;
 }

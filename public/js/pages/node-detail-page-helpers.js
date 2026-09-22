@@ -2,6 +2,7 @@ import {
   formatCostStatus,
   formatCurrencyTotals,
 } from "../shared/cost-formatters.js";
+import { taskStatusText } from "../shared/task-helpers.js";
 
 export function normalizePercent(value, fallback = 0) {
   if (!Number.isFinite(value)) return fallback;
@@ -305,7 +306,7 @@ export function buildNodeDetailViewModel({
   formatRelativeTime,
   formatRenewal,
   formatRouteSummary,
-  formatTaskAttempt,
+  formatTaskRound,
   formatTraffic,
   getAccessMode,
   getDiagnostics,
@@ -471,7 +472,7 @@ export function buildNodeDetailViewModel({
       badgeText: statusText(task.status),
       title: getTaskDisplayTitle(task),
       summary: getTaskSummary(task),
-      detail: `${statusText(task.status)} / ${formatTaskAttempt(task)}`,
+      detail: `${taskStatusText(task.status)} / ${formatTaskRound(task)}`,
       at: task.started_at || task.scheduled_at || task.created_at,
       sortTime: new Date(task.started_at || task.scheduled_at || task.created_at || 0).getTime() || 0,
     })),

@@ -23,6 +23,11 @@
   border-radius: 12px;
   background: var(--surface-field);
   color: var(--text);
+}
+
+.field input:focus:not(:focus-visible),
+.field select:focus:not(:focus-visible),
+.field textarea:focus:not(:focus-visible) {
   outline: none;
 }
 
