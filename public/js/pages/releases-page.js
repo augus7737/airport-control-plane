@@ -407,7 +407,12 @@ export function createReleasesPageModule(dependencies) {
                   <div class="ops-inline-meta">
                     <strong>${escapeHtml(String(groupNodeCount))} 台节点</strong>
                     <span class="tiny">${escapeHtml(
-                      groupNodeCount ? group.node_ids.slice(0, 3).map((nodeId) => getNodeName(nodeId)).join(" / ") : "等待纳入节点",
+                      groupNodeCount
+                        ? `${group.node_ids
+                            .slice(0, 3)
+                            .map((nodeId) => getNodeName(nodeId))
+                            .join(" / ")}${groupNodeCount > 3 ? ` +${groupNodeCount - 3} 台未列出` : ""}`
+                        : "等待纳入节点",
                     )}</span>
                   </div>
                 </td>

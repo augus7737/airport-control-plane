@@ -735,6 +735,9 @@ export function createRoutesPageModule(dependencies) {
     const { mapped: mappedCountries, unmappedCount: unmappedCountryCount } = splitCountryStats(
       getCountryStats(nodes),
     );
+    const entryPoints = [...model.entryPoints].sort((left, right) => right.total - left.total);
+    const entryPointLimit = 5;
+    const hiddenEntryPointCount = Math.max(0, entryPoints.length - entryPointLimit);
 
     return `
       <div class="route-map-shell">
@@ -745,7 +748,7 @@ export function createRoutesPageModule(dependencies) {
             <p>把入口区域、管理好的中转节点和落地国家投到真实世界底图上。橙色代表入口到中转，绿色代表中转到落地，蓝色虚线代表直连。三个计数都是地点数，不是机器数。</p>
           </div>
           <div class="route-map-badges">
-            <span class="route-map-badge is-entry">入口区域 ${model.entryPoints.length}</span>
+            <span class="route-map-badge is-entry">入口区域 ${entryPoints.length}</span>
             <span class="route-map-badge is-relay">中转节点 ${model.relayPoints.length}</span>
             <span class="route-map-badge is-country">落地国家 ${mappedCountries.length}</span>
             ${
@@ -781,9 +784,8 @@ export function createRoutesPageModule(dependencies) {
               <div class="event-list compact">
                 ${
                   model.entryPoints.length > 0
-                    ? model.entryPoints
-                        .sort((left, right) => right.total - left.total)
-                        .slice(0, 5)
+                    ? entryPoints
+                        .slice(0, entryPointLimit)
                         .map((entryPoint) => `
                           <div class="event">
                             <strong>${escapeHtml(formatRegionChip(entryPoint.label, "entry"))}</strong>
@@ -794,6 +796,11 @@ export function createRoutesPageModule(dependencies) {
                     : '<div class="event"><strong>暂无入口区域数据</strong><p>录入经中转节点后，这里会自动统计不同入口区域的分布。</p></div>'
                 }
               </div>
+              ${
+                hiddenEntryPointCount > 0
+                  ? `<div class="country-list-more">另有 ${hiddenEntryPointCount} 个入口区域未展示。</div>`
+                  : ""
+              }
             </section>
             <section class="route-map-sidecard">
               <header>

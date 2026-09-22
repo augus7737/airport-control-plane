@@ -88,6 +88,14 @@ body[data-page="providers"] .provider-inline-tag {
   font-weight: 600;
 }
 
+body[data-page="providers"] .provider-inline-tag.is-more {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+}
+
 body[data-page="providers"] .ops-empty-block {
   padding: 14px 16px;
   border: 1px dashed rgba(56, 189, 248, 0.22);

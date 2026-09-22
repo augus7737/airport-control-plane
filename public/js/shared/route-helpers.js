@@ -130,8 +130,9 @@ export function getCountryStats(nodes = []) {
     } else {
       existing.direct += 1;
     }
-    if (node.labels?.provider) {
-      existing.providers.add(node.labels.provider);
+    const normalizedProvider = String(node.labels?.provider || "").trim().toLowerCase();
+    if (normalizedProvider) {
+      existing.providers.add(normalizedProvider);
     }
     const normalizedRegion = normalizeLocationValue(node.labels?.region, { scope: "region" });
     if (normalizedRegion) {

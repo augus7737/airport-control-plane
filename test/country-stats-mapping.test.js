@@ -51,3 +51,14 @@ test("country stats merge every label of one country into a single entry", () =>
     ["新加坡", "日本", "美国"].sort(),
   );
 });
+
+test("provider label case and spacing variants count as one vendor", () => {
+  const stats = getCountryStats([
+    { labels: { region: "新加坡", provider: "Vultr" } },
+    { labels: { region: "新加坡", provider: " vultr " } },
+    { labels: { region: "新加坡", provider: "VULTR" } },
+    { labels: { region: "新加坡", provider: "AWS" } },
+  ]);
+
+  assert.equal(stats[0].providers, 2);
+});

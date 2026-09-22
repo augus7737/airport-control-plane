@@ -25,6 +25,9 @@ function joinCommaList(value) {
   return Array.isArray(value) ? value.filter(Boolean).join(", ") : "";
 }
 
+// 没打厂商标签的节点会归到这个占位分组，它不是一家厂商，不能计入"未建档厂商"。
+const UNMARKED_PROVIDER_NAME = "未标记";
+
 function normalizeProviderRegions(values = []) {
   return [...new Set(
     (Array.isArray(values) ? values : [values])
@@ -69,7 +72,7 @@ export function createProvidersPageModule(dependencies) {
   };
 
   function normalizeNodeProviderName(node) {
-    return String(node?.labels?.provider || "").trim() || "未标记";
+    return String(node?.labels?.provider || "").trim() || UNMARKED_PROVIDER_NAME;
   }
 
   function normalizeNodeRegionName(node) {
@@ -259,16 +262,22 @@ export function createProvidersPageModule(dependencies) {
     );
   }
 
-  function getNodeOnlySummaries() {
+  function getNodeOnlySummaries(nodeSummaries) {
     const providerNames = new Set(
       appState.providers
         .map((provider) => String(provider.name || "").trim().toLowerCase())
         .filter(Boolean),
     );
 
-    return summarizeProviders(appState.nodes).filter(
-      (summary) => !providerNames.has(summary.name.trim().toLowerCase()),
+    return nodeSummaries.filter(
+      (summary) =>
+        summary.name !== UNMARKED_PROVIDER_NAME &&
+        !providerNames.has(summary.name.trim().toLowerCase()),
     );
+  }
+
+  function getUnmarkedNodeCount(nodeSummaries) {
+    return nodeSummaries.find((summary) => summary.name === UNMARKED_PROVIDER_NAME)?.total ?? 0;
   }
 
   function scrollToForm() {
@@ -336,8 +345,14 @@ export function createProvidersPageModule(dependencies) {
     const draft = getDraft(selectedProvider);
     const filteredProviders = getFilteredProviders();
     const nodeSummaryByName = getNodeSummaryByProviderName();
-    const nodeOnlySummaries = getNodeOnlySummaries();
-    const totalNodeProviders = summarizeProviders(appState.nodes).length;
+    const nodeProviderSummaries = summarizeProviders(appState.nodes);
+    const nodeOnlySummaries = getNodeOnlySummaries(nodeProviderSummaries);
+    const unmarkedNodeCount = getUnmarkedNodeCount(nodeProviderSummaries);
+    const ledgerAlignmentNote = nodeOnlySummaries.length > 0
+      ? `另有 ${nodeOnlySummaries.length} 个厂商标签未建档。`
+      : unmarkedNodeCount > 0
+        ? `${unmarkedNodeCount} 台节点未打厂商标签。`
+        : "节点标签与厂商台账已基本对齐。";
     const autoProvisionCount = appState.providers.filter(
       (provider) => provider.auto_provision_enabled,
     ).length;
@@ -411,7 +426,7 @@ export function createProvidersPageModule(dependencies) {
         </tr>
       `;
 
-    const nodeSummaryCards = summarizeProviders(appState.nodes)
+    const nodeSummaryCards = nodeProviderSummaries
       .map((provider) => {
         const matchedProvider = appState.providers.find(
           (item) => String(item.name || "").trim().toLowerCase() === provider.name.trim().toLowerCase(),
@@ -430,7 +445,13 @@ export function createProvidersPageModule(dependencies) {
               <div class="kv-row"><span>纳管节点</span><strong>${provider.total}</strong></div>
               <div class="kv-row"><span>链路结构</span><strong>直连 ${provider.direct} / 中转 ${provider.relay}</strong></div>
               <div class="kv-row"><span>接入来源</span><strong>${escapeHtml(provider.sourceLabel)}</strong></div>
-              <div class="kv-row"><span>台账状态</span><strong>${escapeHtml(matchedProvider ? "已建档" : "仅节点标签")}</strong></div>
+              <div class="kv-row"><span>台账状态</span><strong>${escapeHtml(
+                matchedProvider
+                  ? "已建档"
+                  : provider.name === UNMARKED_PROVIDER_NAME
+                    ? "未打厂商标签"
+                    : "仅节点标签",
+              )}</strong></div>
               ${
                 matchedProvider
                   ? `<div class="kv-row"><span>总月成本</span><strong>${escapeHtml(
@@ -458,7 +479,17 @@ export function createProvidersPageModule(dependencies) {
               .slice(0, 8)
               .map((summary) => `<span class="provider-inline-tag">${escapeHtml(summary.name)}</span>`)
               .join("")}
+            ${
+              nodeOnlySummaries.length > 8
+                ? `<span class="provider-inline-tag is-more">另有 ${nodeOnlySummaries.length - 8} 个未展示</span>`
+                : ""
+            }
           </div>
+          ${
+            unmarkedNodeCount > 0
+              ? `<p>${unmarkedNodeCount} 台节点还没有厂商标签，未计入上面的数量。</p>`
+              : ""
+          }
         </div>
       `
       : "";
@@ -492,7 +523,7 @@ export function createProvidersPageModule(dependencies) {
         <article class="panel"><div class="panel-body"><div class="stat-label">已建档厂商</div><div class="stat-value">${appState.providers.length}</div><div class="stat-foot">现在可以手工录入、编辑和维护厂商账号信息。</div></div></article>
         <article class="panel"><div class="panel-body"><div class="stat-label">月成本总额</div><div class="stat-value">${escapeHtml(formatCurrencyTotals(costSummary, "待补"))}</div><div class="stat-foot">按节点实时折算，不做汇率换算。</div></div></article>
         <article class="panel"><div class="panel-body"><div class="stat-label">闲置成本</div><div class="stat-value">${escapeHtml(formatCurrencyTotals(costSummary.idle_totals_by_currency, "0"))}</div><div class="stat-foot">当前不在任何活跃发布里的节点成本。</div></div></article>
-        <article class="panel"><div class="panel-body"><div class="stat-label">预算预警</div><div class="stat-value">${budgetAlertCount}</div><div class="stat-foot">${autoProvisionCount} 个厂商已预留自动化；${nodeOnlySummaries.length > 0 ? `另有 ${nodeOnlySummaries.length} 个只存在于节点标签。` : "节点标签与厂商台账已基本对齐。"}</div></div></article>
+        <article class="panel"><div class="panel-body"><div class="stat-label">预算预警</div><div class="stat-value">${budgetAlertCount}</div><div class="stat-foot">${autoProvisionCount} 个厂商已预留自动化；${ledgerAlignmentNote}</div></div></article>
       </section>
 
       <section class="ops-page-grid fade-up">
@@ -677,7 +708,7 @@ export function createProvidersPageModule(dependencies) {
               <h3>节点视角汇总</h3>
               <p>这里保留你当前节点真实跑出来的厂商分布，方便核对哪些厂商已经建档，哪些还只是节点标签。</p>
             </div>
-            <div class="provider-pill">共 ${summarizeProviders(appState.nodes).length} 个</div>
+            <div class="provider-pill">共 ${nodeProviderSummaries.length} 个标签分组${unmarkedNodeCount > 0 ? ` · 未标记 ${unmarkedNodeCount} 台` : ""}</div>
           </div>
           ${
             nodeSummaryCards

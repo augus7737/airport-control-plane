@@ -511,13 +511,16 @@ export function createProxyProfilesPageModule(dependencies) {
     const selectedProfileAlert = selectedProfile
       ? `当前模板已关联 ${selectedAssignedUsers} 个接入用户，修改后建议到发布中心重新下发。`
       : "先收口高频协议参数，再把边角能力留给高级 JSON，避免每次发布都手工拼模板。";
-    const relatedReleases = [...appState.configReleases]
-      .filter((release) => (selectedProfile ? release.profile_id === selectedProfile.id : true))
+    const relatedReleaseScope = appState.configReleases.filter((release) =>
+      selectedProfile ? release.profile_id === selectedProfile.id : true,
+    );
+    const relatedReleases = [...relatedReleaseScope]
       .sort(
         (left, right) =>
           new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime(),
       )
       .slice(0, 6);
+    const hiddenRelatedReleaseCount = relatedReleaseScope.length - relatedReleases.length;
     const relatedReleaseItems = relatedReleases.length
       ? relatedReleases
           .map(
@@ -689,6 +692,13 @@ export function createProxyProfilesPageModule(dependencies) {
                 </div>
               </div>
               <div class="ops-soft-list">${relatedReleaseItems}</div>
+              ${
+                hiddenRelatedReleaseCount > 0
+                  ? `<p class="tiny">另有 ${hiddenRelatedReleaseCount} 条${
+                      selectedProfile ? "历史发布" : "发布记录"
+                    }未展示，共 ${relatedReleaseScope.length} 条。</p>`
+                  : ""
+              }
             </div>
           </article>
         </aside>

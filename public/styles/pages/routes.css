@@ -441,7 +441,8 @@ body[data-page="routes"] .country-list-more {
   color: var(--muted);
 }
 
-body[data-page="routes"] .country-grid + .country-list-more {
+body[data-page="routes"] .country-grid + .country-list-more,
+body[data-page="routes"] .event-list + .country-list-more {
   margin-top: 10px;
 }
 
