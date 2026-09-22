@@ -1,0 +1,74 @@
+name: airport-local-e2e
+
+x-node: &node
+  build:
+    context: .
+    dockerfile: Dockerfile.node
+  image: airport-local-node:dev
+  # 控制面用 /etc/machine-id 当节点指纹，镜像层里它三台相同，必须在启动时重建身份，
+  # 否则三台节点会互相覆盖成同一条记录。
+  entrypoint:
+    - /bin/sh
+    - -c
+    - |
+      rm -f /etc/machine-id /var/lib/dbus/machine-id
+      systemd-machine-id-setup
+      ln -sf /etc/machine-id /var/lib/dbus/machine-id
+      ssh-keygen -A
+      exec /sbin/init
+  privileged: true
+  stop_grace_period: 5s
+  tmpfs:
+    - /run
+    - /run/lock
+    - /tmp
+  volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+services:
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: docker/local-nodes/Dockerfile.dev
+    image: airport-control-plane:dev
+    working_dir: /app
+    command: ["npm", "run", "dev"]
+    environment:
+      PORT: "8080"
+      PLATFORM_PUBLIC_BASE_URL: http://control-plane:8080
+      CLIENT_PUBLIC_BASE_URL: http://control-plane:8080
+      NODE_SSH_USER: root
+      AUTO_PROBE_ENABLED: "false"
+      SSH_CONNECT_TIMEOUT_SECONDS: "8"
+      PROBE_TCP_TIMEOUT_MS: "3000"
+      PROBE_SSH_TIMEOUT_MS: "15000"
+    volumes:
+      - ../../src:/app/src
+      - ../../public:/app/public
+      - ../../scripts:/app/scripts
+      - airport-e2e-data:/app/data
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      - node-hk
+      - node-sg
+      - node-us
+
+  node-hk:
+    <<: *node
+    hostname: node-hk
+
+  node-sg:
+    <<: *node
+    hostname: node-sg
+
+  node-us:
+    <<: *node
+    hostname: node-us
+
+# 注：不模拟 x86 节点。在 Apple Silicon 上用 platform: linux/amd64 跑 systemd 时，
+# sshd 的 ExecStartPre 与 /run/sshd 特权分离目录都不稳定，验证结论不可信；
+# amd64 路径请直接用真实 VPS 验证。
+
+volumes:
+  airport-e2e-data:

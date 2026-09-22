@@ -1,0 +1,39 @@
+ARG BASE_IMAGE=docker.m.daocloud.io/library/debian:trixie-slim
+FROM ${BASE_IMAGE}
+
+# 国内环境用 HTTP 镜像：Tuna 的 HTTPS 在容器里证书校验失败，HTTP 实测比默认源快一个数量级。
+ARG APT_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN set -eu; \
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do \
+      [ -f "$f" ] || continue; \
+      sed -i \
+        -e "s|http://deb.debian.org/debian|${APT_MIRROR}|g" \
+        -e "s|http://deb.debian.org/debian-security|${APT_MIRROR}-security|g" \
+        -e "s|http://security.debian.org/debian-security|${APT_MIRROR}-security|g" \
+        -e "s|http://archive.ubuntu.com/ubuntu|${APT_MIRROR}|g" \
+        -e "s|http://ports.ubuntu.com/ubuntu-ports|${APT_MIRROR}|g" \
+        -e "s|http://security.ubuntu.com/ubuntu|${APT_MIRROR}|g" \
+        "$f"; \
+    done; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      iproute2 \
+      netcat-openbsd \
+      openssh-server \
+      procps \
+      systemd \
+      systemd-sysv \
+      tar; \
+    rm -rf /var/lib/apt/lists/*; \
+    mkdir -p /run/sshd /etc/sing-box /var/log/sing-box /etc/systemd/system/multi-user.target.wants; \
+    printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\nUsePAM no\n' \
+      >/etc/ssh/sshd_config.d/90-airport.conf; \
+    ln -sf /lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service
+
+STOPSIGNAL SIGRTMIN+3
+
+ENTRYPOINT ["/sbin/init"]

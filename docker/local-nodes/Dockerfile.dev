@@ -1,0 +1,31 @@
+FROM node:20-bookworm-slim
+
+# 控制面靠 spawn 系统 ssh 与 curl 干活，裸 node 镜像没有 openssh-client，节点操作会直接 ENOENT。
+ENV DEBIAN_FRONTEND=noninteractive \
+    NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+
+RUN set -eu; \
+    for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+      [ -f "$f" ] || continue; \
+      sed -i \
+        -e "s|http://deb.debian.org/debian-security|http://mirrors.tuna.tsinghua.edu.cn/debian-security|g" \
+        -e "s|http://deb.debian.org/debian|http://mirrors.tuna.tsinghua.edu.cn/debian|g" \
+        "$f"; \
+    done; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      iputils-ping \
+      netcat-openbsd \
+      openssh-client \
+      procps \
+      tar; \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+
+CMD ["npm", "run", "dev"]
