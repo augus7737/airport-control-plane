@@ -115,7 +115,12 @@ Operator auth env vars:
 
 ### `GET /api/v1/nodes`
 
-返回全量节点。前端一次拉取后在本地派生筛选与拓扑，**没有** `GET /api/v1/nodes/:id`。
+返回全量节点。前端一次拉取后在本地派生筛选与拓扑。
+
+### `GET /api/v1/nodes/:id`
+
+返回 `200 { node }`（nodeStore 原始记录，与列表同一口径、无 serializer）。非法百分号编码 → `400 bad_request`；未建档 → `404 not_found`。
+注意 `manual`、`register` 不是保留 id 之外的字面量：`GET /api/v1/nodes/manual` 走本接口并返回 `404`，真实的 `POST /api/v1/nodes/manual` 由后面的精确 pathname 分支处理。
 
 ### `POST /api/v1/nodes/register`
 
@@ -206,6 +211,20 @@ Notes:
 - `entry_host` / `entry_port`：用户流量真实公网入口；`internal_host` / `internal_port`：节点内部监听。**两者必须分开**，订阅只使用前者。
 - `relay_node_id` / `relay_label` / `relay_region`：单级中转描述。
 - `billing_cycle` 接受 `月付/季付/年付/周付/日付/小时付/一次性` 及英文别名；`billing_currency` 为 3–10 位大写代码，默认 `CNY`。
+
+### `PATCH /api/v1/nodes/:id/labels`
+
+自定义标签的唯一写入口，节点其余字段不受影响：
+
+```json
+{ "labels": { "batch": "round-2", "role": null } }
+```
+
+- 语义是**按键合并**：出现的键写入或覆盖，值为 `null` 或空白字符串即删除该键；不能整份替换标签集。
+- `PATCH /:id/assets` 只能改 `provider` / `region` / `role` 这三个已知键，自定义键只能通过本接口读写。
+- `region` 走共享地域字典（`东京` → `日本`），与注册和列表口径一致。
+- 校验失败返回 `400 validation_failed`：`labels` 必须是对象（不接受数组）、单次最多 20 个键、键名去掉首尾空白后非空且 ≤ 40 字符不含换行、值只能是字符串或 `null` 且 ≤ 100 字符。
+- 未建档 `404 not_found`，非法百分号编码 `400 bad_request`；成功返回 `200 { node }`。
 
 ### `POST /api/v1/nodes/:id/init`
 
@@ -335,4 +354,4 @@ Notes:
 
 ## Not implemented
 
-以下能力没有接口，只有前端或文档占位：`GET /api/v1/nodes/:id`、`POST /api/v1/nodes/:id/actions`、`POST /api/v1/probes/report`、`/api/v1/routes*`（中转拓扑页面由 `GET /api/v1/nodes` 客户端派生）、云厂商建机/销毁、NMS/面板适配、外部探测结果上报、登录限流、`/readyz`。
+以下能力没有接口，只有前端或文档占位：`POST /api/v1/nodes/:id/actions`、`POST /api/v1/probes/report`、`/api/v1/routes*`（中转拓扑页面由 `GET /api/v1/nodes` 客户端派生）、云厂商建机/销毁、NMS/面板适配、外部探测结果上报、登录限流、`/readyz`。

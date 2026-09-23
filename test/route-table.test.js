@@ -57,6 +57,8 @@ const routes = [
   ["POST", "/api/v1/nodes/manual", 400, "validation_failed"],
   ["POST", "/api/v1/nodes/register", 400, "validation_failed", "anon"],
   ["PATCH", "/api/v1/nodes/missing-node/assets", 404, "not_found"],
+  ["PATCH", "/api/v1/nodes/missing-node/labels", 404, "not_found"],
+  ["PATCH", "/api/v1/nodes/%/labels", 400, "bad_request"],
   ["POST", "/api/v1/nodes/missing-node/init", 404, "not_found"],
   ["POST", "/api/v1/nodes/missing-node/probe", 404, "not_found"],
   ["POST", "/api/v1/nodes/missing-node/diagnostics", 404, "not_found"],
@@ -303,6 +305,93 @@ test("GET /api/v1/nodes/:id reads a single node record", async () => {
     const invalidIdBody = await invalidId.json();
     assert.equal(invalidIdBody.error, "bad_request");
     assert.equal(invalidIdBody.message, "invalid node id");
+  } finally {
+    await server.stop();
+  }
+});
+
+// 自定义 labels 只能走窄口 PATCH：合并写入、null 或空串删除，其余字段不受影响。
+test("PATCH /api/v1/nodes/:id/labels merges and removes custom labels only", async () => {
+  const server = await startProbeServer();
+
+  try {
+    const cookie = await loginSession(server.baseUrl);
+    const headers = { "content-type": "application/json", cookie };
+
+    const created = await fetch(`${server.baseUrl}/api/v1/nodes/manual`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ hostname: `route-table-labels-${Date.now()}` }),
+    });
+    assert.equal(created.status, 201);
+    const { node: createdNode } = await created.json();
+    const nodeUrl = `${server.baseUrl}/api/v1/nodes/${encodeURIComponent(createdNode.id)}/labels`;
+
+    const merged = await fetch(nodeUrl, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ labels: { batch: "round-2", role: "  egress  " } }),
+    });
+    assert.equal(merged.status, 200);
+    const mergedBody = await merged.json();
+    assert.equal(mergedBody.error, undefined);
+    assert.equal(mergedBody.node.labels.batch, "round-2");
+    assert.equal(mergedBody.node.labels.role, "egress", "values must be trimmed");
+    assert.equal(mergedBody.node.hostname, createdNode.hostname, "only labels may change");
+    assert.deepEqual(
+      Object.keys(mergedBody.node).sort(),
+      Object.keys(createdNode).sort(),
+      "the update must not add or drop fields",
+    );
+
+    const regionLabel = await fetch(nodeUrl, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ labels: { region: "  东京  " } }),
+    });
+    assert.equal(regionLabel.status, 200);
+    const regionLabelBody = await regionLabel.json();
+    assert.equal(regionLabelBody.node.labels.batch, "round-2", "writes must merge, not replace");
+    assert.equal(
+      regionLabelBody.node.labels.region,
+      // 地域字典的既有口径：东京归一到国家「日本」，窄口不能绕开归一
+      "日本",
+    );
+
+    const removed = await fetch(nodeUrl, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ labels: { batch: null, role: "" } }),
+    });
+    assert.equal(removed.status, 200);
+    const removedBody = await removed.json();
+    assert.equal("batch" in removedBody.node.labels, false);
+    assert.equal("role" in removedBody.node.labels, false);
+
+    const invalidPayloads = [
+      [{}, "labels must be an object"],
+      [{ labels: [] }, "labels must be an object"],
+      [{ labels: { batch: 3 } }, "labels.batch must be a string or null"],
+      [{ labels: { "": "x" } }, "labels key must be a non-empty string"],
+    ];
+
+    for (const [body, expectedDetail] of invalidPayloads) {
+      const invalid = await fetch(nodeUrl, { method: "PATCH", headers, body: JSON.stringify(body) });
+      assert.equal(invalid.status, 400, `${JSON.stringify(body)} must be rejected`);
+      const invalidBody = await invalid.json();
+      assert.equal(invalidBody.error, "validation_failed");
+      assert.ok(
+        invalidBody.details.includes(expectedDetail),
+        `expected "${expectedDetail}" in ${JSON.stringify(invalidBody.details)}`,
+      );
+    }
+
+    const unchanged = await fetch(
+      `${server.baseUrl}/api/v1/nodes/${encodeURIComponent(createdNode.id)}`,
+      { headers },
+    );
+    const unchangedBody = await unchanged.json();
+    assert.equal(unchangedBody.node.labels.batch, undefined, "rejected writes must not persist");
   } finally {
     await server.stop();
   }

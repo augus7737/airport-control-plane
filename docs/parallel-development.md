@@ -38,7 +38,7 @@
    extractRemoteAddress）、`../../utils/network.js`、`../../http/validators.js`、
    `../../utils/static-assets.js`、node 内置模块。
 
-拆分是纯搬家，没有顺手改逻辑，所以 nodes 这类老模块 ctx 很重（38 项）。后续任何一轮里，
+拆分是纯搬家，没有顺手改逻辑，所以 nodes 这类老模块 ctx 很重（40 项）。后续任何一轮里，
 把某模块的 ctx 项下沉为 utils/domain 的直接 import 是**降耦合的正确方向**，但必须一次一个模块、
 `node --test` 全绿再走下一步。
 
@@ -78,14 +78,18 @@
 
 **nodes**
 - 可改：`src/http/routes/nodes.js`
-- 接口面：`GET /api/v1/nodes`、`DELETE /api/v1/nodes/:id`、`POST /api/v1/nodes/:id/init`、
-  `POST /api/v1/nodes/:id/probe`、`POST /api/v1/nodes/:id/diagnostics`、
-  `PATCH /api/v1/nodes/:id/assets`、`POST /api/v1/nodes/{manual,register}`
-- 依赖：38 项（含 8 个 `persist*`、任务/探测/操作的 prune 与 upsert、bootstrap token 校验）
+- 接口面：`GET /api/v1/nodes`、`GET /api/v1/nodes/:id`、`DELETE /api/v1/nodes/:id`、
+  `POST /api/v1/nodes/:id/init`、`POST /api/v1/nodes/:id/probe`、
+  `POST /api/v1/nodes/:id/diagnostics`、`PATCH /api/v1/nodes/:id/assets`、
+  `PATCH /api/v1/nodes/:id/labels`（自定义标签窄口）、`POST /api/v1/nodes/{manual,register}`
+- 依赖：40 项（含 8 个 `persist*`、任务/探测/操作的 prune 与 upsert、bootstrap token 校验、
+  `safeDecodePathSegment`、`updateNodeLabelsRecord`）
 - 领域：`src/domain/nodes/*`、`src/domain/bootstrap/tokens.js`
 - 注意：`/register` 是节点侧脚本调用的公开入口（鉴权门放行），改动会影响真机 bootstrap；
-  `nodes/manual`、`nodes/register` 必须在 `nodes/:id` 之后判定；目前**没有**
-  `GET|PATCH /api/v1/nodes/:id`，补单个节点读接口是已登记缺口。
+  `nodes/manual`、`nodes/register` 必须在 `nodes/:id` 之后判定；节点**没有**通用
+  `PATCH /api/v1/nodes/:id`（已拍板不做），`status` / `source` / `bootstrap_token_id` /
+  `fingerprint` / `health_score` / `last_probe_at` / `registered_at` 无写入口，自定义
+  `labels` 键只能走 `/:id/labels`。
 - 前端：`public/nodes.html`、`public/node.html` + `public/js/pages/{nodes-page.js,node-detail-page*.js}`
 
 **tasks**
@@ -275,5 +279,5 @@ git worktree list
 2. `providers`、`node-groups`、`proxy-profiles`、`access-users`、`bootstrap-tokens`：
    独立 CRUD，冲突面在 validators 和 runtime-api。
 3. `system-*`、`releases`：会下发节点侧脚本，需真集群复验。
-4. `tasks`、`operations`、`shell`、`nodes`：互相引用最重（nodes 的 ctx 38 项，
+4. `tasks`、`operations`、`shell`、`nodes`：互相引用最重（nodes 的 ctx 40 项，
    牵动 8 个 store 的持久化），放最后，且这一层合完要人工过一遍 `src/server.js`。

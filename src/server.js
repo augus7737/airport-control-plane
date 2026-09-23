@@ -27,7 +27,7 @@ import {
   serveStaticFile,
 } from "./utils/static-assets.js";
 import { createOperatorSessionAuth } from "./domain/auth/session.js";
-import { createNodeRecordBuilders, normalizeLocationList } from "./domain/nodes/records.js";
+import { createNodeRecordBuilders, normalizeLocationList, updateNodeLabelsRecord } from "./domain/nodes/records.js";
 import { createNodeFactsDomain } from "./domain/nodes/facts.js";
 import { createNodeLifecycleDomain } from "./domain/nodes/lifecycle.js";
 import { createBootstrapTokenDomain } from "./domain/bootstrap/tokens.js";
@@ -3787,6 +3787,7 @@ const apiRoutes = createApiRoutes({
   triggerDiagnostic,
   uniqueStringList,
   updateNodeAssetRecord,
+  updateNodeLabelsRecord,
   updatePlatformSingBoxDistribution,
   upsertTaskRecord,
   validateAccessUserProfileLink,

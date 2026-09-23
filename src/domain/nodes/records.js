@@ -296,6 +296,29 @@ function normalizeLabelsRecord(labels = {}) {
   };
 }
 
+export function updateNodeLabelsRecord(existingNode, payload) {
+  const mergedLabels = {
+    ...(isPlainObject(existingNode?.labels) ? existingNode.labels : {}),
+  };
+
+  for (const [rawKey, rawValue] of Object.entries(isPlainObject(payload?.labels) ? payload.labels : {})) {
+    const key = rawKey.trim();
+    const value = typeof rawValue === "string" ? rawValue.trim() : rawValue;
+
+    if (value === null || value === "") {
+      delete mergedLabels[key];
+      continue;
+    }
+
+    mergedLabels[key] = value;
+  }
+
+  return {
+    ...existingNode,
+    labels: normalizeLabelsRecord(mergedLabels),
+  };
+}
+
 function normalizeNetworkingRecord(record = {}) {
   if (!isPlainObject(record)) {
     return record ?? {};

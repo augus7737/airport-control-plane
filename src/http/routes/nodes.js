@@ -1,4 +1,4 @@
-import { validateAssetUpdate, validateManualNode, validateRegistration } from "../../http/validators.js";
+import { validateAssetUpdate, validateManualNode, validateNodeLabelsUpdate, validateRegistration } from "../../http/validators.js";
 import { extractRemoteAddress, jsonResponse, readJsonBody } from "../../utils/http.js";
 
 export function createNodesRoutes(ctx) {
@@ -41,6 +41,7 @@ export function createNodesRoutes(ctx) {
     safeDecodePathSegment,
     triggerDiagnostic,
     updateNodeAssetRecord,
+    updateNodeLabelsRecord,
     upsertTaskRecord,
   } = ctx;
 
@@ -185,6 +186,59 @@ export function createNodesRoutes(ctx) {
           message: error instanceof Error ? error.message : "unknown error",
         });
       }
+      return;
+    }
+
+    const nodeLabelsMatch = url.pathname.match(/^\/api\/v1\/nodes\/([^/]+)\/labels$/);
+    if (request.method === "PATCH" && nodeLabelsMatch) {
+      const nodeId = safeDecodePathSegment(nodeLabelsMatch[1]);
+
+      if (!nodeId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid node id",
+        });
+        return;
+      }
+
+      const existingNode = nodeStore.get(nodeId);
+
+      if (!existingNode) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "node not found",
+        });
+        return;
+      }
+
+      let payload;
+      try {
+        payload = await readJsonBody(request);
+      } catch (error) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: error instanceof Error ? error.message : "unknown error",
+        });
+        return;
+      }
+
+      const errors = validateNodeLabelsUpdate(payload);
+
+      if (errors.length > 0) {
+        jsonResponse(reply, 400, {
+          error: "validation_failed",
+          details: errors,
+        });
+        return;
+      }
+
+      const updatedNode = updateNodeLabelsRecord(existingNode, payload);
+      nodeStore.set(updatedNode.id, updatedNode);
+      await persistNodeStore();
+
+      jsonResponse(reply, 200, {
+        node: updatedNode,
+      });
       return;
     }
 

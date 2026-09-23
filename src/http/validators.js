@@ -464,6 +464,49 @@ export function validateAssetUpdate(payload) {
   return errors;
 }
 
+export function validateNodeLabelsUpdate(payload) {
+  const errors = [];
+  const labels = payload?.labels;
+
+  if (!isPlainObject(labels)) {
+    errors.push("labels must be an object");
+    return errors;
+  }
+
+  const entries = Object.entries(labels);
+  if (entries.length > 20) {
+    errors.push("labels supports at most 20 entries per request");
+  }
+
+  for (const [rawKey, value] of entries) {
+    const key = typeof rawKey === "string" ? rawKey.trim() : "";
+
+    if (!key) {
+      errors.push("labels key must be a non-empty string");
+      continue;
+    }
+
+    if (key.length > 40 || /[\r\n\t]/.test(key)) {
+      errors.push(`labels key "${key}" must be at most 40 characters without line breaks`);
+    }
+
+    if (value === null) {
+      continue;
+    }
+
+    if (typeof value !== "string") {
+      errors.push(`labels.${key} must be a string or null`);
+      continue;
+    }
+
+    if (value.trim().length > 100) {
+      errors.push(`labels.${key} must be at most 100 characters`);
+    }
+  }
+
+  return errors;
+}
+
 export function validateOperationRequest(payload) {
   const errors = [];
   const mode = payload.mode ?? "command";

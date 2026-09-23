@@ -131,7 +131,7 @@
 - JSON 无事务、跨文件一致性不足；SQLite 迁移仍是最大结构性欠债
 - SSH 主机指纹未持久化信任，中间人风险与密钥轮换确认缺失
 - `src/server.js` 仍 3805 行：路由已按命名空间拆到 `src/http/routes/`，剩下的装配/编排/实体构造未拆
-- 路由模块的 `ctx` 偏重（nodes 38 项、access-users 19 项），纯函数依赖尚未下沉为直接 import
+- 路由模块的 `ctx` 偏重（nodes 40 项、access-users 19 项），纯函数依赖尚未下沉为直接 import
 - 无 `/readyz`、无结构化日志与 `request_id`、无服务端登录限流
 - 任务缺执行租约与取消；发布/探测失败无告警出口
 - `data/` 自动备份尚未实现（只有单文件 `.bak`）

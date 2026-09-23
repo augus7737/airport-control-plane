@@ -42,7 +42,7 @@
 {
   id, fingerprint, status, source,
   registered_at, last_seen_at, last_probe_at, health_score,
-  labels{ provider, region, role },
+  labels{ provider, region, role, ...自定义键 },
   provider_id, bootstrap_token_id,
   facts{...}, commercial{...}, networking{...}, management{...}, endpoints{...}
 }
@@ -83,7 +83,7 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 
 ### 派生的业务身份
 
-节点身份不止 `labels`。发布与订阅会解析 `AccessUser + ProxyProfile + networking + endpoints` 得到入口/落地/中转三元组，因此节点没有“业务角色”字段也能表达入口机与落地机。这是当前实现的关键设计选择，也是后续 Route 实体化的迁移起点。
+节点身份不止 `labels`。发布与订阅会解析 `AccessUser + ProxyProfile + networking + endpoints` 得到入口/落地/中转三元组，因此节点没有“业务角色”字段也能表达入口机与落地机。这是当前实现的关键设计选择，也是后续 Route 实体化的迁移起点。`labels` 的写入口只有两个：`PATCH /:id/assets` 改 `provider`/`region`/`role` 三个已知键，`PATCH /:id/labels` 按键合并任意自定义键（`null` 或空串删除）；两者都走 `region` 地域字典归一。
 
 ## Task
 
