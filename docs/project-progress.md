@@ -148,6 +148,37 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 规模：测试 25 文件 / 110 用例 → **32 文件 / 173 用例**；路由矩阵 91 → **128 行**；`src/server.js` 3849 → **3866 行**。
 
+## 进展（2026-09-23，批次 2：platform / releases / probes + 接入真机前的三处收口）
+
+批次 2 三个窗口合入 `main`：
+
+- **platform**：新增 `GET /api/v1/platform/ssh-key` 只读复查口（`buildPlatformSshKeyView`，只暴露状态/算法/
+  `SHA256:` 指纹/文件名，永不含私钥、绝对路径与公钥正文；重复生成改 `409 conflict`）；
+  sing-box 镜像/同步前对 `version` 做安全路径段守卫。集成人另外把同一口径前移到**写入口**
+  （`validatePlatformSingBoxDistributionUpdate`）：`version` 参与制品落盘与匿名下载的路径拼接，
+  脏值一旦入库清不掉，所以写入即锁成单个安全段，而不是只靠两个读出口守。
+- **releases**：`GET /api/v1/config-releases/:id`（`200 { release, detail }`，产物有界投影，
+  全文出口指向 operations/订阅通道）。
+- **probes**：零生产代码改动，75 条用例把探测健康分、降级口径与 `?node_id=` 读接口语义钉死
+  （未命中是 `200 + {"items":[]}`；失败探测按分档给分不落 0；领域内**没有** staleness 概念）。
+  另记 6 处读码缺口在模块卡片，其中最影响排障的是「诊断异常兜底会把已落库的 transport/预检快照覆写回 null」。
+
+接入真机前由集成人直接落的两处收口：
+
+1. **发布列表不再整表直出渲染配置**：`GET /api/v1/config-releases` 原样返回 store，而每条记录的
+   `deployments[].artifacts.*.rendered_config` 是含用户凭证的完整配置文本，是当时最大的响应体与敏感信息面；
+   现在与明细共用 `projectConfigReleaseForList`。前端零处读该字段，故无渲染口径变更。
+   顺带修掉 `rendered_config_total_bytes` 每节点只累加第一个产物的下计数。
+2. **操作启动回收**：任务与诊断早有 `running → failed` 的启动回收，`loadOperationStore` 没有 ——
+   崩溃会让操作永久停在"执行中"、未跑完的 target 仍是 `pending`，页面进度与实际相反。
+   现按 target 实际结果收口（全成 `success`、混合 `partial`、其余 `failed`）并落盘。
+
+并行开发纪律补一条硬约束（`docs/parallel-development.md` §4）：窗口停实例只能按端口反查 PID 再 kill，
+**禁止 `pkill -f "node src/server.js"`** —— 本轮就有一次窗口按命令行模式清理自己的 8091 探针实例，
+连带杀掉了同机挂着的其他实例。
+
+规模：测试 32 → **40 文件 / 280 用例**；路由矩阵 128 → **133 行**；`src/server.js` 仍 **3866 行**（本轮零改动）。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
