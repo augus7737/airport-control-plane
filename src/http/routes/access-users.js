@@ -153,6 +153,31 @@ export function createAccessUsersRoutes(ctx) {
     }
 
     const accessUserMatch = url.pathname.match(/^\/api\/v1\/access-users\/([^/]+)$/);
+    if (accessUserMatch && request.method === "GET") {
+      const accessUserId = safeDecodePathSegment(accessUserMatch[1]);
+      if (!accessUserId) {
+        jsonResponse(reply, 400, {
+          error: "invalid_request",
+          message: "invalid access user id",
+        });
+        return;
+      }
+      const existingAccessUser = findAccessUserById(accessUserId);
+
+      if (!existingAccessUser) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "access user not found",
+        });
+        return;
+      }
+
+      jsonResponse(reply, 200, {
+        access_user: serializeAccessUser(existingAccessUser),
+      });
+      return;
+    }
+
     if (accessUserMatch && request.method === "PATCH") {
       try {
         const accessUserId = decodeURIComponent(accessUserMatch[1]);
