@@ -48,7 +48,10 @@ import {
   buildTrafficForwarderConfig,
   buildTrafficForwarderPublishScript,
 } from "./domain/releases/haproxy.js";
-import { evaluateReleaseVerification } from "./domain/releases/verification.js";
+import {
+  evaluateReleaseVerification,
+  resolveDeploymentOutcome,
+} from "./domain/releases/verification.js";
 import {
   applyRollbackRenderPlans,
   buildDeploymentPlanDigest,
@@ -60,6 +63,7 @@ import { createShellSessionsDomain } from "./domain/shell/sessions.js";
 import { createSharesDomain } from "./domain/shares/links.js";
 import { createTaskLifecycleDomain } from "./domain/tasks/lifecycle.js";
 import { createTaskStoreDomain } from "./domain/tasks/store.js";
+import { buildTaskLogExcerpt } from "./domain/tasks/log-excerpt.js";
 import { createTrafficRouteDomain } from "./domain/routes/traffic.js";
 import { createManagementRouteDomain } from "./domain/routes/management.js";
 import { buildCostViews } from "./domain/costs/summary.js";
@@ -1418,11 +1422,6 @@ function sortByUpdatedAt(items) {
   return [...items].sort((a, b) =>
     String(b.updated_at ?? b.created_at ?? "").localeCompare(String(a.updated_at ?? a.created_at ?? "")),
   );
-}
-
-function taskExcerptFromLines(lines) {
-  const entries = Array.isArray(lines) ? lines.filter(Boolean) : [];
-  return entries.slice(-8);
 }
 
 function operationTargetForNode(operation, nodeId) {
@@ -3073,48 +3072,41 @@ async function executeConfigRelease(payload, options = {}) {
     const verificationByNodeId = new Map(
       verification.deployments.map((item) => [item.node_id, item]),
     );
-    release.status = verification.status;
+    // 成败只看生效层；verification.status 仍保留含可达层的完整结论供详情与告警。
+    release.status = verification.effectiveness_status;
     release.finished_at = nowIso();
     release.verification = verification;
     release.deployments = release.deployments.map((deployment) => {
-      const result = verificationByNodeId.get(deployment.node_id);
-      const failureText = result?.failures
-        ?.map((failure) => failure.reason_code)
-        .filter(Boolean)
-        .join(", ");
+      const outcome = resolveDeploymentOutcome(verificationByNodeId.get(deployment.node_id));
       return {
         ...deployment,
-        status: result?.status ?? "failed",
-        verification: result ?? null,
-        note:
-          result?.status === "success"
-            ? deployment.note
-            : `发布后复检${result?.status === "partial" ? "未完成" : "失败"}: ${failureText || "unknown"}`,
+        status: outcome.status,
+        reachability: outcome.reachability,
+        verification: verificationByNodeId.get(deployment.node_id) ?? null,
+        note: outcome.note ?? deployment.note,
       };
     });
     release.summary = {
       ...release.summary,
       verification: verification.summary,
       verification_failures: verification.failures.slice(0, 8),
+      reachability_status: verification.reachability_status,
+      reachability_failures: verification.reachability_failures.slice(0, 8),
     };
 
     for (const task of tasks) {
       const target = operationTargetForNode(operation, task.node_id);
       const deploymentVerification = verificationByNodeId.get(task.node_id);
-      task.status = deploymentVerification?.status === "success" ? "success" : "failed";
+      const outcome = resolveDeploymentOutcome(deploymentVerification);
+      task.status = outcome.status === "success" ? "success" : "failed";
       task.operation_id = operation.id;
       task.started_at = target?.started_at ?? operation.started_at ?? task.started_at ?? nowIso();
       task.finished_at = target?.finished_at ?? operation.finished_at ?? nowIso();
       task.note =
-        deploymentVerification?.status === "success"
-          ? describeSingBoxTargetOutcome(target)
-          : `发布后复检${deploymentVerification?.status === "partial" ? "未完成" : "失败"}: ${
-              deploymentVerification?.failures
-                ?.map((failure) => failure.reason_code)
-                .filter(Boolean)
-                .join(", ") || "unknown"
-            }`;
-      task.log_excerpt = taskExcerptFromLines(target?.output || []);
+        outcome.status === "success"
+          ? [describeSingBoxTargetOutcome(target), outcome.note].filter(Boolean).join("；")
+          : outcome.note;
+      task.log_excerpt = buildTaskLogExcerpt(target?.output || [], { operationId: operation.id });
       upsertTaskRecord(task);
     }
 

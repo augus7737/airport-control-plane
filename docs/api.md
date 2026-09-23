@@ -334,7 +334,7 @@ Notes:
 
 - 无法解析目标节点，或过滤掉失效用户后没有可发布用户时拒绝请求。
 - 节点侧流程：写 manifest → 渲染 sing-box 配置 → `sing-box check` → 替换配置 → 重启服务 → 失败回滚。
-- 发布成功状态按校验后的实际结果判定，`rendered_only` 不计为成功；Hysteria2 发布要求 UDP/QUIC 复检通过。
+- 发布成功状态按**生效层**判定（`rendered`/`config_validation`/`activation`/`subscription_entry`），`rendered_only` 不计为成功；Hysteria2 发布要求 UDP/QUIC 复检通过。**业务入口可达性不参与成败**：端口不通多是厂商安全组/防火墙问题，配置其实已生效，判失败会让中转线路整条从订阅消失。可达性单独落 `verification.reachability_status` 与 `release.summary.reachability_failures[]`，并写进逐节点 `note`（详见 `docs/data-model.md`「发布复检分层」）。
 - 业务入口复检由控制面本地发起，失败的目标会重试：默认最多 3 次探测、每次间隔 2000 ms（`RELEASE_VERIFY_PROBE_ATTEMPTS`、`RELEASE_VERIFY_PROBE_RETRY_GAP_MS`）。宽限只延后重探失败目标，已通的节点不再等待；用尽预算仍不通即判为真实失败，不引入“降级”状态。
 
 ### `GET /api/v1/config-releases/:id`

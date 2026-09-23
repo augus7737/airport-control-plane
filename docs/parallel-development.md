@@ -202,6 +202,13 @@
 - 集成人追加（已合入）：列表 `GET /api/v1/config-releases` 改为共用同一份有界投影
   （`projectConfigReleaseForList`），不再直出全量 `rendered_config`；前端零处读该字段，故无渲染口径变更。
   同时修掉 `rendered_config_total_bytes` 只累加每节点第一个产物的下计数 bug。
+- 判定口径（2026-09-23 已定并落地）：复检分**生效层**（rendered/config_validation/activation/subscription_entry）
+  与**可达层**（business_entry）。只有生效层决定 `release.status` / `deployment.status` / `task.status`
+  与中转订阅准入；可达层只写 `reachability_status` + 逐节点 note。映射唯一出口是纯函数
+  `resolveDeploymentOutcome`（`src/domain/releases/verification.js`），**不要**在发布尾部重新引入
+  `release.status = verification.status` 这类把两层混在一起的写法。
+- 剩余缺口：可达层告警目前只落在 note 文本，发布中心没有独立的告警位；那 5 项 checks 明细已完整落库
+  （`release.verification.deployments[].checks`）但 UI 一条都没渲染。
 - 剩余缺口：`deployments[].artifacts.sing_box.rendered_config` 仍是**全文落库**，
   `configReleaseStore` 随发布数线性膨胀（响应面已收紧，存储面未收）
 - “当前生效版本”判定两处都用 `find(status==="success")` 第一条（`config-releases.js` 与 `server.js` 发布尾部），

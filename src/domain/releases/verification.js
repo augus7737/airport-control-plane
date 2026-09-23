@@ -537,6 +537,84 @@ function statusFromChecks(checks, requiredCheckNames) {
   return "partial";
 }
 
+// 复检的 5 项检查分两层，判定口径不同（见 docs/data-model.md「发布复检分层」）：
+//   生效层 = 配置渲染出来没有 / `sing-box check` 过没过 / 服务有没有真的起来 /
+//            订阅入口和发布入口对不对得上（这是平台内两份数据的比对，不是网络探测）；
+//   可达层 = 控制面从外面探业务端口通不通。
+// 可达层不通最常见的原因是厂商安全组没放行、节点防火墙、出口 IP 被风控，而不是配置坏了；
+// 它一旦参与 release/task/订阅准入判定，就会把"已生效"的节点整条从中转订阅里摘掉，
+// 所以只有生效层决定成败，可达层单独成字段给告警用。
+const EFFECTIVENESS_CHECK_NAMES = ["rendered", "config_validation", "activation", "subscription_entry"];
+const REACHABILITY_CHECK_NAMES = ["business_entry"];
+
+// 不适用（skipped）不参与分层判定：例如没配订阅入口时 subscription_entry 是 skipped，
+// 不能因此把生效层拉成 partial。
+function layerStatusFromChecks(checks, names) {
+  const required = checks
+    .filter((check) => names.includes(check.name) && check.status !== "skipped")
+    .map((check) => check.status);
+  if (required.length === 0) {
+    return "skipped";
+  }
+  if (required.includes("failed")) {
+    return "failed";
+  }
+  if (required.every((status) => status === "passed")) {
+    return "success";
+  }
+  return "partial";
+}
+
+function reasonCodes(checks, names) {
+  return checks
+    .filter(
+      (check) =>
+        names.includes(check.name) && check.status !== "passed" && check.status !== "skipped",
+    )
+    .map((check) => check.reason_code)
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * 发布结果判定的唯一出口：把逐节点复检映射成 release/deployment/task 该写的状态与文案。
+ * 纯函数放在这里，是为了让「生效层决定成败、可达层只告警」这条口径可单测——
+ * 发布尾部在 src/server.js 里，import 即起服务，本身测不到。
+ */
+export function resolveDeploymentOutcome(deploymentVerification) {
+  if (!deploymentVerification) {
+    return {
+      status: "failed",
+      reachability: "skipped",
+      note: "发布后复检缺失: verification_missing",
+    };
+  }
+
+  const status = deploymentVerification.effectiveness_status ?? "failed";
+  const reachability = deploymentVerification.reachability_status ?? "skipped";
+  const checks = Array.isArray(deploymentVerification.checks) ? deploymentVerification.checks : [];
+
+  if (status !== "success") {
+    const reasons = reasonCodes(checks, EFFECTIVENESS_CHECK_NAMES);
+    return {
+      status,
+      reachability,
+      note: `发布后复检${status === "partial" ? "未完成" : "失败"}: ${reasons || "unknown"}`,
+    };
+  }
+
+  if (reachability !== "success" && reachability !== "skipped") {
+    const reasons = reasonCodes(checks, REACHABILITY_CHECK_NAMES);
+    return {
+      status,
+      reachability,
+      note: `配置已生效，但业务入口可达性复检未通过或未完成（多为端口未放行 / 节点防火墙 / 控制面出口被风控，不一定是配置问题）: ${reasons || "unknown"}`,
+    };
+  }
+
+  return { status, reachability, note: null };
+}
+
 function failureListFromChecks(checks) {
   return checks
     .filter((check) => check.status !== "passed" && check.status !== "skipped")
@@ -608,11 +686,18 @@ export function evaluateDeploymentVerification({
     targetStatus === "failed" && markers.result !== "rendered_only"
       ? "failed"
       : statusFromChecks(allChecks, requiredCheckNames);
+  const effectivenessStatus =
+    targetStatus === "failed" && markers.result !== "rendered_only"
+      ? "failed"
+      : layerStatusFromChecks(allChecks, EFFECTIVENESS_CHECK_NAMES);
 
   return {
     node_id: deployment?.node_id ?? operationTarget?.node_id ?? null,
     status,
     success: status === "success",
+    // 生效层决定成败，可达层单独成字段（见 EFFECTIVENESS_CHECK_NAMES 注释）。
+    effectiveness_status: effectivenessStatus,
+    reachability_status: layerStatusFromChecks(allChecks, REACHABILITY_CHECK_NAMES),
     applied: activation.status === "passed",
     rendered: rendered.status === "passed",
     business_entry_ready: businessEntry.status === "passed",
@@ -649,6 +734,9 @@ export function evaluateReleaseVerification({
       release_id: release?.id ?? null,
       status: "failed",
       success: false,
+      effectiveness_status: "failed",
+      reachability_status: "skipped",
+      reachability_failures: [],
       deployments: [],
       summary: { total: 0, success: 0, partial: 0, failed: 0 },
       failures: [
@@ -688,11 +776,48 @@ export function evaluateReleaseVerification({
       : summary.failed === summary.total
         ? "failed"
         : "partial";
+  const effectivenessStatus = (() => {
+    const values = deploymentResults.map((item) => item.effectiveness_status ?? "failed");
+    if (values.every((value) => value === "success")) {
+      return "success";
+    }
+    if (values.every((value) => value === "failed")) {
+      return "failed";
+    }
+    return "partial";
+  })();
+  const reachabilityValues = deploymentResults.map((item) => item.reachability_status ?? "skipped");
+  const reachabilityStatus = reachabilityValues.every((value) => value === "skipped")
+    ? "skipped"
+    : reachabilityValues.includes("failed")
+      ? "failed"
+      : reachabilityValues.includes("partial")
+        ? "partial"
+        : "success";
+  const reachabilityFailures = deploymentResults.flatMap((item) =>
+    (item.checks ?? [])
+      .filter(
+        (check) =>
+          REACHABILITY_CHECK_NAMES.includes(check.name) &&
+          check.status !== "passed" &&
+          check.status !== "skipped",
+      )
+      .map((check) => ({
+        node_id: item.node_id,
+        check: check.name,
+        reason_code: check.reason_code,
+        message: check.message,
+      })),
+  );
 
   return {
     release_id: release?.id ?? null,
     status,
     success: status === "success",
+    // 对外判定用生效层；status/success 仍是含可达层的完整复检结论，供告警与详情展示。
+    effectiveness_status: effectivenessStatus,
+    reachability_status: reachabilityStatus,
+    reachability_failures: reachabilityFailures,
     deployments: deploymentResults,
     summary,
     failures: deploymentResults.flatMap((item) =>

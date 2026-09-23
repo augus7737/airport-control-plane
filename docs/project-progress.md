@@ -179,6 +179,31 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 规模：测试 32 → **40 文件 / 280 用例**；路由矩阵 128 → **133 行**；`src/server.js` 仍 **3866 行**（本轮零改动）。
 
+## 进展（2026-09-23，接入真机第二轮：发布判定分层 + 任务日志不再只留尾 8 行）
+
+**#24 判定口径定为 C 并落地**：复检 5 项检查分成两层——生效层
+（`rendered` / `config_validation` / `activation` / `subscription_entry`）与可达层（`business_entry`）。
+只有生效层决定 `release.status` / `deployment.status` / `task.status` 与中转订阅准入；可达层单独成
+`reachability_status` + `reachability_failures[]`，并把告警写进逐节点 `note`（发布中心已有的
+`deployment.note` 渲染位就能看到，不需要新 UI）。
+`verification.status` 原语义保留（含可达层的完整结论），供详情与后续告警出口用。
+
+- 为什么：可达层不通最常见是厂商安全组没放行 / 节点防火墙 / 控制面出口被风控，而配置其实 `result=applied`。
+  旧写法 `release.status = verification.status` 会把这种节点判成失败，而 `links.js` 的中转准入读的正是
+  被覆写后的 `deployment.status` → 入口节点一抖，该落地机上所有 relay 线路整条从订阅消失，任务中心再记一条假失败。
+  直连线路不受影响（它读 apply 层 `operation.targets[].status`），所以旧问题只在中转暴露。
+- `subscription_entry` 归生效层而非可达层：它是平台内两份数据（发布入口 vs 订阅里的入口）的比对，
+  不一致就是线路真的坏，不是网络抖动。
+- 判定映射收成一个纯函数 `resolveDeploymentOutcome`（`src/domain/releases/verification.js`），发布尾部只消费它 ——
+  发布逻辑在 `src/server.js` 里，import 即起服务，本身测不到。新增 6 条分层用例。
+
+**#30 修掉**：`src/server.js` 与 `src/domain/tasks/lifecycle.js` 各有一份 `slice(-8)`，真机装失败时
+刚好把最要紧的证据（apt/apk 报错、下载超时通常在前 10 行）切掉。统一成
+`src/domain/tasks/log-excerpt.js`：头 12 行 + 尾 60 行、单行截 400 字符、中间插一行指明
+`GET /api/v1/operations/<id>`（该接口本轮已在）；省略标记必须在中间，因为 `getTaskSummary` 取最后一行当列表摘要。
+
+规模：测试 40 文件 / 280 → **42 文件 / 291 用例**。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页

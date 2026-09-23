@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { isRelayTransportKind } from "../routes/management-strategies.js";
+import { buildTaskLogExcerpt } from "./log-excerpt.js";
 import {
   DEFAULT_NODE_SSH_PORT,
   normalizeSshPort,
@@ -57,11 +58,6 @@ export function createTaskLifecycleDomain(dependencies) {
     }
 
     return null;
-  }
-
-  function taskLogExcerpt(lines) {
-    const entries = Array.isArray(lines) ? lines.filter(Boolean) : [];
-    return entries.slice(-8);
   }
 
   function operationTargetForNode(operation, nodeId) {
@@ -408,8 +404,9 @@ export function createTaskLifecycleDomain(dependencies) {
     }
 
     let taskChanged = false;
-    const nextExcerpt = taskLogExcerpt(
+    const nextExcerpt = buildTaskLogExcerpt(
       operationTargetForNode(operation, task.node_id)?.output || [],
+      { operationId: operation?.id ?? null },
     );
     const nextNote = initTaskNote(nextStatus);
 
@@ -857,7 +854,9 @@ export function createTaskLifecycleDomain(dependencies) {
       claimedTask.operation_id = completedOperation.id;
       claimedTask.finished_at = nowIso();
       claimedTask.note = initTaskNote(taskStatus);
-      claimedTask.log_excerpt = taskLogExcerpt(target?.output || []);
+      claimedTask.log_excerpt = buildTaskLogExcerpt(target?.output || [], {
+        operationId: completedOperation.id,
+      });
       if (taskStatus === "success" || options.retain_claim_on_failure !== true) {
         clearInitExecutionClaim(claimedTask);
       }

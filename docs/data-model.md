@@ -99,6 +99,9 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 - `trigger`：`bootstrap_register | bootstrap_refresh | bootstrap_auto_probe | manual_probe | manual_diagnostic | manual_retry | manual_release | scheduled_probe`。
 - 认领是原子的：同一任务并发执行只有一个 owner 能推进终态。
 - 任务→节点状态映射：`success → active`，`failed → degraded`。
+- `log_excerpt` 由 `src/domain/tasks/log-excerpt.js` 的 `buildTaskLogExcerpt` 统一生成：保留头 12 行 + 尾 60 行，单行截到 400 字符，中间省略处插一行 `… 中间省略 N 行，完整输出见 GET /api/v1/operations/<id>`。
+  装包失败的原因常在开头（apt/apk 报错、下载超时），所以不能只留尾部；省略标记必须落在中间——
+  前端 `getTaskSummary` 取数组最后一行当列表摘要。节点侧完整回显（每目标上限 `OPERATION_OUTPUT_LIMIT_BYTES`，默认 128 KB）只在 operations 里。
 - 历史裁剪会保留活跃任务，不会把正在跑的任务裁掉。
 
 ## ProbeResult
@@ -187,6 +190,24 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 回滚记录的用户计数（`active_user_count` / `skipped_user_count`）取目标发布的 summary 而不是本次渲染结果：节点上跑的字节来自目标发布，用户集合也必须按目标发布陈述。
 
 `status` 起始 `running`，由 `src/domain/releases/verification.js` 的复检结果收敛；成功集合与失败集合是显式枚举（`success|passed|ok|ready|healthy|running|applied` / `failed|failure|error|errored|timeout|rolled_back`），逐目标检查记录 `passed|skipped|missing`。业务入口探测在 `src/server.js` 的 `verifyConfigReleaseAfterPublish` 内执行，失败目标最多重探 `RELEASE_VERIFY_PROBE_ATTEMPTS` 次（间隔 `RELEASE_VERIFY_PROBE_RETRY_GAP_MS`），只有最后一轮的结果进入 `businessProbesByNodeId` 并参与判定。
+
+### 发布复检分层（判定口径，2026-09-23 定）
+
+复检的 5 项检查分两层，**只有生效层决定成败**：
+
+| 层 | 检查项 | 含义 | 参与什么 |
+| --- | --- | --- | --- |
+| 生效层 | `rendered` / `config_validation` / `activation` / `subscription_entry` | 配置渲染出来没有、`sing-box check` 过没过、服务真起来没有；订阅入口与发布入口对不对得上（平台内两份数据的比对，不是网络探测） | `release.status`、`deployment.status`、`task.status`、中转订阅准入 |
+| 可达层 | `business_entry` | 控制面从外面探业务端口通不通 | 只写 `reachability_status` + 告警文案，不改成败 |
+
+可达层不通最常见的原因是厂商安全组没放行、节点本机防火墙、控制面出口 IP 被风控，而不是配置坏了。它一旦参与成败判定，就会把"配置已生效"的节点从中转订阅里整条摘掉（`src/domain/shares/links.js` 的 `resolveDeploymentStatus` 读 `deployment.status`），并在任务中心留下一条假失败。
+
+落库形态：`release.verification` 保留含可达层的完整结论（`status`/`summary`/`failures`），另有
+`effectiveness_status`、`reachability_status`、`reachability_failures[]`（带 `node_id`）；
+逐节点 `deployment.reachability` 单独存可达层结果，可达层失败时 `deployment.note` 与 `task.note`
+写成「配置已生效，但业务入口可达性复检未通过或未完成（…）: <reason_code>」。
+判定映射的唯一出口是纯函数 `resolveDeploymentOutcome(逐节点复检结果)`（同文件），发布尾部只消费它——
+因为发布逻辑在 `src/server.js` 里，import 即起服务，本身测不到。
 
 ## SystemUser / SystemTemplate 与下发记录
 
