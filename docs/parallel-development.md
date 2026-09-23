@@ -21,9 +21,9 @@
 - 顺序约定：命名空间之间按 URL 前缀互斥，`createApiRoutes` 里的顺序 = 各命名空间首个路由块
   拆分前在 server.js 中的出现顺序；命名空间内部保持原顺序（例如 `nodes/:id` 与
   `nodes/manual` 的先后不能变）。
-- 门禁：`npm run check`（全树语法）+ `node --test`（98 例）。
+- 门禁：`npm run check`（全树语法）+ `node --test`（110 例）。
   `test/route-table.test.js` 是路由回归网：它真的起一个 `node src/server.js` 实例
-  （`PORT=0` + 临时 `AIRPORT_DATA_DIR`），登录后按 78 行冻结矩阵逐条比对状态码和 error code。
+  （`PORT=0` + 临时 `AIRPORT_DATA_DIR`），登录后按 91 行冻结矩阵逐条比对状态码和 error code。
   任何路由增删改都必须让它继续全绿；新增路由时把新行加进那个矩阵。
 - `AIRPORT_DATA_DIR` 现在真的生效（此前硬编码 `../data`），`PORT=0` 会打印实际端口。
   实例之间的数据隔离靠这两项。
@@ -72,8 +72,12 @@
   `POST /api/v1/platform/ssh-key/generate`
 - 依赖：`buildPlatformContext`、`buildPublishDistribution`、`generateManagedPlatformSshKey`、
   `mirrorPlatformSingBoxArtifact`、`updatePlatformSingBoxDistribution`、`hasOwn`
-- 领域：`src/domain/platform/{ssh.js,sing-box-distribution.js}`；`PUT` 的校验在
+- 领域：`src/domain/platform/{ssh.js,sing-box-distribution.js}`；distribution 的 `PATCH` 校验在
   `src/http/validators.js`
+- 前端：总览卡在 `public/js/pages/overview-page.js`，SSH 面板在 `public/js/platform/platform-ssh-page.js`；
+  两者由 `public/app.js` 装配，属共享装配区，窗口不要顺手改
+- 缺口：`/mirror`、`/sync` 没有矩阵行；`ssh-key/generate` 是单向的（只有 `platformSshKeyState` 可读，
+  没有复查已生成密钥的接口）；`probe_scheduler` 无手动触发接口（要新 ctx 依赖，找集成人）
 - 注意：`platform-context` 是几乎所有前端页面的首屏数据源，字段是契约，删字段=全站回归。
 
 **nodes**
@@ -125,6 +129,9 @@
 - 依赖：19 项（含 `rotateAccessUserShareToken`、`buildAccessUserShareResponse`、
   `validateAccessUserProfileLink`、`safeDecodePathSegment`）
 - 领域：`src/domain/shares/links.js`（订阅链接与中转拓扑在这里，改动会同时影响 `/sub/:token`）
+- 缺口：`expired` 没有服务端写入路径（`expires_at` 过期仍显示 `active`，只有订阅侧派生）；服务端把
+  `credential.uuid`/`password` 当可选而前端按协议强制；`POST /:id/share-token/regenerate` 没有矩阵行；
+  `PATCH|DELETE /:id` 用裸 `decodeURIComponent`（`access-users.js:183`、`:253`）
 - 前端：`public/access-users.html` + `public/js/pages/access-users-page.js`
 - 注意：`/sub/:token` 本体在 server.js 内（禁改区），若需求要改订阅渲染，先谈。
 
@@ -133,14 +140,22 @@
 - 接口面：各自 `GET|POST /api/v1/<ns>` + `GET|PATCH|DELETE /api/v1/<ns>/:id`（单资源读
   返回 `{ profile }` / `{ group }` / `{ provider }`，非法 id 编码 → `400 bad_request`）；
   node-groups 的 `DELETE` 前会查 6 个 store 做引用保护
+- 缺口：providers 的 `DELETE /:id` 没有引用保护（`nodeStore` 已在 ctx 里，可直接数 `provider_id`
+  引用后返 `409`）；proxy-profiles 的 `name` 无唯一性（providers 有），且创建/更新只把 `template`
+  当对象校验，`validateSingBoxProfileTemplate` 要到发布才生效（错误延迟一整个链路），也没有克隆接口；
+  三个模块的 `PATCH` 与 `DELETE` 分支仍用裸 `decodeURIComponent`（`proxy-profiles.js:83`/`:123`、
+  `node-groups.js:100`/`:151`、`providers.js:92`/`:145`）
 - 依赖：store + `build*Record` + `find*ById` + `persist*` + validator + `safeDecodePathSegment`，8~15 项
 - 注意：node-groups 读 6 个别的 store 做引用检查，删除保护逻辑跨模块，别只看本文件。
-- 前端：`public/proxy-profiles.html`、`public/providers.html`
+- 前端：`public/providers.html` + `public/js/pages/providers-page.js`、`public/proxy-profiles.html` +
+  `public/js/pages/proxy-profiles-page.js`；节点组没有独立页面，其编辑 UI 在 `public/js/pages/releases-page.js`
 
 **system-templates / system-users**
 - 可改：`src/http/routes/system-{templates,users}.js`
 - 接口面：`GET|POST /api/v1/system-<x>`、`PATCH|DELETE /api/v1/system-<x>/:id`、
   `GET /api/v1/system-<x>-releases`、`POST /api/v1/system-<x>/apply`
+- 缺口：两边都没有 `GET /api/v1/system-<x>/:id`；`DELETE` 分支用裸 `decodeURIComponent`，
+  `/%` 会 500（`src/http/routes/system-templates.js:120`、`src/http/routes/system-users.js:143`）
 - 依赖：`execute*Apply`、`system*ReleaseStore`、冲突收集（system-users 的
   `collectSystemUserConflictMessages`）
 - 领域：`src/domain/system/{templates.js,users.js}`
@@ -164,6 +179,7 @@
 **operations**
 - 可改：`src/http/routes/operations.js`
 - 接口面：`GET /api/v1/operations`、`POST /api/v1/operations/execute`
+- 缺口：没有 `GET /api/v1/operations/:id`，逐节点 target 只能整包取回、不能按节点过滤
 - 依赖：`operationStore`、`pushOperationRecord`、`buildOperationRecord`、`nodeStore`
 - 领域：`src/domain/operations/executor.js`；测试 `test/operation-executor-limits.test.js`
 - 注意：执行器有并发/超时口径（见 `docs/stability-roadmap.md`），别在路由层加重试。
@@ -181,6 +197,9 @@
 - 可改：`src/http/routes/costs.js`
 - 接口面：`GET /api/v1/costs/{summary,nodes,providers,releases,access-users}`
 - 依赖：只有 `buildLiveCostViews`（全项目最干净的模块，可作为其他模块降耦合的样板）
+- 缺口：5 个端点各调一次 `buildLiveCostViews()`，一次成本页 = 5 次全库遍历；
+  `src/domain/costs/{calculator,summary}.js` 没有单测（只有 `normalize.js` 有）；handler 无 try/catch，
+  领域层抛错就是裸 500
 - 领域：`src/domain/costs/*`
 
 ## 4. 并行开发提示词
