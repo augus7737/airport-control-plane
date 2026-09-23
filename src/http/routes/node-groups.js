@@ -67,6 +67,24 @@ export function createNodeGroupsRoutes(ctx) {
     }
 
     const nodeGroupMatch = url.pathname.match(/^\/api\/v1\/node-groups\/([^/]+)$/);
+    if (nodeGroupMatch && request.method === "GET") {
+      const groupId = decodeURIComponent(nodeGroupMatch[1]);
+      const existingGroup = findNodeGroupById(groupId);
+
+      if (!existingGroup) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "node group not found",
+        });
+        return;
+      }
+
+      jsonResponse(reply, 200, {
+        group: existingGroup,
+      });
+      return;
+    }
+
     if (nodeGroupMatch && request.method === "PATCH") {
       try {
         const groupId = decodeURIComponent(nodeGroupMatch[1]);

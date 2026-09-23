@@ -76,6 +76,7 @@ const routes = [
   ["PATCH", "/api/v1/proxy-profiles/missing", 404, "not_found"],
   ["DELETE", "/api/v1/proxy-profiles/missing", 404, "not_found"],
   ["POST", "/api/v1/node-groups", 400, "validation_failed"],
+  ["GET", "/api/v1/node-groups/missing", 404, "not_found"],
   ["PATCH", "/api/v1/node-groups/missing", 404, "not_found"],
   ["DELETE", "/api/v1/node-groups/missing", 404, "not_found"],
   ["POST", "/api/v1/providers", 400, "validation_failed"],
