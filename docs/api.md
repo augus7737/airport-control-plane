@@ -323,6 +323,19 @@ Notes:
 - 发布成功状态按校验后的实际结果判定，`rendered_only` 不计为成功；Hysteria2 发布要求 UDP/QUIC 复检通过。
 - 业务入口复检由控制面本地发起，失败的目标会重试：默认最多 3 次探测、每次间隔 2000 ms（`RELEASE_VERIFY_PROBE_ATTEMPTS`、`RELEASE_VERIFY_PROBE_RETRY_GAP_MS`）。宽限只延后重探失败目标，已通的节点不再等待；用尽预算仍不通即判为真实失败，不引入“降级”状态。
 
+### `POST /api/v1/config-releases/:id/rollback`
+
+`201 { release, operation }`。请求体可选 `{ title, operator, note }`，缺省自动生成“回滚到 <版本>”标题与备注。
+
+语义是**重新发布上一条**：把目标发布存储的逐节点产物（`deployments[].artifacts.*.rendered_config`）逐字节回放到当前线路上，走同一条渲染→下发→复检链路，并生成一条新的发布记录；节点侧不需要备份目录，也没有就地交换。
+
+- 只有 `status=success` 的发布可以作为回滚目标；目标已经是该模板当前生效版本时返回 `400`。
+- 拓扑必须完全一致：当前线路解析出的节点集合与目标发布的 `deployment_node_ids` 有任何一侧多出节点都整体拒绝（`400`），不做部分回滚。
+- 目标发布缺少某个组件产物、产物没有 `config_digest`/`config_path`，或产物里有 Reality 占位符但当前模板不再提供私钥路径时返回 `400`。
+- 用户集合按目标发布的产物回放，差异如实记录在 `summary.rollback_diff`（`lost_users` / `restored_users`），前端在确认框和列表里提示“回滚后暂不可用”的用户。
+- 目标发布的节点已被删除时，走与新建发布相同的 `no valid nodes resolved` 拒绝路径。
+- 生成的记录：`type=rollback_proxy_config`、`summary.action_type="rollback"`、`summary.rollback_target_release_id` 指向目标发布、`summary.config_digest_after` 由回放后的产物重新计算。
+
 ## System users and templates
 
 - `GET|POST /api/v1/system-users`，`PATCH|DELETE /api/v1/system-users/:id`

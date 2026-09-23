@@ -498,6 +498,17 @@ export async function createConfigRelease(payload) {
   };
 }
 
+export async function rollbackConfigRelease(id, payload = {}) {
+  const result = await requestJson(
+    `/api/v1/config-releases/${encodeURIComponent(id)}/rollback`,
+    jsonRequest(payload),
+  );
+  return {
+    release: pickEntity(result, ["config_release", "release", "item"]) || result.release || result,
+    operation: result.operation || null,
+  };
+}
+
 export async function applySystemUsers(payload) {
   const result = await requestJson("/api/v1/system-users/apply", jsonRequest(payload));
   return {

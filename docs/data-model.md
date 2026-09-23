@@ -175,11 +175,16 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 ## ConfigRelease
 
 ```
-{ id, type: "publish_proxy_config", version: rel_<ts>, title, status,
+{ id, type: "publish_proxy_config" | "rollback_proxy_config", version: rel_<ts>, title, status,
   profile_id, access_user_ids[], node_ids[], node_group_ids[],
+  deployment_node_ids[], entry_node_ids[],
   routes[序列化后的 TrafficRoute], deployments[逐节点结果],
   operation_id, task_ids[], created_by, note, created_at, updated_at }
 ```
+
+`summary` 里与回滚相关的键：`action_type`（`publish` / `rollback`）、`based_on_release_id`（上一条生效发布）、`rollback_target_release_id`（回滚目标；普通发布为上一条生效发布）、`config_digest_before` / `config_digest_after`、`rollback_diff`（仅回滚记录，`{ target_release_id, target_version, current_release_id, current_version, target_node_count, current_node_count, lost_users[{id,name}], restored_users[{id,name}] }`）。
+
+回滚记录的用户计数（`active_user_count` / `skipped_user_count`）取目标发布的 summary 而不是本次渲染结果：节点上跑的字节来自目标发布，用户集合也必须按目标发布陈述。
 
 `status` 起始 `running`，由 `src/domain/releases/verification.js` 的复检结果收敛；成功集合与失败集合是显式枚举（`success|passed|ok|ready|healthy|running|applied` / `failed|failure|error|errored|timeout|rolled_back`），逐目标检查记录 `passed|skipped|missing`。业务入口探测在 `src/server.js` 的 `verifyConfigReleaseAfterPublish` 内执行，失败目标最多重探 `RELEASE_VERIFY_PROBE_ATTEMPTS` 次（间隔 `RELEASE_VERIFY_PROBE_RETRY_GAP_MS`），只有最后一轮的结果进入 `businessProbesByNodeId` 并参与判定。
 

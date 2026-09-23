@@ -150,13 +150,16 @@
 
 **config-releases**
 - 可改：`src/http/routes/config-releases.js`
-- 接口面：只有 `GET /api/v1/config-releases`、`POST /api/v1/config-releases`
-- 依赖：`configReleaseStore`、`executeConfigRelease`、`buildPlatformContext`、`sortByUpdatedAt`
-- 缺口：没有 `GET/PATCH /api/v1/config-releases/:id`，也没有回滚接口——发布中心方案
-  第 3 步会加 `POST /api/v1/config-releases/:id/rollback`，需要新命名空间决策，先谈。
-- 领域：`src/domain/releases/{sing-box.js,verification.js,haproxy.js}`、
-  测试 `test/release-verification.test.js`
+- 接口面：`GET /api/v1/config-releases`、`POST /api/v1/config-releases`、
+  `POST /api/v1/config-releases/:id/rollback`
+- 依赖：`configReleaseStore`、`executeConfigRelease`、`buildPlatformContext`、`sortByUpdatedAt`、
+  `safeDecodePathSegment`
+- 缺口：没有 `GET/PATCH /api/v1/config-releases/:id`。
+- 领域：`src/domain/releases/{sing-box.js,verification.js,haproxy.js,rollback.js}`、
+  测试 `test/release-verification.test.js`、`test/release-rollback-plan.test.js`
 - 前端：`public/releases.html` + `public/js/pages/releases-page.js`
+- 回滚口径：回放目标发布存储的产物并生成新记录，节点侧无备份交换；仅 `success` 且非当前生效版本可回滚，
+  拓扑两侧节点集合必须完全一致，否则整体 `400`。
 
 **operations**
 - 可改：`src/http/routes/operations.js`

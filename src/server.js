@@ -49,6 +49,11 @@ import {
   buildTrafficForwarderPublishScript,
 } from "./domain/releases/haproxy.js";
 import { evaluateReleaseVerification } from "./domain/releases/verification.js";
+import {
+  applyRollbackRenderPlans,
+  buildDeploymentPlanDigest,
+  buildRollbackUserDiff,
+} from "./domain/releases/rollback.js";
 import { buildSystemTemplateApplyScript } from "./domain/system/templates.js";
 import { buildSystemUserApplyScript } from "./domain/system/users.js";
 import { createShellSessionsDomain } from "./domain/shell/sessions.js";
@@ -2206,6 +2211,8 @@ function buildConfigReleaseRecord(payload, resolved, options = {}) {
   const binaryDistribution = options.binaryDistribution ?? null;
   const deploymentNodeIds = deploymentPlan?.deploymentNodeIds ?? resolved.nodeIds;
   const entryNodeIds = deploymentPlan?.entryNodeIds ?? [];
+  const rollbackSourceRelease = options.rollbackSourceRelease ?? null;
+  const rollbackSummary = rollbackSourceRelease?.summary ?? null;
   const routeRecords = Array.isArray(resolved.trafficRoutes)
     ? resolved.trafficRoutes.map((route) => serializeTrafficRoute(route))
     : [];
@@ -2234,14 +2241,16 @@ function buildConfigReleaseRecord(payload, resolved, options = {}) {
       landing_node_count: resolved.nodeIds.length,
       entry_node_count: entryNodeIds.length,
       access_user_count: resolved.accessUsers.length,
-      active_user_count: renderPlan?.eligibleUsers?.length ?? 0,
-      skipped_user_count: renderPlan?.skippedUsers?.length ?? 0,
+      active_user_count:
+        rollbackSummary?.active_user_count ?? renderPlan?.eligibleUsers?.length ?? 0,
+      skipped_user_count:
+        rollbackSummary?.skipped_user_count ?? renderPlan?.skippedUsers?.length ?? 0,
       profile_name: resolved.profile.name,
       engine:
         Array.isArray(deploymentPlan?.engines) && deploymentPlan.engines.length > 0
           ? deploymentPlan.engines.join("+")
           : renderPlan?.metadata?.engine ?? "managed-snapshot",
-      action_type: "publish",
+      action_type: rollbackSourceRelease ? "rollback" : "publish",
       delivery_mode:
         deploymentPlan?.delivery_mode ?? renderPlan?.metadata?.delivery_mode ?? "snapshot_only",
       binary_version: binaryDistribution?.enabled ? binaryDistribution.version : null,
@@ -2253,7 +2262,8 @@ function buildConfigReleaseRecord(payload, resolved, options = {}) {
         deploymentPlan?.rollbackable ?? renderPlan?.metadata?.rollbackable,
       ),
       based_on_release_id: previousRelease?.id ?? null,
-      rollback_target_release_id: previousRelease?.id ?? null,
+      rollback_target_release_id: rollbackSourceRelease?.id ?? previousRelease?.id ?? null,
+      rollback_diff: options.rollbackDiff ?? null,
       config_digest_before:
         previousRelease?.summary?.config_digest_after ??
         previousRelease?.summary?.config_digest ??
@@ -2656,18 +2666,7 @@ function buildConfigReleaseDeploymentPlan({ releaseId, resolved, binaryDistribut
       .map((plan) => plan.node_id),
   );
   const deploymentNodeIds = deploymentPlans.map((plan) => plan.node_id);
-  const digestPayload = deploymentPlans.map((plan) => ({
-    node_id: plan.node_id,
-    route_roles: [...plan.route_roles].sort(),
-    sing_box_digest: plan.components.sing_box?.renderPlan?.digest ?? null,
-    traffic_forwarder_digest: plan.components.traffic_forwarder?.renderPlan?.digest ?? null,
-    entry_ports:
-      plan.components.traffic_forwarder?.renderPlan?.bindings?.map((binding) => binding.entry_port) ?? [],
-  }));
-  const digest = createHash("sha256")
-    .update(JSON.stringify(digestPayload))
-    .digest("hex")
-    .slice(0, 12);
+  const digest = buildDeploymentPlanDigest(deploymentPlans);
   const landingCount = landingNodeIds.length;
   const entryCount = entryNodeIds.length;
   const engines = uniqueStringList(
@@ -2866,11 +2865,15 @@ async function executeConfigRelease(payload, options = {}) {
 
   const releaseId = `release_${randomUUID()}`;
   const binaryDistribution = buildPublishDistribution(options.platformBaseUrl ?? null);
+  const rollbackSourceRelease = options.rollbackSourceRelease ?? null;
   const deploymentPlan = buildConfigReleaseDeploymentPlan({
     releaseId,
     resolved,
     binaryDistribution,
   });
+  if (rollbackSourceRelease) {
+    applyRollbackRenderPlans(deploymentPlan, rollbackSourceRelease);
+  }
   const previousRelease =
     configReleaseStore.find(
       (item) => item.profile_id === profile.id && item.status === "success",
@@ -2880,6 +2883,14 @@ async function executeConfigRelease(payload, options = {}) {
     deploymentPlan,
     previousRelease,
     releaseId,
+    rollbackSourceRelease,
+    rollbackDiff: rollbackSourceRelease
+      ? buildRollbackUserDiff({
+          currentRelease: previousRelease,
+          targetRelease: rollbackSourceRelease,
+          findUser: findAccessUserById,
+        })
+      : null,
   });
   const manifest = buildReleaseManifest(release, resolved, {
     deploymentPlan,

@@ -95,6 +95,8 @@ const routes = [
   ["PATCH", "/api/v1/providers/missing", 404, "not_found"],
   ["DELETE", "/api/v1/providers/missing", 404, "not_found"],
   ["POST", "/api/v1/config-releases", 400, "validation_failed"],
+  ["POST", "/api/v1/config-releases/missing-release/rollback", 404, "not_found"],
+  ["POST", "/api/v1/config-releases/%/rollback", 400, "bad_request"],
   ["POST", "/api/v1/operations/execute", 400, "validation_failed"],
   ["POST", "/api/v1/tasks/missing/bootstrap-complete", 404, "not_found"],
   ["GET", "/api/v1/shell/sessions/missing", 404, "not_found"],

@@ -25,6 +25,7 @@ export function createReleasesPageModule(dependencies) {
     page,
     refreshRuntimeData,
     renderCurrentContent,
+    rollbackConfigRelease,
     statusClassName,
     statusText,
     updateNodeGroup,
@@ -36,6 +37,7 @@ export function createReleasesPageModule(dependencies) {
     selectedGroupId: null,
     releaseMessage: null,
     groupMessage: null,
+    rollbackBusyId: null,
   };
 
   function getSelectedGroup() {
@@ -64,6 +66,45 @@ export function createReleasesPageModule(dependencies) {
 
   function getReleaseSummary(release) {
     return release?.summary && typeof release.summary === "object" ? release.summary : {};
+  }
+
+  function getAccessUserName(userId) {
+    const user = appState.accessUsers.find((item) => item.id === userId);
+    return user?.name || userId;
+  }
+
+  // 与后端 executeConfigRelease 一致：发布列表按新到旧排列，每个模板第一条 success 即当前生效版本。
+  function getEffectiveReleaseByProfile() {
+    const effective = new Map();
+    for (const release of appState.configReleases) {
+      if (String(release.status || "") !== "success" || !release.profile_id) {
+        continue;
+      }
+      if (!effective.has(release.profile_id)) {
+        effective.set(release.profile_id, release);
+      }
+    }
+    return effective;
+  }
+
+  function isRollbackTarget(release, effectiveByProfile) {
+    if (String(release.status || "") !== "success") {
+      return false;
+    }
+    const effective = effectiveByProfile.get(release.profile_id);
+    return Boolean(effective) && effective.id !== release.id;
+  }
+
+  function buildRollbackUserDelta(targetRelease, effectiveRelease) {
+    const targetIds = Array.isArray(targetRelease?.access_user_ids) ? targetRelease.access_user_ids : [];
+    const currentIds = Array.isArray(effectiveRelease?.access_user_ids)
+      ? effectiveRelease.access_user_ids
+      : [];
+    const names = (ids) => ids.map((id) => getAccessUserName(id));
+    return {
+      lost: names(currentIds.filter((id) => !targetIds.includes(id))),
+      restored: names(targetIds.filter((id) => !currentIds.includes(id))),
+    };
   }
 
   function shortDigest(value) {
@@ -128,14 +169,16 @@ export function createReleasesPageModule(dependencies) {
     `;
   }
 
-  function renderReleaseMetaBadges(summary) {
+  function renderReleaseMetaBadges(release, summary, effectiveByProfile) {
+    const isEffective = effectiveByProfile.get(release.profile_id)?.id === release.id;
     return `
       <div class="ops-chip-list">
         <span class="pill">${escapeHtml(String(summary.engine || "managed").toUpperCase())}</span>
         <span class="pill">${escapeHtml(String(summary.action_type || "publish").toUpperCase())}</span>
+        ${isEffective ? '<span class="pill">当前生效</span>' : ""}
         ${
-          summary.rollbackable
-            ? '<span class="pill" title="本次发布保留旧配置备份，具备回滚条件；回滚入口将在后续版本提供。">可回滚</span>'
+          isRollbackTarget(release, effectiveByProfile)
+            ? '<span class="pill" title="这条记录可以作为回滚目标：行尾「回滚到此版本」会把它存储的配置重新下发到节点。">可回滚</span>'
             : ""
         }
       </div>
@@ -231,6 +274,66 @@ export function createReleasesPageModule(dependencies) {
     }
   }
 
+  async function handleRollbackRelease(id) {
+    const release = appState.configReleases.find((item) => item.id === id);
+    if (!release || state.rollbackBusyId) {
+      return;
+    }
+
+    const summary = getReleaseSummary(release);
+    const effective = getEffectiveReleaseByProfile().get(release.profile_id) || null;
+    const delta = buildRollbackUserDelta(release, effective);
+    const lines = [
+      `确认把协议模板「${getProfileName(release.profile_id)}」回滚到 ${release.version || release.id}？`,
+      "",
+      `目标发布：${release.title || release.id} · ${formatDateTime(release.created_at)} · ${Number(
+        summary.landing_node_count || summary.total_nodes || 0,
+      )} 台节点`,
+      `当前生效：${effective?.version || effective?.id || "无"}`,
+    ];
+    if (delta.lost.length) {
+      lines.push(`注意：回滚后这些接入用户会暂时拿不到配置：${delta.lost.join("、")}`);
+    }
+    if (delta.restored.length) {
+      lines.push(`回滚后会重新启用：${delta.restored.join("、")}`);
+    }
+    lines.push("回滚会重新下发目标发布存储的配置，并生成一条新的发布记录。");
+
+    if (!windowRef.confirm(lines.join("\n"))) {
+      return;
+    }
+
+    state.rollbackBusyId = release.id;
+    renderCurrentContent();
+
+    try {
+      const result = await rollbackConfigRelease(release.id, { operator: "console" });
+      await refreshRuntimeData();
+      const diff = getReleaseSummary(result?.release).rollback_diff || null;
+      const lostNames = (diff?.lost_users || []).map((item) => item?.name || item?.id).filter(Boolean);
+      state.releaseMessage = {
+        type: "success",
+        text: [
+          result?.operation?.id
+            ? `回滚发布已创建，执行回显 ID：${result.operation.id}`
+            : "回滚发布已创建，等待执行链路返回。",
+          lostNames.length ? `回滚后暂不可用的接入用户：${lostNames.join("、")}` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      };
+    } catch (error) {
+      state.releaseMessage = {
+        type: "error",
+        text: error instanceof Error ? error.message : "触发回滚失败",
+      };
+    } finally {
+      state.rollbackBusyId = null;
+      renderCurrentContent();
+      scrollToReleaseBuilder();
+    }
+  }
+
   function renderGroupSummary(groupIds = []) {
     if (!groupIds.length) {
       return '<span class="tiny">未选择节点组</span>';
@@ -276,10 +379,15 @@ export function createReleasesPageModule(dependencies) {
           ["建议方式", "按入口 / 中转 / 落地区分"],
           ["适用方式", "先小组试发再放大"],
         ];
+    const effectiveReleaseByProfile = getEffectiveReleaseByProfile();
     const rows = filteredReleases.length
       ? filteredReleases
           .map((release) => {
             const summary = getReleaseSummary(release);
+            const canRollback = isRollbackTarget(release, effectiveReleaseByProfile);
+            const rollbackDiff = summary.rollback_diff && typeof summary.rollback_diff === "object"
+              ? summary.rollback_diff
+              : null;
             const accessUserCount = Array.isArray(release.access_user_ids)
               ? release.access_user_ids.length
               : 0;
@@ -310,6 +418,16 @@ export function createReleasesPageModule(dependencies) {
                         ? `<span class="tiny">${escapeHtml(summary.change_summary)}</span>`
                         : ""
                     }
+                    ${
+                      rollbackDiff?.lost_users?.length
+                        ? `<span class="tiny">回滚后暂不可用：${escapeHtml(
+                            rollbackDiff.lost_users
+                              .map((item) => item?.name || item?.id)
+                              .filter(Boolean)
+                              .join("、"),
+                          )}</span>`
+                        : ""
+                    }
                     <span class="tiny">估算月成本 ${escapeHtml(
                       formatCurrencyTotals(
                         releaseCost?.totals_by_currency,
@@ -317,7 +435,7 @@ export function createReleasesPageModule(dependencies) {
                       ),
                     )}</span>
                   </div>
-                  ${renderReleaseMetaBadges(summary)}
+                  ${renderReleaseMetaBadges(release, summary, effectiveReleaseByProfile)}
                 </td>
                 <td>
                   ${renderGroupSummary(release.node_group_ids)}
@@ -345,6 +463,13 @@ export function createReleasesPageModule(dependencies) {
                 <td>
                   <div class="ops-table-actions">
                     <button class="button ghost" type="button" data-release-toggle="${escapeHtml(release.id)}">逐节点</button>
+                    ${
+                      canRollback
+                        ? `<button class="button ghost" type="button" data-release-rollback="${escapeHtml(release.id)}"${
+                            state.rollbackBusyId ? " disabled" : ""
+                          }>${state.rollbackBusyId === release.id ? "回滚中..." : "回滚到此版本"}</button>`
+                        : ""
+                    }
                     ${
                       release.operation_id
                         ? `<a class="button ghost" href="/terminal.html?operation_id=${encodeURIComponent(release.operation_id)}">查看回显</a>`
@@ -842,6 +967,12 @@ export function createReleasesPageModule(dependencies) {
         const willShow = detailRow.hidden;
         detailRow.hidden = !willShow;
         button.textContent = willShow ? "收起" : "逐节点";
+      });
+    });
+
+    documentRef.querySelectorAll("[data-release-rollback]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        handleRollbackRelease(event.currentTarget.dataset.releaseRollback || "");
       });
     });
 

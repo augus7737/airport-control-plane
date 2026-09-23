@@ -91,6 +91,25 @@
   已通的节点不再参与等待
 - 判定模型不变：宽限用尽后仍不通仍然是真实失败，不新增「降级」状态，`business_entry` 依旧计入必需检查
 
+## 进展（2026-09-23，发布回滚：重新发布上一条）
+
+- 新增 `POST /api/v1/config-releases/:id/rollback`，语义定为**回放目标发布存储的产物并生成一条新记录**，
+  不是节点侧就地交换备份；脚本、制品、摘要链、任务、operation、复检全部复用正常发布链路
+- 回放逻辑放在新的纯领域模块 `src/domain/releases/rollback.js`（`applyRollbackRenderPlans`、
+  `buildRollbackUserDiff`、`buildDeploymentPlanDigest`）；`buildConfigReleaseDeploymentPlan` 里原来内联的
+  12 行摘要计算抽成 `buildDeploymentPlanDigest`，回放后的摘要与正常发布由同一段代码算出
+- 口径（本轮拍板）：只有 `status=success` 且不是该模板当前生效版本的发布可作为回滚目标；
+  当前拓扑与目标发布的节点集合必须两侧完全一致，任何一侧漂移都整体 `400`，不做部分回滚；
+  用户集差异照旧回放，但写进 `summary.rollback_diff` 并在前端提示
+- 真实性取舍：Reality 私钥注入只看存储产物里是否还有占位符（模板后来改成 Reality 也不会给旧配置塞私钥）；
+  回滚记录的 `active_user_count` / `skipped_user_count` 取目标发布的 summary，因为节点上跑的字节来自它
+- 前端：发布列表每条可回滚记录加「回滚到此版本」+ 二次确认（列出目标版本、当前生效版本、
+  回滚后拿不到配置的用户）；新增「当前生效」标记，「可回滚」tooltip 改为真实语义
+- 测试规模 25 文件 / 110 用例；路由矩阵 91 条（新增回滚接口 404 与坏编码 400 两条）
+- 验证边界：回滚的产物回放、摘要重算、拓扑与产物缺失的拒绝分支由 `test/release-rollback-plan.test.js`
+  覆盖；接口在真实例上验证过 404 / 坏编码 400 / 目标节点已删除时的 `no valid nodes resolved` 400。
+  **带真实节点的成功回滚尚未在假集群上跑过**，随任务 #43 一起补
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
