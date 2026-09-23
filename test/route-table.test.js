@@ -77,12 +77,18 @@ const routes = [
   ["PATCH", "/api/v1/access-users/missing", 404, "not_found"],
   ["DELETE", "/api/v1/access-users/missing", 404, "not_found"],
   ["POST", "/api/v1/system-templates", 400, "validation_failed"],
+  ["GET", "/api/v1/system-templates/missing-template", 404, "not_found"],
+  ["GET", "/api/v1/system-templates/%", 400, "bad_request"],
   ["PATCH", "/api/v1/system-templates/missing", 404, "not_found"],
   ["DELETE", "/api/v1/system-templates/missing", 404, "not_found"],
+  ["DELETE", "/api/v1/system-templates/%", 400, "bad_request"],
   ["POST", "/api/v1/system-templates/apply", 400, "validation_failed"],
   ["POST", "/api/v1/system-users", 400, "validation_failed"],
+  ["GET", "/api/v1/system-users/missing-user", 404, "not_found"],
+  ["GET", "/api/v1/system-users/%", 400, "bad_request"],
   ["PATCH", "/api/v1/system-users/missing", 404, "not_found"],
   ["DELETE", "/api/v1/system-users/missing", 404, "not_found"],
+  ["DELETE", "/api/v1/system-users/%", 400, "bad_request"],
   ["POST", "/api/v1/system-users/apply", 400, "validation_failed"],
   ["POST", "/api/v1/proxy-profiles", 400, "validation_failed"],
   ["GET", "/api/v1/proxy-profiles/missing", 404, "not_found"],
@@ -261,6 +267,92 @@ test("GET /api/v1/providers/:id reads a single provider record", async () => {
     assert.equal(missingBody.error, "not_found");
     // 与 PATCH/DELETE 的单资源 404 口径一致，而不是全局兜底（兜底无 message）
     assert.equal(missingBody.message, "provider not found");
+  } finally {
+    await server.stop();
+  }
+});
+
+// 同上：system-templates / system-users 的单资源读 200 语义用独立用例覆盖
+// （矩阵只探测 404/400；POST 两条路由都只做校验 + 纯 store 写入，不碰节点侧）。
+test("GET /api/v1/system-templates/:id reads a single system template record", async () => {
+  const server = await startProbeServer();
+
+  try {
+    const cookie = await loginSession(server.baseUrl);
+    const headers = { "content-type": "application/json", cookie };
+
+    const created = await fetch(`${server.baseUrl}/api/v1/system-templates`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: `route-table-template-${Date.now()}`,
+        script_body: "#!/bin/sh\necho route-table\n",
+      }),
+    });
+    assert.equal(created.status, 201);
+    const { system_template: createdTemplate } = await created.json();
+    assert.ok(createdTemplate?.id, "created system template must have an id");
+
+    const found = await fetch(
+      `${server.baseUrl}/api/v1/system-templates/${encodeURIComponent(createdTemplate.id)}`,
+      { headers },
+    );
+    assert.equal(found.status, 200);
+    const foundBody = await found.json();
+    assert.equal(foundBody.error, undefined);
+    // 列表口径就是 store 原始记录（无 serializer），单资源读同样直出
+    assert.deepEqual(foundBody.template, createdTemplate);
+
+    const missing = await fetch(`${server.baseUrl}/api/v1/system-templates/missing-id`, {
+      headers,
+    });
+    assert.equal(missing.status, 404);
+    const missingBody = await missing.json();
+    assert.equal(missingBody.error, "not_found");
+    // 与 PATCH/DELETE 的单资源 404 口径一致，而不是全局兜底（兜底无 message）
+    assert.equal(missingBody.message, "system template not found");
+  } finally {
+    await server.stop();
+  }
+});
+
+test("GET /api/v1/system-users/:id reads a single system user record", async () => {
+  const server = await startProbeServer();
+
+  try {
+    const cookie = await loginSession(server.baseUrl);
+    const headers = { "content-type": "application/json", cookie };
+
+    const created = await fetch(`${server.baseUrl}/api/v1/system-users`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: `route-table-user-${Date.now()}`,
+        username: "route_table_user",
+      }),
+    });
+    assert.equal(created.status, 201);
+    const { system_user: createdSystemUser } = await created.json();
+    assert.ok(createdSystemUser?.id, "created system user must have an id");
+
+    const found = await fetch(
+      `${server.baseUrl}/api/v1/system-users/${encodeURIComponent(createdSystemUser.id)}`,
+      { headers },
+    );
+    assert.equal(found.status, 200);
+    const foundBody = await found.json();
+    assert.equal(foundBody.error, undefined);
+    // 列表口径就是 store 原始记录（无 serializer），单资源读同样直出
+    assert.deepEqual(foundBody.user, createdSystemUser);
+
+    const missing = await fetch(`${server.baseUrl}/api/v1/system-users/missing-id`, {
+      headers,
+    });
+    assert.equal(missing.status, 404);
+    const missingBody = await missing.json();
+    assert.equal(missingBody.error, "not_found");
+    // 与 PATCH/DELETE 的单资源 404 口径一致，而不是全局兜底（兜底无 message）
+    assert.equal(missingBody.message, "system user not found");
   } finally {
     await server.stop();
   }
