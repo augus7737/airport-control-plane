@@ -126,8 +126,65 @@ export function createStorePersistenceInfrastructure(dependencies) {
     try {
       const payload = await readJsonFile(operationsFile);
       const items = Array.isArray(payload.items) ? payload.items : [];
+      let mutated = false;
       operationStore.length = 0;
-      operationStore.push(...items);
+
+      // 控制面崩溃时，正在跑的 operation 会以 running 落盘；它的子任务在 loadTaskStore
+      // 里已被回收成 failed，operation 不跟着收口的话会永久停在"执行中"，
+      // 且未跑完的 target 还是 pending，页面读到的进度与实际相反。
+      for (const item of items) {
+        const status = String(item?.status || "").toLowerCase();
+        if (status !== "running" && status !== "queued") {
+          operationStore.push(item);
+          continue;
+        }
+
+        const finishedAt = item?.finished_at || nowIso();
+        const targets = Array.isArray(item?.targets)
+          ? item.targets.map((target) => {
+              const targetStatus = String(target?.status || "").toLowerCase();
+              if (targetStatus === "success" || targetStatus === "failed") {
+                return target;
+              }
+              return {
+                ...target,
+                status: "failed",
+                finished_at: target?.finished_at || finishedAt,
+                error_message:
+                  target?.error_message || "控制面重启后发现操作仍停留在执行中，已按异常中断回收。",
+              };
+            })
+          : [];
+
+        const successCount = targets.filter((target) => target?.status === "success").length;
+        const failedCount = targets.length - successCount;
+        // 与 executor 收口同一套口径：全成 success、混合 partial、其余 failed。
+        // 被中断的 target 上面已统一翻成 failed，所以这里不会再留 running/pending。
+        let closedStatus = "failed";
+        if (successCount > 0 && failedCount === 0) {
+          closedStatus = "success";
+        } else if (successCount > 0) {
+          closedStatus = "partial";
+        }
+        operationStore.push({
+          ...item,
+          status: closedStatus,
+          finished_at: finishedAt,
+          updated_at: nowIso(),
+          note: item?.note || "控制面重启后发现操作仍停留在执行中，已按异常中断回收。",
+          targets,
+          summary: {
+            total: targets.length,
+            success: successCount,
+            failed: failedCount,
+          },
+        });
+        mutated = true;
+      }
+
+      if (mutated) {
+        await persistOperationStore();
+      }
     } catch (error) {
       if (isMissingFileError(error)) {
         await ensureDataDir();

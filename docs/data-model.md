@@ -10,7 +10,7 @@
 - 写入流程：临时文件 → `fsync` → 原子 `rename` → 保留上一版 `.bak`；主文件损坏时启动阶段回读备份（`src/infrastructure/json-file-store.js`）。
 - 每个文件一条串行写队列，避免并发覆盖（`src/infrastructure/store-persistence.js`）。
 - 没有迁移表。“迁移”是启动时幂等修复函数：管理链路字段迁移、厂商地域归一、节点-厂商关联迁移、内置系统模板种子、bootstrap 初始化任务补齐。
-- 启动修复会把遗留的 `running` 任务、`running|queued` 诊断标记为 `failed`，因此控制面重启不会留下永久运行态。
+- 启动修复会把遗留的 `running` 任务、`running|queued` 诊断、`running|queued` 操作标记为收口态，因此控制面重启不会留下永久运行态。操作的收口会把未结束（`pending`/`running`）的目标一并翻成 `failed`（带"异常中断回收"原因），并按目标实际结果重算 `summary` 与状态：全成 `success`、混合 `partial`、其余 `failed`。
 - 一致性局限：跨文件写入没有事务，历史统计口径依赖最近 N 条记录。**这是 SQLite 迁移的主要动因**（见 `docs/stability-roadmap.md` P4）。
 
 ## Store 清单
