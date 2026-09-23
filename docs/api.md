@@ -46,6 +46,8 @@
 
 留在 `src/server.js` 的是请求管线本身：`/api/v1/auth/*`、鉴权门禁、`/healthz`、`/bootstrap.sh`、`/bootstrap/enroll.sh`、订阅 `/sub/:token`、`/api/v1/artifacts/sing-box/*`、静态资源与 `404`。并行开发约束见 `docs/parallel-development.md`。
 
+路径段一律经 `safeDecodePathSegment` 解码：百分号编码非法（`/%`、`%zz`）时返回 `400 { error: "bad_request" }`，不再抛 `URIError` 变成裸 500。
+
 ## Authentication
 
 控制面页面与 operator API 使用同源 session cookie；匿名只保留给 bootstrap 注册、bootstrap 完成回报、`/healthz`、`/bootstrap.sh`、`/bootstrap/enroll.sh`、订阅 `/sub/:token` 和 sing-box 制品下载。
@@ -110,6 +112,7 @@ Operator auth env vars:
 ### `GET /api/v1/artifacts/sing-box/:version/:target`
 
 公开。下载控制面镜像仓中的 sing-box 二进制（gzip）。目标平台不存在返回 `404`。
+路径段百分号编码非法，或解码后的 `version` 让产物路径解析到 `data/artifacts/sing-box` 之外（`..%2f` 一类）返回 `400 bad_request`——该路由匿名可访问，version 参与拼路径，必须锁在目录内。
 
 ## Nodes
 
@@ -277,7 +280,11 @@ Notes:
 
 ### `GET /api/v1/operations`
 
-批量执行历史（上限 `OPERATION_HISTORY_LIMIT`，默认 1000）。
+批量执行历史（上限 `OPERATION_HISTORY_LIMIT`，默认 1000）。支持 `?node_id=` 只读过滤：返回 `targets[]` 含该节点的**整条记录**（不裁剪 targets），顶层加 `filtered_by_node_id` 回显；未知或非法 `node_id` 返回空列表 `200`，不返 `404`。无该参数时响应体与从前逐字一致。
+
+### `GET /api/v1/operations/:id`
+
+`200 { operation }`，返回台账原对象（与列表 `items[]` 同构，无独立序列化器）。id 百分号编码非法 → `400 bad_request`；不存在 → `404 not_found`。`GET /api/v1/operations/execute` 也落到本分支，返回 `404`。
 
 ### `POST /api/v1/operations/execute`
 
@@ -302,10 +309,15 @@ Notes:
 
 - `GET|POST /api/v1/access-users`，`GET|PATCH|DELETE /api/v1/access-users/:id`
 - `GET /api/v1/access-users/:id`：`200 { access_user }`，序列化口径与列表一致（不含 `share_token` 明文）；id 百分号编码非法 → `400 invalid_request`，记录不存在 → `404 not_found`
+- `PATCH|DELETE /api/v1/access-users/:id`：id 编码非法 → `400 bad_request`（与其他命名空间一致）
+- 凭证：`credential.uuid` / `credential.password` **可以缺省**，缺省时由服务端生成（vless/vmess 生成 UUID，hysteria2 生成随机密码）。给了就按协议校验格式：`uuid` 必须是 UUID（大小写与无连字符形式均可），`hysteria2` 的 `password` 去空格后至少 8 位；`PATCH` 只对本次真正改动 `protocol`/`credential` 的请求按合并后的生效凭证校验，存量不合规不阻塞无关字段更新。
 - `GET /api/v1/access-users/:id/share`：按当前生效发布返回订阅条目、二维码与告警
 - `POST /api/v1/access-users/:id/share-token/regenerate`
 - `GET|POST /api/v1/proxy-profiles`，`GET|PATCH|DELETE /api/v1/proxy-profiles/:id`（`200 { profile }`）
+  - 写入口（`POST`/`PATCH`/克隆）依次过：字段校验 → 重名 `409 profile_name_conflict`（trim + 大小写不敏感，`PATCH` 排除自身）→ `validateSingBoxProfileTemplate` 模板语义 `400 validation_failed`。模板语义校验前移后，缺 `template.tls.certificate_path`/`key_path`、Reality 缺 `private_key_path`/`short_id` 这类问题在保存时即报，不再等到发布才炸。
+- `POST /api/v1/proxy-profiles/:id/clone`：`201 { profile }`。深拷贝模板与其余字段，新 id、`status="draft"`、名字按「X 副本」「X 副本 2」避重；源模板通不过写入口校验时返回 `400`（副本仍会被挡）。
 - `GET|POST /api/v1/node-groups`，`GET|PATCH|DELETE /api/v1/node-groups/:id`（`200 { group }`）
+  - `PATCH` 成功响应额外带 `warnings: string[]`（不拒绝写入）：本次实际移除了成员、且该组仍被某个模板的当前生效发布引用时，逐 profile 给一条“生效拓扑已与节点组不一致，建议重新发布”的提示；发布页保存后同口径展示。
 - `GET|HEAD /sub/:shareToken`：公开订阅输出，可选 `?node_id=` 只取单节点
 
 协议兼容：`hysteria2` 必须 `tls` + UDP/QUIC，凭证取 `credential.password`；`vmess` 支持 `tls` 或 `none`，不支持 `reality`；`reality` 要求节点本地 `template.reality.private_key_path`（私钥内容不接受 inline 提交）；`tls` 需要 `template.tls.certificate_path` 与 `key_path`。被发布记录引用的用户、模板、节点组删除时返回 `409`。
@@ -338,16 +350,19 @@ Notes:
 
 ## System users and templates
 
-- `GET|POST /api/v1/system-users`，`PATCH|DELETE /api/v1/system-users/:id`
+- `GET|POST /api/v1/system-users`，`GET|PATCH|DELETE /api/v1/system-users/:id`（`GET /:id` 返回 `200 { user }`，与列表同构）
 - `POST /api/v1/system-users/apply`：`{ system_user_ids[], node_group_ids[], node_ids[], title, operator, note, dry_run }` → `201 { release, operation }`
 - `GET /api/v1/system-user-releases`
-- `GET|POST /api/v1/system-templates`，`PATCH|DELETE /api/v1/system-templates/:id`（`category` 默认 `baseline`）
+- `GET|POST /api/v1/system-templates`，`GET|PATCH|DELETE /api/v1/system-templates/:id`（`category` 默认 `baseline`；`GET /:id` 返回 `200 { template }`）
 - `POST /api/v1/system-templates/apply`：`{ template_id, node_group_ids[], node_ids[], title, operator, note, dry_run }` → `201 { release, operation }`
 - `GET /api/v1/system-template-releases`
+
+以上四个 `:id` 分支的百分号编码非法时统一 `400 bad_request`（此前 `DELETE` 会 500）。
 
 ## Providers and costs
 
 - `GET|POST /api/v1/providers`，`GET|PATCH|DELETE /api/v1/providers/:id`（重名返回 `409`；`GET /:id` 返回 `200 { provider }`）
+  - `DELETE` 引用保护：节点台账中仍有 `provider_id` 指向该厂商时返回 `409 provider_in_use`，`message` 带绑定台数，`details.node_ids` 最多 10 个、超出置 `truncated`；需先在节点侧解绑或删机
   - 字段：`name`、`account_name`、`website`、`api_endpoint`、`regions[]`、`auto_provision_enabled`、`default_currency`、`monthly_budget`、`budget_alert_threshold`、`default_overage_price_per_gb`、`billing_contact`、`status`、`cost_note`、`note`
 - 成本视图全部只读，按当前台账实时派生：`GET /api/v1/costs/summary`、`/nodes`、`/providers`、`/releases`、`/access-users`
 - 厂商“同步云资源”在前端是显式占位，没有对应的自动建机接口

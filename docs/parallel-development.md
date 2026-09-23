@@ -129,9 +129,12 @@
 - 依赖：19 项（含 `rotateAccessUserShareToken`、`buildAccessUserShareResponse`、
   `validateAccessUserProfileLink`、`safeDecodePathSegment`）
 - 领域：`src/domain/shares/links.js`（订阅链接与中转拓扑在这里，改动会同时影响 `/sub/:token`）
-- 缺口：`expired` 没有服务端写入路径（`expires_at` 过期仍显示 `active`，只有订阅侧派生）；服务端把
-  `credential.uuid`/`password` 当可选而前端按协议强制；`POST /:id/share-token/regenerate` 没有矩阵行；
-  `PATCH|DELETE /:id` 用裸 `decodeURIComponent`（`access-users.js:183`、`:253`）
+- 本轮已做：`PATCH|DELETE /:id` 改 `safeDecodePathSegment`（非法编码 400）；`regenerate` 与 `/%` 进矩阵；
+  新增 `src/domain/shares/credentials.js` 做协议级**格式**校验（给了 uuid 必须是 UUID、hysteria2 给了
+  password 至少 8 位，`PATCH` 按合并后的生效凭证校验）
+- 剩余缺口：`expired` 没有服务端写入路径（`expires_at` 过期仍显示 `active`，只有订阅侧派生）——
+  派生显示 vs 定时落库待用户拍板。注意：**凭证缺省由服务端生成是有意的**
+  （`buildAccessUserRecord` 会生成 uuid / 随机密码），不要改成必填
 - 前端：`public/access-users.html` + `public/js/pages/access-users-page.js`
 - 注意：`/sub/:token` 本体在 server.js 内（禁改区），若需求要改订阅渲染，先谈。
 
@@ -140,11 +143,14 @@
 - 接口面：各自 `GET|POST /api/v1/<ns>` + `GET|PATCH|DELETE /api/v1/<ns>/:id`（单资源读
   返回 `{ profile }` / `{ group }` / `{ provider }`，非法 id 编码 → `400 bad_request`）；
   node-groups 的 `DELETE` 前会查 6 个 store 做引用保护
-- 缺口：providers 的 `DELETE /:id` 没有引用保护（`nodeStore` 已在 ctx 里，可直接数 `provider_id`
-  引用后返 `409`）；proxy-profiles 的 `name` 无唯一性（providers 有），且创建/更新只把 `template`
-  当对象校验，`validateSingBoxProfileTemplate` 要到发布才生效（错误延迟一整个链路），也没有克隆接口；
-  三个模块的 `PATCH` 与 `DELETE` 分支仍用裸 `decodeURIComponent`（`proxy-profiles.js:83`/`:123`、
-  `node-groups.js:100`/`:151`、`providers.js:92`/`:145`）
+- 本轮已做：providers `DELETE` 引用保护（`409 provider_in_use` + `details.node_ids`/`truncated`）；
+  proxy-profiles 重名 `409 profile_name_conflict`、写入口先跑 `validateSingBoxProfileTemplate`
+  （不再等发布才炸）、新增 `POST /:id/clone`（副本 `status=draft`、名字避重）；node-groups `PATCH`
+  成功响应加信息性 `warnings[]`（生效发布仍引用本组且本次移除了成员）；三模块 `PATCH|DELETE` 与
+  `GET` 一律 `safeDecodePathSegment`
+- 剩余缺口：node-groups 的缩容目前只警告不拒绝（要不要升到 `409` 待拍板）；proxy-profiles 的历史记录
+  若模板不合格，`PATCH`/克隆会被挡（错误消息即修复指引），`seed-local-demo.js` 已补齐证书/Reality 字段，
+  但**已在跑的实例里的旧数据需要人工补一次**
 - 依赖：store + `build*Record` + `find*ById` + `persist*` + validator + `safeDecodePathSegment`，8~15 项
 - 注意：node-groups 读 6 个别的 store 做引用检查，删除保护逻辑跨模块，别只看本文件。
 - 前端：`public/providers.html` + `public/js/pages/providers-page.js`、`public/proxy-profiles.html` +
@@ -154,8 +160,9 @@
 - 可改：`src/http/routes/system-{templates,users}.js`
 - 接口面：`GET|POST /api/v1/system-<x>`、`PATCH|DELETE /api/v1/system-<x>/:id`、
   `GET /api/v1/system-<x>-releases`、`POST /api/v1/system-<x>/apply`
-- 缺口：两边都没有 `GET /api/v1/system-<x>/:id`；`DELETE` 分支用裸 `decodeURIComponent`，
-  `/%` 会 500（`src/http/routes/system-templates.js:120`、`src/http/routes/system-users.js:143`）
+- 本轮已做：两边补 `GET /api/v1/system-<x>/:id`（`200 { template }` / `{ user }`，与列表同构）；
+  `GET|PATCH|DELETE /:id` 的非法编码统一 `400 bad_request`
+- 剩余缺口：`/apply` 的结果只有整包 `operation`，没有按节点回看口（属 operations 的 `/:id` + 过滤，已具备）
 - 依赖：`execute*Apply`、`system*ReleaseStore`、冲突收集（system-users 的
   `collectSystemUserConflictMessages`）
 - 领域：`src/domain/system/{templates.js,users.js}`
@@ -169,7 +176,7 @@
   `POST /api/v1/config-releases/:id/rollback`
 - 依赖：`configReleaseStore`、`executeConfigRelease`、`buildPlatformContext`、`sortByUpdatedAt`、
   `safeDecodePathSegment`
-- 缺口：没有 `GET/PATCH /api/v1/config-releases/:id`。
+- 缺口：没有 `GET /api/v1/config-releases/:id`（回滚与前端都只能整表取回）。
 - 领域：`src/domain/releases/{sing-box.js,verification.js,haproxy.js,rollback.js}`、
   测试 `test/release-verification.test.js`、`test/release-rollback-plan.test.js`
 - 前端：`public/releases.html` + `public/js/pages/releases-page.js`
@@ -179,7 +186,9 @@
 **operations**
 - 可改：`src/http/routes/operations.js`
 - 接口面：`GET /api/v1/operations`、`POST /api/v1/operations/execute`
-- 缺口：没有 `GET /api/v1/operations/:id`，逐节点 target 只能整包取回、不能按节点过滤
+- 本轮已做：`GET /api/v1/operations/:id`（`200 { operation }`）、列表 `?node_id=` 只读过滤
+  （整条返回 + `filtered_by_node_id`，未知 id 返空列表不返 404）；纯函数落在 `src/domain/operations/query.js`
+- 剩余缺口：没有取消/重试；`GET /:id` 的 200 命中路径没有 HTTP 用例（需要安全 seed 通道）
 - 依赖：`operationStore`、`pushOperationRecord`、`buildOperationRecord`、`nodeStore`
 - 领域：`src/domain/operations/executor.js`；测试 `test/operation-executor-limits.test.js`
 - 注意：执行器有并发/超时口径（见 `docs/stability-roadmap.md`），别在路由层加重试。
