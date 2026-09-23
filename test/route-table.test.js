@@ -62,6 +62,7 @@ const routes = [
   ["PATCH", "/api/v1/bootstrap-tokens/missing", 404, "not_found"],
   ["GET", "/api/v1/access-users/missing/share", 404, "not_found"],
   ["POST", "/api/v1/access-users", 400, "validation_failed"],
+  ["GET", "/api/v1/access-users/missing", 404, "not_found"],
   ["PATCH", "/api/v1/access-users/missing", 404, "not_found"],
   ["DELETE", "/api/v1/access-users/missing", 404, "not_found"],
   ["POST", "/api/v1/system-templates", 400, "validation_failed"],
