@@ -379,8 +379,19 @@ Notes:
 
 - `GET /api/v1/platform-context`：bootstrap 基址、请求来源、局域网探测地址、平台 SSH 密钥状态、sing-box 分发配置、`probe_scheduler` 状态
 - `GET|PATCH /api/v1/platform/sing-box-distribution`：`{ enabled, version, default_version, install_path, variants }`，`variants.<target>` 支持 `enabled` / `upstream_url` / `upstream_sha256`
-- `POST /api/v1/platform/sing-box-distribution/mirror` 与 `.../sync`：同一处理逻辑，请求 `{ target }`，`201`
-- `POST /api/v1/platform/ssh-key/generate`：生成受管密钥；已存在返回 `409`，外部 `PLATFORM_SSH_PRIVATE_KEY_PATH` 优先
+- `POST /api/v1/platform/sing-box-distribution/mirror` 与 `.../sync`：同一处理逻辑，请求 `{ target }`，`201`。
+  缺/空 `target` → `400 validation_failed`；未知 `target` 由领域层在下载前拒绝 → `400 bad_request`（不产生外网请求）。
+  镜像前会检查**配置里的** `version` 是否为单个安全路径段（`[A-Za-z0-9][A-Za-z0-9._+-]*` 且不含 `..`），
+  否则 `400 validation_failed`——`version` 参与落盘路径拼接，必须锁在 `data/artifacts/sing-box` 内
+- `POST /api/v1/platform/ssh-key/generate`：生成受管密钥；已存在返回 `409 { error: "conflict" }`，
+  外部 `PLATFORM_SSH_PRIVATE_KEY_PATH` 优先（该情况下 `400 bad_request`）
+- `GET /api/v1/platform/ssh-key`：只读复查已生成密钥，恒 `200 { platform_ssh_key }`。
+  只输出状态类信息：`status`（`ready|partial|invalid|missing`，与 `platform-context` 同口径）、`usable`、
+  `managed`（是否控制面自管）、`source`、`bootstrap_ready`、`can_generate`、`algorithm`、`key_type`、
+  `fingerprint`（`SHA256:` 口径，同 `ssh-keygen -lf`）、`public_key_available`、
+  `private_key_file_name` / `private_key_dir_name`（只文件名与目录名）、`created_at` / `updated_at`
+  （取自配套 `.pub` 文件的 birthtime/mtime，公钥文件不在则为 `null`）、`reason_code`、`note`。
+  **不返回**私钥内容与任何绝对路径，也不返回公钥本体——公钥的唯一出口仍是 `platform-context`
 
 `probe_scheduler` 只读：开关、间隔、批量与最小间隔来自环境变量和启动装配，没有对外切换接口。
 
