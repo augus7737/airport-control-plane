@@ -1,5 +1,6 @@
 import { validateConfigReleaseCreate } from "../../http/validators.js";
 import { jsonResponse, readJsonBody } from "../../utils/http.js";
+import { projectConfigReleaseForDetail } from "../../domain/releases/detail.js";
 
 export function createConfigReleasesRoutes(ctx) {
   const {
@@ -15,6 +16,24 @@ export function createConfigReleasesRoutes(ctx) {
       jsonResponse(reply, 200, {
         items: sortByUpdatedAt(configReleaseStore),
       });
+      return;
+    }
+
+    const detailMatch = url.pathname.match(/^\/api\/v1\/config-releases\/([^/]+)$/);
+    if (request.method === "GET" && detailMatch) {
+      const releaseId = safeDecodePathSegment(detailMatch[1]);
+      if (!releaseId) {
+        jsonResponse(reply, 400, { error: "bad_request", message: "invalid release id" });
+        return;
+      }
+
+      const release = configReleaseStore.find((item) => item.id === releaseId) ?? null;
+      if (!release) {
+        jsonResponse(reply, 404, { error: "not_found", message: "config release not found" });
+        return;
+      }
+
+      jsonResponse(reply, 200, projectConfigReleaseForDetail(release));
       return;
     }
 
