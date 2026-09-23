@@ -181,7 +181,7 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
   operation_id, task_ids[], created_by, note, created_at, updated_at }
 ```
 
-`status` 起始 `running`，由 `src/domain/releases/verification.js` 的复检结果收敛；成功集合与失败集合是显式枚举（`success|passed|ok|ready|healthy|running|applied` / `failed|failure|error|errored|timeout|rolled_back`），逐目标检查记录 `passed|skipped|missing`。
+`status` 起始 `running`，由 `src/domain/releases/verification.js` 的复检结果收敛；成功集合与失败集合是显式枚举（`success|passed|ok|ready|healthy|running|applied` / `failed|failure|error|errored|timeout|rolled_back`），逐目标检查记录 `passed|skipped|missing`。业务入口探测在 `src/server.js` 的 `verifyConfigReleaseAfterPublish` 内执行，失败目标最多重探 `RELEASE_VERIFY_PROBE_ATTEMPTS` 次（间隔 `RELEASE_VERIFY_PROBE_RETRY_GAP_MS`），只有最后一轮的结果进入 `businessProbesByNodeId` 并参与判定。
 
 ## SystemUser / SystemTemplate 与下发记录
 

@@ -135,6 +135,14 @@ const probeSshTimeoutMs = Number.parseInt(
   process.env.PROBE_SSH_TIMEOUT_MS ?? "12000",
   10,
 );
+const releaseVerifyProbeAttempts = Number.parseInt(
+  process.env.RELEASE_VERIFY_PROBE_ATTEMPTS ?? "3",
+  10,
+);
+const releaseVerifyProbeRetryGapMs = Number.parseInt(
+  process.env.RELEASE_VERIFY_PROBE_RETRY_GAP_MS ?? "2000",
+  10,
+);
 const autoProbeEnabled = String(process.env.AUTO_PROBE_ENABLED ?? "true").toLowerCase() !== "false";
 const autoProbeIntervalMs = Number.parseInt(
   process.env.AUTO_PROBE_INTERVAL_MS ?? `${60 * 60 * 1000}`,
@@ -2439,6 +2447,28 @@ async function verifyConfigReleaseAfterPublish(release, operation, profile) {
   const checksByNodeId = {};
   const businessProbesByNodeId = {};
   const subscriptionsByNodeId = {};
+  const failedBusinessProbes = [];
+
+  async function runBusinessEntryProbe({ target, requirement }) {
+    try {
+      return requirement.requires_udp
+        ? await runUdpProbe(target, {
+            probeType: requirement.requires_quic ? "udp_quic" : "udp",
+            timeoutMs: probeTcpTimeoutMs,
+            expectResponse: true,
+          })
+        : await runTcpProbe(target);
+    } catch (error) {
+      return {
+        attempted: true,
+        success: false,
+        latency_ms: null,
+        error_message: error instanceof Error ? error.message : "business probe failed",
+        reason_code: "business_probe_error",
+        transport: requirement.requires_udp ? "udp" : "tcp",
+      };
+    }
+  }
 
   for (const deployment of release.deployments) {
     const nodeId = deployment.node_id;
@@ -2463,33 +2493,18 @@ async function verifyConfigReleaseAfterPublish(release, operation, profile) {
       family: String(route.entry_endpoint || "").includes(":") ? "ipv6" : "ipv4",
     };
     const requirement = evaluateProfilePublishCapabilities({ profile, route });
-    let probe;
-    try {
-      probe = requirement.requires_udp
-        ? await runUdpProbe(target, {
-            probeType: requirement.requires_quic ? "udp_quic" : "udp",
-            timeoutMs: probeTcpTimeoutMs,
-            expectResponse: true,
-          })
-        : await runTcpProbe(target);
-    } catch (error) {
-      probe = {
-        attempted: true,
-        success: false,
-        latency_ms: null,
-        error_message: error instanceof Error ? error.message : "business probe failed",
-        reason_code: "business_probe_error",
-        transport: requirement.requires_udp ? "udp" : "tcp",
-      };
-    }
     const stageName = requirement.requires_udp
       ? "business_entry_udp_quic"
       : "business_entry_tcp";
+    const probe = await runBusinessEntryProbe({ target, requirement });
     businessProbesByNodeId[nodeId] = {
       stages: {
         [stageName]: probe,
       },
     };
+    if (!probe.success) {
+      failedBusinessProbes.push({ nodeId, target, requirement, stageName });
+    }
 
     const manifestRoute = manifestRouteForDeployment(deployment);
     subscriptionsByNodeId[nodeId] = {
@@ -2501,6 +2516,23 @@ async function verifyConfigReleaseAfterPublish(release, operation, profile) {
         source: "release_manifest",
       },
     };
+  }
+
+  // 节点侧脚本重启服务后只 sleep 1，单次复检经常在端口还没起来时就判失败。
+  // 只延后重探失败的目标，已通的节点不必再等。
+  for (
+    let attempt = 1;
+    attempt < releaseVerifyProbeAttempts && failedBusinessProbes.length > 0;
+    attempt += 1
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, releaseVerifyProbeRetryGapMs));
+    for (const entry of [...failedBusinessProbes]) {
+      const probe = await runBusinessEntryProbe(entry);
+      businessProbesByNodeId[entry.nodeId].stages[entry.stageName] = probe;
+      if (probe.success) {
+        failedBusinessProbes.splice(failedBusinessProbes.indexOf(entry), 1);
+      }
+    }
   }
 
   return evaluateReleaseVerification({

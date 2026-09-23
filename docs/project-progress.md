@@ -82,6 +82,15 @@
 - 新增 `docs/parallel-development.md`：模块边界卡片 + 边界提示词 + 多窗口并行的 worktree /
   端口 / 数据目录 / 共享文件 / 合并顺序约定
 
+## 进展（2026-09-23，发布复检口径）
+
+- 节点侧脚本重启 `sing-box` 后只 `sleep 1`，控制面单次 TCP/UDP 复检经常在端口起来前就判失败，
+  把「已生效但还没监听」错报成发布失败（真实集群首发即踩到）
+- 改为宽限重探：`verifyConfigReleaseAfterPublish` 先按节点收集失败目标，之后每轮等待
+  `RELEASE_VERIFY_PROBE_RETRY_GAP_MS`(2000) 只重探仍失败的目标，最多 `RELEASE_VERIFY_PROBE_ATTEMPTS`(3) 轮；
+  已通的节点不再参与等待
+- 判定模型不变：宽限用尽后仍不通仍然是真实失败，不新增「降级」状态，`business_entry` 依旧计入必需检查
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
