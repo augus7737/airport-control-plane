@@ -11,6 +11,7 @@ export function createSystemUsersRoutes(ctx) {
     hasOwn,
     missingIds,
     persistSystemUserStore,
+    safeDecodePathSegment,
     sortByUpdatedAt,
     systemUserReleaseStore,
     systemUserStore,
@@ -75,9 +76,45 @@ export function createSystemUsersRoutes(ctx) {
     }
 
     const systemUserMatch = url.pathname.match(/^\/api\/v1\/system-users\/([^/]+)$/);
+    if (systemUserMatch && request.method === "GET") {
+      const systemUserId = safeDecodePathSegment(systemUserMatch[1]);
+
+      if (!systemUserId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid system user id",
+        });
+        return;
+      }
+
+      const existingSystemUser = findSystemUserById(systemUserId);
+
+      if (!existingSystemUser) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "system user not found",
+        });
+        return;
+      }
+
+      jsonResponse(reply, 200, {
+        user: existingSystemUser,
+      });
+      return;
+    }
+
     if (systemUserMatch && request.method === "PATCH") {
       try {
-        const systemUserId = decodeURIComponent(systemUserMatch[1]);
+        const systemUserId = safeDecodePathSegment(systemUserMatch[1]);
+
+        if (!systemUserId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid system user id",
+          });
+          return;
+        }
+
         const existingSystemUser = findSystemUserById(systemUserId);
 
         if (!existingSystemUser) {
@@ -140,7 +177,16 @@ export function createSystemUsersRoutes(ctx) {
     }
 
     if (systemUserMatch && request.method === "DELETE") {
-      const systemUserId = decodeURIComponent(systemUserMatch[1]);
+      const systemUserId = safeDecodePathSegment(systemUserMatch[1]);
+
+      if (!systemUserId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid system user id",
+        });
+        return;
+      }
+
       const existingSystemUser = findSystemUserById(systemUserId);
 
       if (!existingSystemUser) {

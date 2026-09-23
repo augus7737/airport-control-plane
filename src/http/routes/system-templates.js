@@ -10,6 +10,7 @@ export function createSystemTemplatesRoutes(ctx) {
     hasOwn,
     missingIds,
     persistSystemTemplateStore,
+    safeDecodePathSegment,
     sortByUpdatedAt,
     systemTemplateReleaseStore,
     systemTemplateStore,
@@ -64,9 +65,45 @@ export function createSystemTemplatesRoutes(ctx) {
     }
 
     const systemTemplateMatch = url.pathname.match(/^\/api\/v1\/system-templates\/([^/]+)$/);
+    if (systemTemplateMatch && request.method === "GET") {
+      const templateId = safeDecodePathSegment(systemTemplateMatch[1]);
+
+      if (!templateId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid system template id",
+        });
+        return;
+      }
+
+      const existingTemplate = findSystemTemplateById(templateId);
+
+      if (!existingTemplate) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "system template not found",
+        });
+        return;
+      }
+
+      jsonResponse(reply, 200, {
+        template: existingTemplate,
+      });
+      return;
+    }
+
     if (systemTemplateMatch && request.method === "PATCH") {
       try {
-        const templateId = decodeURIComponent(systemTemplateMatch[1]);
+        const templateId = safeDecodePathSegment(systemTemplateMatch[1]);
+
+        if (!templateId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid system template id",
+          });
+          return;
+        }
+
         const existingTemplate = findSystemTemplateById(templateId);
 
         if (!existingTemplate) {
@@ -117,7 +154,16 @@ export function createSystemTemplatesRoutes(ctx) {
     }
 
     if (systemTemplateMatch && request.method === "DELETE") {
-      const templateId = decodeURIComponent(systemTemplateMatch[1]);
+      const templateId = safeDecodePathSegment(systemTemplateMatch[1]);
+
+      if (!templateId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid system template id",
+        });
+        return;
+      }
+
       const existingTemplate = findSystemTemplateById(templateId);
 
       if (!existingTemplate) {
