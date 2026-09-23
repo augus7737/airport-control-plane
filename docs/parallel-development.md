@@ -115,20 +115,21 @@
 
 **access-users**
 - 可改：`src/http/routes/access-users.js`
-- 接口面：`GET|POST /api/v1/access-users`、`PATCH|DELETE /api/v1/access-users/:id`、
+- 接口面：`GET|POST /api/v1/access-users`、`GET|PATCH|DELETE /api/v1/access-users/:id`、
   `GET /api/v1/access-users/:id/share`（订阅链接）、
-  `POST /api/v1/access-users/:id/share-token`（轮换）
+  `POST /api/v1/access-users/:id/share-token/regenerate`（轮换）
 - 依赖：19 项（含 `rotateAccessUserShareToken`、`buildAccessUserShareResponse`、
-  `validateAccessUserProfileLink`）
+  `validateAccessUserProfileLink`、`safeDecodePathSegment`）
 - 领域：`src/domain/shares/links.js`（订阅链接与中转拓扑在这里，改动会同时影响 `/sub/:token`）
 - 前端：`public/access-users.html` + `public/js/pages/access-users-page.js`
 - 注意：`/sub/:token` 本体在 server.js 内（禁改区），若需求要改订阅渲染，先谈。
 
 **proxy-profiles / node-groups / providers**
 - 可改：`src/http/routes/{proxy-profiles,node-groups,providers}.js`
-- 接口面：各自 `GET|POST /api/v1/<ns>` + `PATCH|DELETE /api/v1/<ns>/:id`（三者都没有
-  `GET /:id`）；node-groups 的 `DELETE` 前会查 6 个 store 做引用保护
-- 依赖：store + `build*Record` + `find*ById` + `persist*` + validator，7~14 项
+- 接口面：各自 `GET|POST /api/v1/<ns>` + `GET|PATCH|DELETE /api/v1/<ns>/:id`（单资源读
+  返回 `{ profile }` / `{ group }` / `{ provider }`，非法 id 编码 → `400 bad_request`）；
+  node-groups 的 `DELETE` 前会查 6 个 store 做引用保护
+- 依赖：store + `build*Record` + `find*ById` + `persist*` + validator + `safeDecodePathSegment`，8~15 项
 - 注意：node-groups 读 6 个别的 store 做引用检查，删除保护逻辑跨模块，别只看本文件。
 - 前端：`public/proxy-profiles.html`、`public/providers.html`
 

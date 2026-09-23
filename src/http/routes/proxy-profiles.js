@@ -9,6 +9,7 @@ export function createProxyProfilesRoutes(ctx) {
     findProxyProfileById,
     persistProxyProfileStore,
     proxyProfileStore,
+    safeDecodePathSegment,
     sortByUpdatedAt,
   } = ctx;
 
@@ -51,7 +52,16 @@ export function createProxyProfilesRoutes(ctx) {
 
     const proxyProfileMatch = url.pathname.match(/^\/api\/v1\/proxy-profiles\/([^/]+)$/);
     if (proxyProfileMatch && request.method === "GET") {
-      const profileId = decodeURIComponent(proxyProfileMatch[1]);
+      const profileId = safeDecodePathSegment(proxyProfileMatch[1]);
+
+      if (!profileId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid profile id",
+        });
+        return;
+      }
+
       const existingProfile = findProxyProfileById(profileId);
 
       if (!existingProfile) {

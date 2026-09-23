@@ -281,11 +281,12 @@ Notes:
 
 ## Access users, profiles, groups
 
-- `GET|POST /api/v1/access-users`，`PATCH|DELETE /api/v1/access-users/:id`
+- `GET|POST /api/v1/access-users`，`GET|PATCH|DELETE /api/v1/access-users/:id`
+- `GET /api/v1/access-users/:id`：`200 { access_user }`，序列化口径与列表一致（不含 `share_token` 明文）；id 百分号编码非法 → `400 invalid_request`，记录不存在 → `404 not_found`
 - `GET /api/v1/access-users/:id/share`：按当前生效发布返回订阅条目、二维码与告警
 - `POST /api/v1/access-users/:id/share-token/regenerate`
-- `GET|POST /api/v1/proxy-profiles`，`PATCH|DELETE /api/v1/proxy-profiles/:id`
-- `GET|POST /api/v1/node-groups`，`PATCH|DELETE /api/v1/node-groups/:id`
+- `GET|POST /api/v1/proxy-profiles`，`GET|PATCH|DELETE /api/v1/proxy-profiles/:id`（`200 { profile }`）
+- `GET|POST /api/v1/node-groups`，`GET|PATCH|DELETE /api/v1/node-groups/:id`（`200 { group }`）
 - `GET|HEAD /sub/:shareToken`：公开订阅输出，可选 `?node_id=` 只取单节点
 
 协议兼容：`hysteria2` 必须 `tls` + UDP/QUIC，凭证取 `credential.password`；`vmess` 支持 `tls` 或 `none`，不支持 `reality`；`reality` 要求节点本地 `template.reality.private_key_path`（私钥内容不接受 inline 提交）；`tls` 需要 `template.tls.certificate_path` 与 `key_path`。被发布记录引用的用户、模板、节点组删除时返回 `409`。
@@ -313,7 +314,7 @@ Notes:
 
 ## Providers and costs
 
-- `GET|POST /api/v1/providers`，`PATCH|DELETE /api/v1/providers/:id`（重名返回 `409`）
+- `GET|POST /api/v1/providers`，`GET|PATCH|DELETE /api/v1/providers/:id`（重名返回 `409`；`GET /:id` 返回 `200 { provider }`）
   - 字段：`name`、`account_name`、`website`、`api_endpoint`、`regions[]`、`auto_provision_enabled`、`default_currency`、`monthly_budget`、`budget_alert_threshold`、`default_overage_price_per_gb`、`billing_contact`、`status`、`cost_note`、`note`
 - 成本视图全部只读，按当前台账实时派生：`GET /api/v1/costs/summary`、`/nodes`、`/providers`、`/releases`、`/access-users`
 - 厂商“同步云资源”在前端是显式占位，没有对应的自动建机接口

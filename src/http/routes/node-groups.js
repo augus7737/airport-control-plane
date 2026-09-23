@@ -11,6 +11,7 @@ export function createNodeGroupsRoutes(ctx) {
     nodeGroupStore,
     nodeStore,
     persistNodeGroupStore,
+    safeDecodePathSegment,
     sortByUpdatedAt,
     systemTemplateReleaseStore,
     systemTemplateStore,
@@ -68,7 +69,16 @@ export function createNodeGroupsRoutes(ctx) {
 
     const nodeGroupMatch = url.pathname.match(/^\/api\/v1\/node-groups\/([^/]+)$/);
     if (nodeGroupMatch && request.method === "GET") {
-      const groupId = decodeURIComponent(nodeGroupMatch[1]);
+      const groupId = safeDecodePathSegment(nodeGroupMatch[1]);
+
+      if (!groupId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid node group id",
+        });
+        return;
+      }
+
       const existingGroup = findNodeGroupById(groupId);
 
       if (!existingGroup) {

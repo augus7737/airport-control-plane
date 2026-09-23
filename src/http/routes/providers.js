@@ -9,6 +9,7 @@ export function createProvidersRoutes(ctx) {
     hasOwn,
     persistProviderStore,
     providerStore,
+    safeDecodePathSegment,
     sortByUpdatedAt,
   } = ctx;
 
@@ -60,7 +61,16 @@ export function createProvidersRoutes(ctx) {
 
     const providerMatch = url.pathname.match(/^\/api\/v1\/providers\/([^/]+)$/);
     if (providerMatch && request.method === "GET") {
-      const providerId = decodeURIComponent(providerMatch[1]);
+      const providerId = safeDecodePathSegment(providerMatch[1]);
+
+      if (!providerId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid provider id",
+        });
+        return;
+      }
+
       const existingProvider = findProviderById(providerId);
 
       if (!existingProvider) {
