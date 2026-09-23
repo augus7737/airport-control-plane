@@ -1,7 +1,7 @@
 # 项目进度
 
-更新时间：2026-09-22
-基线提交：`46544c0`（2026-08-21 Add persistent light and dark themes）+ 本轮任务中心改造
+更新时间：2026-09-23
+基线提交：`c77d27f`（2026-09-23 假节点按架构固定镜像 tag，并加入 Alpine/OpenRC 节点）+ 本轮控制面裸机部署改造；`46544c0`（2026-08-21）及之前的积累见下方“近期进展”
 
 ## 当前定位
 
@@ -29,7 +29,7 @@
 - JSON 原子写 + `.bak` 回读、store 单文件串行写队列、请求体 1 MiB 上限与 `413`、全局 HTTP 异常边界、异常 Host 回退
 - 任务原子认领与 owner 终态保护、批量执行并发与单目标输出上限、重启遗留任务回收
 - 生产环境禁止 SSH 失败回退控制面本机执行；畸形 Cookie 不再打崩进程；活跃会话续签 Cookie
-- canonical 裸机 systemd 安装/升级脚本（`ProtectSystem=strict`、`MemoryMax`、健康检查与代码回滚）
+- canonical 裸机安装/升级脚本（健康检查、失败回滚、`ProtectSystem=strict`、`MemoryMax`）
 
 口径统一：
 
@@ -41,7 +41,7 @@
 - 侧栏重组为节点运维 / 配置发布 / 系统管理三组；中转拓扑升级为世界地图
 - 亮/暗主题持久化；模块级 UI 修复七轮（`docs/module-ui-optimization-plan.md`）
 
-## 本轮进展（2026-09-22，任务中心）
+## 进展（2026-09-22，任务中心）
 
 - 自动巡检从整块面板降级为一行状态条，首屏直接是任务池
 - 任务池实时性：仅在有 `queued/running` 任务时每 15s 轮询，搜索输入防抖并恢复焦点与光标
@@ -50,6 +50,22 @@
 - “重新初始化”增加显式确认，说明会重启 `sshd`、覆写 `/etc/airport/node.env`，并点名目标节点
 - 表格列宽改为状态驱动：详情栏展开时隐藏“说明”列，把宽度让给扫描列，避免动作按钮截断
 - 复探按钮文案收敛，加载态不再撑破动作列
+
+## 进展（2026-09-23，测试集群与控制面裸机部署）
+
+本地测试集群：
+
+- `docker/local-nodes/` 假节点镜像按架构固定 tag，避免 arm64 主机上被 amd64 镜像覆盖；新增 Alpine/OpenRC 节点，让发布链路覆盖无 systemd 分支
+- 8080 实例上过期的演示节点已按要求删除，节点/任务/探测/操作快照归零；节点侧样本改用该假集群
+
+控制面裸机部署（`scripts/deploy-bare-metal.sh`，由只支持 systemd 的版本演进）：
+
+- 按「包管理器 × init 系统」分支：apt / apk × systemd / OpenRC，覆盖 Ubuntu / Debian / Alpine × amd64 / arm64；不支持的组合与无 init 的机器直接失败并说明原因
+- 新增无 checkout 入口：`curl` 拉脚本后用 `sh` 执行，脚本自带 bash 引导前缀（Alpine 最小镜像没有 bash），源码可由 `AIRPORT_DEPLOY_REF` 指定
+- OpenRC 分支：init 脚本 + `start_pre` 逐行导出环境文件、日志落 `/var/log/airport-control-plane.log`、pidfile 判活；systemd 分支保持原有加固项
+- 在真实容器里跑通 `install` 与 `update`（Alpine 3.20 + OpenRC、Debian 13 + systemd），并用失败注入验证回滚会移除服务定义、停止服务且以非零退出，不误报成功
+- 修复真实运行暴露的问题：清理阶段只删脚本自己创建的下载目录，不再碰调用方的源码 checkout
+- 测试规模 20 文件 → 23 文件 / 97 用例
 
 ## 已跑通的主链路
 
@@ -78,11 +94,11 @@
 
 ## 当前本地数据快照（非生产事实）
 
-`data/` 已 gitignore，下列是本轮开发用 `npm run seed`（`scripts/seed-local-demo.js`）造出的本地演示数据，加上一台真实 bootstrap 注册的节点：
+`data/` 已 gitignore，下列是本轮开发用 `npm run seed`（`scripts/seed-local-demo.js`）造出的本地演示配置，加上当前的真实运行态：
 
-- 节点 7（6 台演示 `source=manual`，1 台真实 `source=bootstrap`）
-- 任务 7 · 探测 6 · 操作 2 · 接入用户 3 · 协议模板 3 · 节点组 2 · 厂商 3 · 系统模板 5 · 注册令牌 2 · operator 会话 8
-- `config-releases.json`、`system-users.json`、`diagnostics.json` 在本地快照中不存在（未触发过对应动作）
+- 配置台账：接入用户 3 · 协议模板 3 · 节点组 2 · 厂商 3 · 系统模板 5 · 注册令牌 2
+- 运行态：节点 0 · 任务 0 · 探测 0 · 操作 0（此前 7 台过期演示/真实节点已按要求删除，避免污染测试）
+- 需要节点样本时改用 `docker/local-nodes/` 假集群（Debian + systemd、Ubuntu、Alpine + OpenRC），通过真实 bootstrap 流程注册，不再往 `data/` 手写演示节点
 
 历史文档里“5 台真实节点 / 200 任务 / 224 探测”是某一时刻的生产快照，不应再作为现状引用。
 
@@ -95,6 +111,7 @@
 - 任务缺执行租约与取消；发布/探测失败无告警出口
 - `data/` 自动备份尚未实现（只有单文件 `.bak`）
 - Web Shell 无单用户/单节点会话数上限，仍非生产级 bastion
+- 裸机部署的 amd64 分支未在真机复验（本机 Docker 是 arm64，Rosetta 模拟 systemd 不可信），OpenRC 分支也没有 `MemoryMax` 等价物
 
 ## 下一阶段优先级
 

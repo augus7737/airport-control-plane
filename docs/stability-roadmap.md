@@ -1,6 +1,6 @@
 # 稳定运行改造路线图
 
-更新时间：2026-09-22
+更新时间：2026-09-23
 文档性质：稳定性与工程质量路线图。逐项状态见下表，代码为最终事实。
 
 ## 实施状态
@@ -10,7 +10,8 @@
 | P0.1 JSON 原子写入 | ✅ 已完成 | `src/infrastructure/json-file-store.js`：tmp → fsync → rename + `.bak` + 启动回读 |
 | P0.2 Store 写入串行队列 | ✅ 已完成 | `src/infrastructure/store-persistence.js`，每文件一条队列 |
 | P0.3 请求体上限与 413 | ✅ 已完成 | `src/utils/http.js`：1 MiB、销毁连接、单次 resolve |
-| P0.4 裸机 systemd 加固 | ✅ 已完成，且强于原建议 | `scripts/deploy-systemd.sh`：`Restart=on-failure`、`StartLimitBurst=5`、`MemoryMax=256M`、`NoNewPrivileges`、`PrivateTmp`、`ProtectSystem=strict`、`ReadWritePaths=<data>` |
+| P0.4 裸机部署加固 | ✅ 已完成，且强于原建议 | `scripts/deploy-bare-metal.sh`：systemd 分支带 `Restart=on-failure`、`StartLimitBurst=5`、`MemoryMax=256M`、`NoNewPrivileges`、`PrivateTmp`、`ProtectSystem=strict`、`ReadWritePaths=<data>`；OpenRC 分支用 init 脚本 + `start_pre` 导出环境文件，无 `MemoryMax` 等价物 |
+| P0.4b 控制面多系统/多架构部署 | ✅ 已完成（amd64 待真机复验） | 同一脚本按 apt/apk × systemd/OpenRC 分支，覆盖 Ubuntu / Debian / Alpine × amd64 / arm64；无 checkout 时可 curl 拉取执行；两条 init 分支已在真实容器跑通 `install`，见 `docs/deployment-bare-metal.md` |
 | P0.5 自动备份 | ⬜ 未实现 | 只有单文件 `.bak`；无每日/每周备份与一条命令恢复 |
 | P1.0 多系统节点接入 | ✅ 主体完成 | bootstrap 与初始化模板覆盖 Alpine / Debian-Ubuntu / RHEL；发布期按包管理器补装运行时仍待验证 |
 | P1.1 `/readyz` | ⬜ 未实现 | 代码中不存在，`/healthz` 仍只表示进程存活 |
@@ -21,12 +22,12 @@
 | P2.2 Cookie 安全策略 | ✅ 已完成 | `HttpOnly` + `SameSite=Lax` + `CONTROL_PLANE_SESSION_SECURE` / `x-forwarded-proto` 自动 `Secure`，滑动续期 |
 | P2.3 Token 脱敏（哈希化） | ⬜ 未实现 | `bootstrap-tokens.json` 仍存明文以支持一键复制 |
 | P2.4 敏感日志清理 | 🟡 部分完成 | 私钥与 Reality 私钥不落控制面配置；缺统一的日志脱敏与审查 |
-| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 20 个 `node:test` 文件；`npm test` / `npm run check`；核心远程执行端到端仍缺 |
+| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 23 个 `node:test` 文件 / 97 个用例；`npm test` / `npm run check`；核心远程执行端到端仍缺 |
 | P3.2 拆分 `src/server.js` | ⬜ 未开始 | 仍 5763 行，无 `src/routes`、`src/services` |
 | P4.1 SQLite 迁移 | ⬜ 未开始 | 仍是 JSON 文件，无 SQL 依赖 |
 | P4.2 PostgreSQL 预留 | ⬜ 未开始 | repository 层尚未抽出 |
 
-第一批最小改造包（原子写、写队列、413、systemd 加固、测试脚本）已交付；**下一步最高价值是自动备份 + `/readyz` + 结构化日志 + 登录限流，然后进入 SQLite**。
+第一批最小改造包（原子写、写队列、413、裸机部署加固、测试脚本）已交付；**下一步最高价值是自动备份 + `/readyz` + 结构化日志 + 登录限流，然后进入 SQLite**。
 
 ## 目标
 

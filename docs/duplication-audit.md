@@ -1,6 +1,6 @@
 # 重复口径统一化审计
 
-更新时间：2026-09-22
+更新时间：2026-09-23
 说明：本文为逐项审计台账。“已完成”指已落到单一来源模块并有测试或代码引用；“待处理”仍是分散口径。
 
 ## 当前总览
@@ -15,7 +15,7 @@
 | 代理协议栈与兼容矩阵 | ⬜ 待处理 | 目标 `src/domain/proxy/protocols.js` + `public/js/shared/proxy-options.js`；目前仍分散在 `src/http/validators.js`、`src/domain/releases/sing-box.js`、`proxy-profiles-page.js` |
 | 状态选项与筛选选项 | ⬜ 待处理 | 展示 formatter 已集中在 `core-formatters.js`，但各页表单/筛选选项仍各自写；目标 `public/js/shared/status-options.js` |
 | 初始化模板名与任务类型 | 🟡 部分完成 | 模板覆盖 Alpine / Debian-Ubuntu / RHEL，但任务类型仍叫 `init_alpine`，未引入 `init_node` 别名 |
-| 部署模式口径 | ✅ 完成 | canonical systemd（`scripts/deploy-systemd.sh` + `docs/deployment-systemd.md`），Docker 标注为兼容路径 |
+| 部署模式口径 | ✅ 完成 | canonical 裸机（`scripts/deploy-bare-metal.sh` + `docs/deployment-bare-metal.md`，apt/apk × systemd/OpenRC 在脚本内分支而非两套脚本），Docker 标注为兼容路径 |
 | 通用 normalize 工具 | ⬜ 待处理 | 仍无 `src/domain/shared/normalize.js` |
 | 前端列表工具 | ⬜ 待处理 | `splitCommaList` 等仍在页面内重复 |
 | 节点组摘要渲染 | ⬜ 待处理 | 发布/系统用户/系统模板/接入用户页各有变体 |

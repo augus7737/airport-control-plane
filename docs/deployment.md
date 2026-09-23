@@ -1,10 +1,11 @@
 # 生产部署（Docker / Compose 兼容路径）
 
-更新时间：2026-09-22
+更新时间：2026-09-23
 
-> 本文是可选的容器化部署路径。低配单机的推荐形态是裸机 systemd，见
-> [`docs/deployment-systemd.md`](deployment-systemd.md)。两者写的是同一份数据目录，
-> 不要同时启用；环境变量口径以 systemd 文档为准。
+> 本文是可选的容器化部署路径。低配单机的推荐形态是裸机部署（Ubuntu / Debian / Alpine ×
+> systemd / OpenRC），见
+> [`docs/deployment-bare-metal.md`](deployment-bare-metal.md)。两者写的是同一份数据目录，
+> 不要同时启用；环境变量口径以裸机文档为准。
 
 ## 适用场景
 

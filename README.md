@@ -50,7 +50,7 @@ npm run dev
 其他 npm 脚本：
 
 ```bash
-npm test           # node --test，当前 21 个测试文件 / 85 个用例
+npm test           # node --test，当前 23 个测试文件 / 97 个用例
 npm run check      # node --check src/server.js，语法门禁
 npm run seed       # 生成/刷新本地演示数据（scripts/seed-local-demo.js）
 ```
@@ -116,29 +116,36 @@ curl -X POST http://localhost:8080/api/v1/nodes/register \
 
 ## Production deployment
 
-当前架构（单机 JSON 存储）推荐的上线形态是裸机 systemd：
+当前架构（单机 JSON 存储）推荐的上线形态是裸机部署：
 
 - 独立 `airport` 系统用户
 - `/opt/airport-control-plane` 应用与数据目录
-- systemd 资源限制与重启策略（`MemoryMax`、`ProtectSystem=strict`、`ReadWritePaths` 限定数据目录）
+- 由本机 init 系统托管：systemd 走资源限制与重启策略（`MemoryMax`、`ProtectSystem=strict`、`ReadWritePaths` 限定数据目录），OpenRC 走等价 init 脚本 + 环境文件导出
 - HTTPS 由反向代理终结
 
-On Ubuntu or Debian:
+支持 Ubuntu / Debian / Alpine × systemd / OpenRC × amd64 / arm64；不支持的组合直接失败并说明原因。已有 checkout 时：
 
 ```bash
-sudo bash scripts/deploy-systemd.sh install
+sudo bash scripts/deploy-bare-metal.sh install
+```
+
+服务器上不想装 git 时，直接拉脚本执行（Alpine 最小镜像没有 bash，所以用 `sh` 起步）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/augus7737/airport-control-plane/main/scripts/deploy-bare-metal.sh -o /tmp/airport-deploy.sh
+sudo AIRPORT_DEPLOY_REF=main sh /tmp/airport-deploy.sh install
 ```
 
 For upgrades:
 
 ```bash
 git pull
-sudo bash scripts/deploy-systemd.sh update
+sudo bash scripts/deploy-bare-metal.sh update
 ```
 
-部署脚本在暂存目录安装生产依赖，激活前执行 `npm run check` 语法门禁（完整 `npm test` 需显式设置 `AIRPORT_RUN_FULL_TESTS=true`），随后重启服务、等待 `/healthz` 通过，不健康时回滚代码。已有的 `.env.production` 凭据会在首次执行时迁移。
+部署脚本在暂存目录安装生产依赖，激活前执行 `npm run check` 语法门禁（完整 `npm test` 需显式设置 `AIRPORT_RUN_FULL_TESTS=true`），随后重启服务、等待 `/healthz` 通过，不健康时回滚代码和服务定义。已有的 `.env.production` 凭据会在首次执行时迁移。
 
-完整说明见 `docs/deployment-systemd.md`。
+完整说明见 `docs/deployment-bare-metal.md`。
 
 `install.sh` + `docs/deployment.md` 的 Docker / Compose 链路仍然可用，但定位为兼容性/可选路径，不是低配主机的首选。
 
@@ -165,6 +172,6 @@ sudo bash scripts/deploy-systemd.sh update
 - `docs/stability-roadmap.md`: 稳定化改造项与实施状态
 - `docs/duplication-audit.md`: 重复实现盘点与收敛落地情况
 - `docs/module-ui-optimization-plan.md`: 模块 UI 优化轮次记录
-- `docs/deployment-systemd.md`: 裸机 systemd 部署（推荐）
+- `docs/deployment-bare-metal.md`: 裸机部署（Ubuntu/Debian/Alpine × systemd/OpenRC，推荐）
 - `docs/deployment.md`: Docker / Compose 部署（可选兼容路径）
 - `docs/mvp.md`: 最初的里程碑规划（历史文档）

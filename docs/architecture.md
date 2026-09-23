@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-09-22
+更新时间：2026-09-23
 
 本文分两部分：**当前实现**（可以依赖的事实）与**目标形态**（尚未实现的方向）。两者刻意分开写，避免把路线图能力误读成现状。
 
@@ -28,8 +28,9 @@ src/runtime/             startup（load + 幂等迁移 + 修复）、probe-sched
 src/utils/               http、request-handler（全局异常边界）、static-assets
 public/                  15 个 HTML 页面 + js/{pages,modals,cells,layout,store,shared,auth}
 data/                    每 store 一个 JSON 文件（gitignore）
-scripts/                 bootstrap.sh、deploy-systemd.sh、deploy-production.sh、seed-local-demo.js
-test/                    20 个 node:test 文件
+scripts/                 bootstrap.sh、deploy-bare-metal.sh、deploy-production.sh、seed-local-demo.js
+docker/local-nodes/      本地假节点集群（Debian+systemd / Ubuntu / Alpine+OpenRC）与真实发布 E2E 脚本
+test/                    23 个 node:test 文件
 ```
 
 ### 请求边界
@@ -84,7 +85,7 @@ test/                    20 个 node:test 文件
 
 ### 部署形态
 
-当前 canonical：裸机 systemd（专用 `airport` 用户、`/opt/airport-control-plane`、`MemoryMax=256M`、`ProtectSystem=strict`、`ReadWritePaths=<data>`、HTTPS 由反向代理终结），见 `docs/deployment-systemd.md`。Docker/Compose 保留为兼容路径，不是低配主路径。横向扩展、多实例 HA 不在近期范围。
+当前 canonical：裸机部署（专用 `airport` 用户、`/opt/airport-control-plane`、HTTPS 由反向代理终结），按「包管理器 × init 系统」分支覆盖 Ubuntu / Debian / Alpine × systemd / OpenRC × amd64 / arm64；systemd 分支带 `MemoryMax=256M`、`ProtectSystem=strict`、`ReadWritePaths=<data>`，OpenRC 分支用 init 脚本 + 环境文件导出，没有 `MemoryMax` 等价物。见 `docs/deployment-bare-metal.md`。Docker/Compose 保留为兼容路径，不是低配主路径。横向扩展、多实例 HA 不在近期范围。
 
 ## Historical notes
 

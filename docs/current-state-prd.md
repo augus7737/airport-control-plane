@@ -1,6 +1,6 @@
 # 当前状态 PRD
 
-更新时间：2026-09-22  
+更新时间：2026-09-23  
 文档类型：现状 PRD / 基线说明书  
 适用范围：当前仓库实现、已完成的真实部署与验收结果（`data/` 已 gitignore，本文不再引用本地快照条数作为事实）
 
@@ -151,7 +151,7 @@
 - sing-box 配置在真实节点完成渲染、`sing-box check` 校验、重启激活与失败回滚
 - 控制面登录、回跳、登出、受保护 API 的 `401` 行为已在真实浏览器与 `curl` 下验证
 - 周期巡检在本地实例真实运行并沉淀 `scheduled_probe` 任务
-- 自动化测试：`npm test` 当前 21 个文件 / 85 个用例通过，覆盖 HTTP 边界（413、异常 Host、500 边界）、鉴权会话、JSON store 原子写、任务认领并发、批量执行上限、SSH 传输不回退本机、节点端点与事实归一、管理链路路由、流量方向、HY2 与 UDP 探测、发布复检、主题与前端选项等
+- 自动化测试：`npm test` 当前 23 个文件 / 97 个用例通过，覆盖 HTTP 边界（413、异常 Host、500 边界）、鉴权会话、JSON store 原子写、任务认领并发、批量执行上限、SSH 传输不回退本机、节点端点与事实归一、管理链路路由、流量方向、HY2 与 UDP 探测、发布复检、裸机部署脚本（apt/apk × systemd/OpenRC 分支、回滚边界、清理只删自建目录）、主题与前端选项等
 
 如需复现演示数据：`npm run dev` 后执行 `npm run seed`（`scripts/seed-local-demo.js`，通过 HTTP 造厂商/节点/模板/用户/令牌），该脚本只用于本地演示，不属于生产链路。
 
@@ -197,8 +197,8 @@
 - 前端：无打包链的静态多页面控制台 + 原生 ES module 依赖注入装配
 - 持久化：每实体一个 JSON 文件，原子写 + `.bak` + 单文件串行写队列 + 启动期修复
 - 会话：管理员 session 落盘到 JSON（重启不掉线、滑动续期），Web Shell 会话仍为进程内运行态
-- 部署：canonical 为裸机 systemd（专用 `airport` 用户、`/opt/airport-control-plane`、`ProtectSystem=strict`、`MemoryMax`、健康检查与代码回滚）；Docker/Compose 保留为兼容路径
-- 测试：`node:test`，21 文件 / 85 用例
+- 部署：canonical 为裸机部署（专用 `airport` 用户、`/opt/airport-control-plane`、健康检查与代码回滚；按 apt/apk × systemd/OpenRC 分支覆盖 Ubuntu / Debian / Alpine × amd64 / arm64，systemd 分支带 `ProtectSystem=strict` 与 `MemoryMax`）；无 checkout 时可 curl 拉取脚本执行；Docker/Compose 保留为兼容路径
+- 测试：`node:test`，23 文件 / 97 用例
 
 当前更像：
 
