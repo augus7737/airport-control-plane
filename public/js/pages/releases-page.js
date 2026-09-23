@@ -1027,6 +1027,9 @@ export function createReleasesPageModule(dependencies) {
       }
 
       const isEditing = Boolean(state.selectedGroupId);
+      const previousGroup = isEditing
+        ? appState.nodeGroups.find((item) => item.id === state.selectedGroupId) || null
+        : null;
 
       try {
         const result = isEditing
@@ -1034,10 +1037,35 @@ export function createReleasesPageModule(dependencies) {
           : await createNodeGroup(payload);
         await refreshRuntimeData();
         state.selectedGroupId = result?.id || state.selectedGroupId;
-        state.groupMessage = {
-          type: "success",
-          text: isEditing ? "节点组已保存。" : "节点组已创建。",
-        };
+
+        // 后端 PATCH 响应带信息性 warnings：节点组被当前生效发布引用时缩容，
+        // 真实拓扑会在下次发布前悄悄变；这里给出等价的可读提示。
+        const removedCount = previousGroup
+          ? (Array.isArray(previousGroup.node_ids) ? previousGroup.node_ids : [])
+              .filter((nodeId) => !payload.node_ids.includes(nodeId)).length
+          : 0;
+        const referencingEffectiveRelease = removedCount > 0
+          ? [...getEffectiveReleaseByProfile().values()].find(
+              (release) =>
+                Array.isArray(release.node_group_ids) &&
+                release.node_group_ids.includes(state.selectedGroupId),
+            ) || null
+          : null;
+
+        if (referencingEffectiveRelease) {
+          state.groupMessage = {
+            type: "info",
+            text:
+              `节点组已保存，但已移除 ${removedCount} 台节点，且该组仍被当前生效发布 ` +
+              `${referencingEffectiveRelease.version || referencingEffectiveRelease.id} 引用；` +
+              "生效拓扑与节点组会不一致，建议尽快重新发布。",
+          };
+        } else {
+          state.groupMessage = {
+            type: "success",
+            text: isEditing ? "节点组已保存。" : "节点组已创建。",
+          };
+        }
         if (!isEditing && result?.id) {
           state.selectedGroupId = result.id;
         }
