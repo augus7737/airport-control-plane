@@ -50,6 +50,24 @@ export function createProxyProfilesRoutes(ctx) {
     }
 
     const proxyProfileMatch = url.pathname.match(/^\/api\/v1\/proxy-profiles\/([^/]+)$/);
+    if (proxyProfileMatch && request.method === "GET") {
+      const profileId = decodeURIComponent(proxyProfileMatch[1]);
+      const existingProfile = findProxyProfileById(profileId);
+
+      if (!existingProfile) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "profile not found",
+        });
+        return;
+      }
+
+      jsonResponse(reply, 200, {
+        profile: existingProfile,
+      });
+      return;
+    }
+
     if (proxyProfileMatch && request.method === "PATCH") {
       try {
         const profileId = decodeURIComponent(proxyProfileMatch[1]);
