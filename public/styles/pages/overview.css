@@ -2,12 +2,16 @@ body[data-page="overview"] .content {
   padding: 16px;
 }
 
-body[data-page="overview"] .app {
-  grid-template-columns: 214px minmax(0, 1fr);
-}
+/* 这两条是总览页的加宽版式，必须跟着壳层断点走：不限定宽度的话，它会用更高的特异度
+   盖掉 primitives.css 里侧栏收顶的规则，于是导航条被塞回 214px 的列里竖着叠成一长条。 */
+@media (min-width: 901px) {
+  body[data-page="overview"] .app {
+    grid-template-columns: 214px minmax(0, 1fr);
+  }
 
-body[data-page="overview"] .sidebar {
-  padding: 16px 12px;
+  body[data-page="overview"] .sidebar {
+    padding: 16px 12px;
+  }
 }
 
 body[data-page="overview"] .brand {
@@ -15,9 +19,16 @@ body[data-page="overview"] .brand {
 }
 
 body[data-page="overview"] .brand p,
-body[data-page="overview"] .sidebar-foot,
-body[data-page="overview"] .sidebar .nav-group + .nav-group {
+body[data-page="overview"] .sidebar-foot {
   display: none;
+}
+
+/* 总览页的"紧凑侧栏"会藏掉后两个导航分组，这只在纵向侧栏成立。窄屏下侧栏收成顶部一行，
+   再藏就把发布中心、系统用户等入口整条弄丢了。 */
+@media (min-width: 901px) {
+  body[data-page="overview"] .sidebar .nav-group + .nav-group {
+    display: none;
+  }
 }
 
 body[data-page="overview"] .nav-group {

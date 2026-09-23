@@ -1169,7 +1169,9 @@ a.compact-action-item:focus-visible {
   }
 }
 
-@media (max-width: 1180px) {
+/* 侧栏收顶只在 212px 侧栏真的放不下时发生；收顶后整条导航压成一行横向滚动，
+   不再每个分组各占一行把首屏内容顶到下三屏。 */
+@media (max-width: 900px) {
   .app {
     grid-template-columns: 1fr;
   }
@@ -1177,40 +1179,58 @@ a.compact-action-item:focus-visible {
   .sidebar {
     position: static;
     height: auto;
-    padding: 14px 16px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .sidebar::-webkit-scrollbar {
+    display: none;
   }
 
   .brand {
     grid-template-columns: auto minmax(0, 1fr);
+    flex: 0 0 auto;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 0;
   }
 
   .nav-group {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-top: 0;
+  }
+
+  .nav-group + .nav-group {
+    padding-left: 12px;
+    border-left: 1px solid var(--line);
+  }
+
+  .nav-label {
+    flex: 0 0 auto;
+    margin-bottom: 0;
   }
 
   .nav-list {
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: max-content;
+    grid-template-rows: 1fr;
     gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-  }
-
-  .nav-list::-webkit-scrollbar {
-    display: none;
   }
 
   .nav-item {
     min-width: max-content;
-    padding: 0 14px;
+    padding: 0 12px;
     white-space: nowrap;
   }
 }
