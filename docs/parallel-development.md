@@ -21,9 +21,9 @@
 - 顺序约定：命名空间之间按 URL 前缀互斥，`createApiRoutes` 里的顺序 = 各命名空间首个路由块
   拆分前在 server.js 中的出现顺序；命名空间内部保持原顺序（例如 `nodes/:id` 与
   `nodes/manual` 的先后不能变）。
-- 门禁：`npm run check`（全树语法）+ `node --test`（110 例）。
+- 门禁：`npm run check`（全树语法）+ `node --test`（173 例）。
   `test/route-table.test.js` 是路由回归网：它真的起一个 `node src/server.js` 实例
-  （`PORT=0` + 临时 `AIRPORT_DATA_DIR`），登录后按 91 行冻结矩阵逐条比对状态码和 error code。
+  （`PORT=0` + 临时 `AIRPORT_DATA_DIR`），登录后按 128 行冻结矩阵逐条比对状态码和 error code。
   任何路由增删改都必须让它继续全绿；新增路由时把新行加进那个矩阵。
 - `AIRPORT_DATA_DIR` 现在真的生效（此前硬编码 `../data`），`PORT=0` 会打印实际端口。
   实例之间的数据隔离靠这两项。
@@ -206,10 +206,29 @@
 - 可改：`src/http/routes/costs.js`
 - 接口面：`GET /api/v1/costs/{summary,nodes,providers,releases,access-users}`
 - 依赖：只有 `buildLiveCostViews`（全项目最干净的模块，可作为其他模块降耦合的样板）
-- 缺口：5 个端点各调一次 `buildLiveCostViews()`，一次成本页 = 5 次全库遍历；
-  `src/domain/costs/{calculator,summary}.js` 没有单测（只有 `normalize.js` 有）；handler 无 try/catch，
-  领域层抛错就是裸 500
+- 缺口：~~`src/domain/costs/{calculator,summary}.js` 没有单测~~ 已补（`test/cost-calculator.test.js`
+  / `test/cost-summary.test.js`）
+- 已判定不做（集成人复核，勿再提出）：
+  - 「handler 无 try/catch，领域层抛错就是裸 500」是**错的**——整条请求管线包在 `createSafeRequestHandler`
+    里，抛错已经是 `500 { error: "internal_server_error" }` **且带 error 日志**；路由内再 catch 反而吞掉日志
+  - 「5 个端点 = 5 次全库遍历」不成立为问题：`buildCostViews` 是对内存数组的 O(n) 纯函数，无 IO，
+    当前数据量下微秒级；跨请求缓存要么死代码（宿主没提供失效指纹），要么用弱指纹
+    （记录数 + max `updated_at`）**漏失效**——同一次编辑被更大 `updated_at` 盖住就会长期返回旧视图
 - 领域：`src/domain/costs/*`
+- 下轮待办（costs 窗口读码发现，本轮只固化行为、一条未改；`519b002` 的用例已把现状钉住，改动会红）：
+  1. `calculator.js:19-24` 与 `:31` 到期天数两套口径（date-only 按 UTC 自然日 round，带时刻按相对 now ceil），
+     同一天到期可差 1 天；且 date-only 的「今天」取 UTC 日，UTC+8 凌晨会把今天到期算成 0/负
+  2. 预算：`monthly_budget` 可为负、阈值 `0` 合法（任何花费即告警）、`1` 被当 100%（无法表达 1%）；
+     多币种厂商没配 `default_currency` 时占用恒 null —— 三种「预算静默失效」都无法与「未配预算」区分
+  3. `calculator.js:204-207`：只有附加费、没有基础账单的节点，附加费整体丢弃不进任何合计
+  4. `summary.js:127-139`：全站合计不看 `node.status`，禁用/下线节点仍计入成本与 idle
+  5. `allocation.js:92`：摊薄分母只用 `release.access_user_ids` 去重数，不看用户是否仍存在/`status`，
+     停用与已删用户仍摊薄每用户估算成本（字段名还和 access-users 的 `status:"active"` 撞口径）
+  6. `allocation.js:54` 与 `:156` 口径不一致：节点在用判定看 `deployment.status`，用户估算只看 `release.status`
+  7. `summary.js:18-24` 与 `:75`：无 `id` 的厂商会出行但认领不到节点
+  8. `calculator.js:43-57` + `:190/198/213`：status 是互斥优先级，多问题节点被单一状态掩盖（`incomplete` 靠 Set 去重）
+- 备注：该窗口另交了一个 `c3ec8f3`（统一 500 映射 + 按宿主指纹缓存成本视图），按上面「已判定不做」的理由**未合入 `main`**，
+  只合了它的领域单测；分支保留该提交备查
 
 ## 4. 并行开发提示词
 

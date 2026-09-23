@@ -22,8 +22,8 @@
 | P2.2 Cookie 安全策略 | ✅ 已完成 | `HttpOnly` + `SameSite=Lax` + `CONTROL_PLANE_SESSION_SECURE` / `x-forwarded-proto` 自动 `Secure`，滑动续期 |
 | P2.3 Token 脱敏（哈希化） | ⬜ 未实现 | `bootstrap-tokens.json` 仍存明文以支持一键复制 |
 | P2.4 敏感日志清理 | 🟡 部分完成 | 私钥与 Reality 私钥不落控制面配置；缺统一的日志脱敏与审查 |
-| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 25 个 `node:test` 文件 / 110 个用例；`npm test` / `npm run check`（全树逐文件语法）；核心远程执行端到端仍缺 |
-| P3.2 拆分 `src/server.js` | 🟡 路由层已完成 | 16 个命名空间搬到 `src/http/routes/`（5763 → 3805 行，现为 3849 行），有 `test/route-table.test.js` 守路由；`src/services` 服务层未拆 |
+| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 32 个 `node:test` 文件 / 173 个用例；`npm test` / `npm run check`（全树逐文件语法）；核心远程执行端到端仍缺 |
+| P3.2 拆分 `src/server.js` | 🟡 路由层已完成 | 16 个命名空间搬到 `src/http/routes/`（5763 → 3805 行，现为 3866 行），有 `test/route-table.test.js` 守路由；`src/services` 服务层未拆 |
 | P4.1 SQLite 迁移 | ⬜ 未开始 | 仍是 JSON 文件，无 SQL 依赖 |
 | P4.2 PostgreSQL 预留 | ⬜ 未开始 | repository 层尚未抽出 |
 
@@ -354,7 +354,7 @@ ReadWritePaths=/opt/airport-control-plane/data
 
 ### 2. 拆分 `src/server.js`
 
-已完成的部分：路由层按命名空间拆出，16 个业务模块落在 `src/http/routes/*.js`，`src/server.js` 从 5763 行降到 3805 行（本轮发布回滚接口后为 3849 行），只保留启动装配、请求管线（鉴权门禁、`/healthz`、bootstrap 脚本、订阅、制品、静态资源、404）与实体构造；模块通过单一 `ctx` 取用宿主能力，纯函数直接 `import`。回归由 `test/route-table.test.js` 的接口矩阵守住，并行开发约束见 `docs/parallel-development.md`。
+已完成的部分：路由层按命名空间拆出，16 个业务模块落在 `src/http/routes/*.js`，`src/server.js` 从 5763 行降到 3805 行（本轮接口与加固补齐后为 3866 行），只保留启动装配、请求管线（鉴权门禁、`/healthz`、bootstrap 脚本、订阅、制品、静态资源、404）与实体构造；模块通过单一 `ctx` 取用宿主能力，纯函数直接 `import`。回归由 `test/route-table.test.js` 的接口矩阵守住，并行开发约束见 `docs/parallel-development.md`。
 
 剩余问题：
 
@@ -450,7 +450,7 @@ ReadWritePaths=/opt/airport-control-plane/data
 ### 第四轮
 
 1. 增加测试脚本（已完成，含全树 `npm run check`）
-2. 补核心单测（已完成，25 文件 / 110 用例，含 `test/route-table.test.js` 路由矩阵回归）
+2. 补核心单测（已完成，32 文件 / 173 用例，含 `test/route-table.test.js` 路由矩阵回归）
 3. 拆分 `src/server.js`（路由层已完成：`src/http/routes/` 16 个模块；服务层与 `ctx` 瘦身未做）
 
 ### 第五轮

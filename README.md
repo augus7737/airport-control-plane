@@ -50,7 +50,7 @@ npm run dev
 其他 npm 脚本：
 
 ```bash
-npm test           # node --test，当前 25 个测试文件 / 110 个用例
+npm test           # node --test，当前 32 个测试文件 / 173 个用例
 npm run check      # 对 src public/js scripts test 下每个 .js 逐文件 node --check，语法门禁
 npm run seed       # 生成/刷新本地演示数据（scripts/seed-local-demo.js）
 ```

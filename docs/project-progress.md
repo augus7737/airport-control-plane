@@ -110,6 +110,44 @@
   覆盖；接口在真实例上验证过 404 / 坏编码 400 / 目标节点已删除时的 `no valid nodes resolved` 400。
   **带真实节点的成功回滚尚未在假集群上跑过**，随任务 #43 一起补
 
+## 进展（2026-09-23，六模块并行：接口面补齐 + 三处安全/一致性加固）
+
+集成人按 `docs/parallel-development.md` 的模块卡片开了六个窗口（providers / node-groups、system、operations、
+proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree 开发，全部 `--no-ff` 合入 `main`，
+每次合并后重跑门禁。合并窗口里 providers 与 proxy-profiles 两窗交付时未提交，由集成人复核 diff、
+重跑门禁后代为提交。
+
+接口面（本轮新增，全部进了 128 行矩阵）：
+
+- 单资源读：`GET /api/v1/{providers,node-groups,system-templates,system-users,operations}/:id`，`config-releases`
+  的 `GET /:id` 仍缺（卡片已记）
+- `POST /api/v1/proxy-profiles/:id/clone`（名称按「X 副本」避重）、`POST /api/v1/access-users/:id/share-token/regenerate`
+- `GET /api/v1/operations?node_id=` 台账按节点过滤
+- `PATCH /api/v1/nodes/:id/labels` 窄口标签编辑
+- `POST /api/v1/config-releases/:id/rollback`
+
+安全与一致性：
+
+- 路径段解码统一走 `ctx.safeDecodePathSegment`，10 处 `decodeURIComponent` 的裸 `URIError` 500 改为 `400 bad_request`，
+  矩阵补 `/%` 系列 11 行
+- 公开产物下载 `GET /api/v1/artifacts/sing-box/:version/:target`：`version` 参与 `path.join`，`..%2F` 可越出
+  `platform/artifacts` 读任意 gzip 文件。现在两段各自解码失败 → `400`，解析后的绝对路径必须落在 artifacts 目录内
+- bootstrap token：`id` / `created_at` / `uses` / `last_used_*` 不再接受客户端传入，改由存量记录或 `randomUUID()` 决定，
+  客户端只能提供 `token` 本身（查重在 validators 里已挡）
+- 接入用户凭证校验：卡片原写成「按协议强制 uuid/password 必填」是**错的**——`buildAccessUserRecord` 会在缺省时自动生成
+  （「留空由服务端生成」是有意设计）。强制必填会打断这条产品路径并引发订阅漂移，已回退为**只校验格式**
+  （给了非空字符串才要求形如 UUID；HY2 密码给了才要求 ≥8 字符），类型与空串语义仍归 `validators.js`，
+  卡片里已写明「不要改成必填」
+- 协议模板写入口前置校验：名称查重（`409 profile_name_conflict`）+ 模板语义校验，克隆/编辑不再只在发布渲染时炸；
+  连带修好 `scripts/seed-local-demo.js` 三条演示 profile 的 `security`/`reality`/`tls` 字段（旧种子数据在新门槛下 PATCH/clone 会 400）
+
+判定取舍（未拍板前不动）：接入用户 `expired` 是派生显示还是定时落库；节点组缩容不一致返回 `warnings[]` 还是升 409；
+探测未知 `node_id` 返回 404 还是空集；任务取消语义。costs 卡片里的「跨请求缓存」和「路由层 try/catch」经复核判为
+**净负收益**（宿主没提供指纹 ⇒ 缓存是死代码；`createSafeRequestHandler` 已统一 500 且会打日志 ⇒ 路由内 catch 反而吞掉日志），
+只保留其 1157 行成本领域单测。
+
+规模：测试 25 文件 / 110 用例 → **32 文件 / 173 用例**；路由矩阵 91 → **128 行**；`src/server.js` 3849 → **3866 行**。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
@@ -149,7 +187,7 @@
 
 - JSON 无事务、跨文件一致性不足；SQLite 迁移仍是最大结构性欠债
 - SSH 主机指纹未持久化信任，中间人风险与密钥轮换确认缺失
-- `src/server.js` 仍 3849 行：路由已按命名空间拆到 `src/http/routes/`，剩下的装配/编排/实体构造未拆
+- `src/server.js` 仍 3866 行：路由已按命名空间拆到 `src/http/routes/`，剩下的装配/编排/实体构造未拆
 - 路由模块的 `ctx` 偏重（nodes 40 项、access-users 19 项），纯函数依赖尚未下沉为直接 import
 - 无 `/readyz`、无结构化日志与 `request_id`、无服务端登录限流
 - 任务缺执行租约与取消；发布/探测失败无告警出口
