@@ -1,3 +1,4 @@
+import { mergeAccessUserCredential, validateAccessUserCredential } from "../../domain/shares/credentials.js";
 import { validateAccessUserCreate, validateAccessUserUpdate } from "../../http/validators.js";
 import { jsonResponse, readJsonBody } from "../../utils/http.js";
 import { normalizeNullableString } from "../../utils/network.js";
@@ -36,7 +37,14 @@ export function createAccessUsersRoutes(ctx) {
     if (request.method === "POST" && url.pathname === "/api/v1/access-users") {
       try {
         const payload = await readJsonBody(request);
-        const errors = validateAccessUserCreate(payload);
+        const basicErrors = validateAccessUserCreate(payload);
+        const protocol = normalizeNullableString(payload?.protocol)?.toLowerCase() ?? "vless";
+        const errors = [
+          ...new Set([
+            ...basicErrors,
+            ...validateAccessUserCredential({ protocol, credential: payload?.credential }),
+          ]),
+        ];
 
         if (errors.length > 0) {
           jsonResponse(reply, 400, {
@@ -48,7 +56,6 @@ export function createAccessUsersRoutes(ctx) {
 
         const profileId = hasOwn(payload, "profile_id") ? normalizeNullableString(payload.profile_id) : null;
         const groupIds = hasOwn(payload, "node_group_ids") ? uniqueStringList(payload.node_group_ids) : [];
-        const protocol = normalizeNullableString(payload.protocol)?.toLowerCase() ?? "vless";
         const details = [];
 
         validateAccessUserProfileLink({ protocol, profileId, details });
@@ -180,7 +187,14 @@ export function createAccessUsersRoutes(ctx) {
 
     if (accessUserMatch && request.method === "PATCH") {
       try {
-        const accessUserId = decodeURIComponent(accessUserMatch[1]);
+        const accessUserId = safeDecodePathSegment(accessUserMatch[1]);
+        if (!accessUserId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid access user id",
+          });
+          return;
+        }
         const existingAccessUser = findAccessUserById(accessUserId);
 
         if (!existingAccessUser) {
@@ -192,7 +206,25 @@ export function createAccessUsersRoutes(ctx) {
         }
 
         const payload = await readJsonBody(request);
-        const errors = validateAccessUserUpdate(payload);
+        const basicErrors = validateAccessUserUpdate(payload);
+        // 只校验本次请求真正改动到的字段：credential 或 protocol 至少给了一个。
+        // 存量数据本身不合规（例如历史遗留的短密码）不阻塞无关字段的更新。
+        const credentialErrors = [];
+        if (
+          payload &&
+          typeof payload === "object" &&
+          (hasOwn(payload, "credential") || hasOwn(payload, "protocol"))
+        ) {
+          const effectiveProtocol =
+            normalizeNullableString(payload.protocol ?? existingAccessUser.protocol)?.toLowerCase() ?? "vless";
+          const effectiveCredential = hasOwn(payload, "credential")
+            ? mergeAccessUserCredential(existingAccessUser.credential, payload.credential)
+            : existingAccessUser.credential;
+          credentialErrors.push(
+            ...validateAccessUserCredential({ protocol: effectiveProtocol, credential: effectiveCredential }),
+          );
+        }
+        const errors = [...new Set([...basicErrors, ...credentialErrors])];
 
         if (errors.length > 0) {
           jsonResponse(reply, 400, {
@@ -250,7 +282,14 @@ export function createAccessUsersRoutes(ctx) {
     }
 
     if (accessUserMatch && request.method === "DELETE") {
-      const accessUserId = decodeURIComponent(accessUserMatch[1]);
+      const accessUserId = safeDecodePathSegment(accessUserMatch[1]);
+      if (!accessUserId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid access user id",
+        });
+        return;
+      }
       const existingAccessUser = findAccessUserById(accessUserId);
 
       if (!existingAccessUser) {

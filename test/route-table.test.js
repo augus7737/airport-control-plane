@@ -72,10 +72,22 @@ const routes = [
   ["PATCH", "/api/v1/bootstrap-tokens/%", 400, "bad_request"],
   ["GET", "/api/v1/access-users/missing/share", 404, "not_found"],
   ["POST", "/api/v1/access-users", 400, "validation_failed"],
+  ["POST", "/api/v1/access-users", 400, "validation_failed", null, { name: "route-table-no-uuid", protocol: "vless" }],
+  [
+    "POST",
+    "/api/v1/access-users",
+    201,
+    null,
+    null,
+    { name: "route-table-with-uuid", protocol: "vless", credential: { uuid: "0f6c5a3e-7a1d-4c2b-9e5f-1b2c3d4e5f60" } },
+  ],
   ["GET", "/api/v1/access-users/missing", 404, "not_found"],
   ["GET", "/api/v1/access-users/%", 400, "invalid_request"],
   ["PATCH", "/api/v1/access-users/missing", 404, "not_found"],
+  ["PATCH", "/api/v1/access-users/%", 400, "bad_request"],
   ["DELETE", "/api/v1/access-users/missing", 404, "not_found"],
+  ["DELETE", "/api/v1/access-users/%", 400, "bad_request"],
+  ["POST", "/api/v1/access-users/missing-user/share-token/regenerate", 404, "not_found"],
   ["POST", "/api/v1/system-templates", 400, "validation_failed"],
   ["GET", "/api/v1/system-templates/missing-template", 404, "not_found"],
   ["GET", "/api/v1/system-templates/%", 400, "bad_request"],
@@ -208,14 +220,14 @@ test("every registered route resolves to the same status and error code", async 
     const cookie = await loginSession(server.baseUrl);
     const mismatches = [];
 
-    for (const [method, pathname, expectedStatus, expectedError, authMode] of routes) {
+    for (const [method, pathname, expectedStatus, expectedError, authMode, requestBody] of routes) {
       const headers = { "content-type": "application/json" };
       if (authMode !== "anon") {
         headers.cookie = cookie;
       }
       const init = { method, headers, redirect: "manual" };
       if (method !== "GET" && method !== "HEAD") {
-        init.body = "{}";
+        init.body = JSON.stringify(requestBody ?? {});
       }
 
       const response = await fetch(server.baseUrl + pathname, init);
