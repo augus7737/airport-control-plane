@@ -6,6 +6,7 @@ export function createBootstrapTokensRoutes(ctx) {
     buildBootstrapTokenRecord,
     persistBootstrapTokens,
     registerBootstrapToken,
+    safeDecodePathSegment,
     serializeBootstrapToken,
     validateBootstrapTokenCreate,
     validateBootstrapTokenUpdate,
@@ -54,7 +55,15 @@ export function createBootstrapTokensRoutes(ctx) {
     const bootstrapTokenMatch = url.pathname.match(/^\/api\/v1\/bootstrap-tokens\/([^/]+)$/);
     if (bootstrapTokenMatch && request.method === "PATCH") {
       try {
-        const tokenId = decodeURIComponent(bootstrapTokenMatch[1]);
+        const tokenId = safeDecodePathSegment(bootstrapTokenMatch[1]);
+        if (!tokenId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid bootstrap token id",
+          });
+          return;
+        }
+
         const existingToken = bootstrapTokenStore.get(tokenId);
 
         if (!existingToken) {

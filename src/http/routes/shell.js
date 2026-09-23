@@ -7,6 +7,7 @@ export function createShellRoutes(ctx) {
     createShellSession,
     nodeStore,
     nowIso,
+    safeDecodePathSegment,
     serializeShellSession,
     shellSessionStore,
   } = ctx;
@@ -49,7 +50,15 @@ export function createShellRoutes(ctx) {
 
     const shellSessionMatch = url.pathname.match(/^\/api\/v1\/shell\/sessions\/([^/]+)$/);
     if (shellSessionMatch && request.method === "GET") {
-      const sessionId = decodeURIComponent(shellSessionMatch[1]);
+      const sessionId = safeDecodePathSegment(shellSessionMatch[1]);
+      if (!sessionId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid shell session id",
+        });
+        return;
+      }
+
       const session = shellSessionStore.get(sessionId);
 
       if (!session) {
@@ -67,7 +76,15 @@ export function createShellRoutes(ctx) {
     }
 
     if (shellSessionMatch && request.method === "DELETE") {
-      const sessionId = decodeURIComponent(shellSessionMatch[1]);
+      const sessionId = safeDecodePathSegment(shellSessionMatch[1]);
+      if (!sessionId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid shell session id",
+        });
+        return;
+      }
+
       const session = shellSessionStore.get(sessionId);
 
       if (!session) {
@@ -88,7 +105,15 @@ export function createShellRoutes(ctx) {
     const shellInputMatch = url.pathname.match(/^\/api\/v1\/shell\/sessions\/([^/]+)\/input$/);
     if (shellInputMatch && request.method === "POST") {
       try {
-        const sessionId = decodeURIComponent(shellInputMatch[1]);
+        const sessionId = safeDecodePathSegment(shellInputMatch[1]);
+        if (!sessionId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid shell session id",
+          });
+          return;
+        }
+
         const session = shellSessionStore.get(sessionId);
 
         if (!session) {

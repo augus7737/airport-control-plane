@@ -12,6 +12,7 @@ export function createTasksRoutes(ctx) {
     nodeStore,
     operationStore,
     reconcileTaskStoreFromOperations,
+    safeDecodePathSegment,
     sortTasks,
     taskStore,
   } = ctx;
@@ -30,7 +31,15 @@ export function createTasksRoutes(ctx) {
     );
     if (taskBootstrapCompleteMatch && request.method === "POST") {
       try {
-        const taskId = decodeURIComponent(taskBootstrapCompleteMatch[1]);
+        const taskId = safeDecodePathSegment(taskBootstrapCompleteMatch[1]);
+        if (!taskId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid task id",
+          });
+          return;
+        }
+
         const task = taskStore.find((item) => item.id === taskId);
 
         if (!task) {

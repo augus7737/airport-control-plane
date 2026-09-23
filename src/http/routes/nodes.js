@@ -86,7 +86,15 @@ export function createNodesRoutes(ctx) {
 
     if (request.method === "DELETE" && nodeMatch) {
       try {
-        const nodeId = decodeURIComponent(nodeMatch[1]);
+        const nodeId = safeDecodePathSegment(nodeMatch[1]);
+        if (!nodeId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid node id",
+          });
+          return;
+        }
+
         const existingNode = nodeStore.get(nodeId);
 
         if (!existingNode) {
@@ -152,7 +160,15 @@ export function createNodesRoutes(ctx) {
     const nodeAssetsMatch = url.pathname.match(/^\/api\/v1\/nodes\/([^/]+)\/assets$/);
     if (request.method === "PATCH" && nodeAssetsMatch) {
       try {
-        const nodeId = decodeURIComponent(nodeAssetsMatch[1]);
+        const nodeId = safeDecodePathSegment(nodeAssetsMatch[1]);
+        if (!nodeId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid node id",
+          });
+          return;
+        }
+
         const existingNode = nodeStore.get(nodeId);
 
         if (!existingNode) {
@@ -246,7 +262,15 @@ export function createNodesRoutes(ctx) {
     if (request.method === "POST" && nodeInitMatch) {
       try {
         await reconcileTaskStoreFromOperations();
-        const nodeId = decodeURIComponent(nodeInitMatch[1]);
+        const nodeId = safeDecodePathSegment(nodeInitMatch[1]);
+        if (!nodeId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid node id",
+          });
+          return;
+        }
+
         const node = nodeStore.get(nodeId);
 
         if (!node) {
@@ -317,7 +341,15 @@ export function createNodesRoutes(ctx) {
     const nodeDiagnosticMatch = url.pathname.match(/^\/api\/v1\/nodes\/([^/]+)\/diagnostics$/);
     if (request.method === "POST" && nodeDiagnosticMatch) {
       try {
-        const nodeId = decodeURIComponent(nodeDiagnosticMatch[1]);
+        const nodeId = safeDecodePathSegment(nodeDiagnosticMatch[1]);
+        if (!nodeId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid node id",
+          });
+          return;
+        }
+
         const node = nodeStore.get(nodeId);
 
         if (!node) {
@@ -356,7 +388,15 @@ export function createNodesRoutes(ctx) {
     const nodeProbeMatch = url.pathname.match(/^\/api\/v1\/nodes\/([^/]+)\/probe$/);
     if (request.method === "POST" && nodeProbeMatch) {
       try {
-        const nodeId = decodeURIComponent(nodeProbeMatch[1]);
+        const nodeId = safeDecodePathSegment(nodeProbeMatch[1]);
+        if (!nodeId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid node id",
+          });
+          return;
+        }
+
         const node = nodeStore.get(nodeId);
 
         if (!node) {
