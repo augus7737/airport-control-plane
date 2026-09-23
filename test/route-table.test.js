@@ -40,6 +40,8 @@ const routes = [
   ["GET", "/api/v1/node-groups", 200, null],
   ["GET", "/api/v1/providers", 200, null],
   ["GET", "/api/v1/config-releases", 200, null],
+  ["GET", "/api/v1/config-releases/missing-release", 404, "not_found"],
+  ["GET", "/api/v1/config-releases/%", 400, "bad_request"],
   ["GET", "/api/v1/operations", 200, null],
   ["GET", "/api/v1/costs/summary", 200, null],
   ["GET", "/api/v1/costs/nodes", 200, null],
