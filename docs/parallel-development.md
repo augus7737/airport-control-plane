@@ -235,20 +235,27 @@
 | costs | `module/costs` | `../wt-costs` | 8092 |
 | probes+diagnostics | `module/probes` | `../wt-probes` | 8093 |
 | bootstrap-tokens | `module/tokens` | `../wt-tokens` | 8094 |
-| providers / node-groups | `module/providers` | `../wt-providers` | 8095 |
-| proxy-profiles | `module/profiles` | `../wt-profiles` | 8096 |
-| access-users | `module/access-users` | `../wt-access-users` | 8097 |
-| system-templates / system-users | `module/system` | `../wt-system` | 8098 |
-| config-releases（发布中心） | `module/releases` | `../wt-releases` | 8099 |
-| tasks | `module/tasks` | `../wt-tasks` | 8100 |
-| nodes / operations / shell | `module/nodes` | `../wt-nodes` | 8101 |
+| providers | `module/providers` | `../wt-providers` | 8095 |
+| node-groups | `module/node-groups` | `../wt-node-groups` | 8096 |
+| proxy-profiles | `module/profiles` | `../wt-profiles` | 8097 |
+| access-users | `module/access-users` | `../wt-access-users` | 8098 |
+| system-templates+system-users | `module/system` | `../wt-system` | 8099 |
+| config-releases（发布中心） | `module/releases` | `../wt-releases` | 8100 |
+| tasks | `module/tasks` | `../wt-tasks` | 8101 |
+| nodes | `module/nodes` | `../wt-nodes` | 8102 |
+| operations | `module/operations` | `../wt-operations` | 8103 |
+| shell | `module/shell` | `../wt-shell` | 8104 |
+
+8081 已被另一会话的 `airport-local-e2e-*` 控制面占用，不要使用。
 
 worktree 建立（主窗口执行一次）：
 
 ```bash
 cd /Users/linkai/Documents/airport/airport-control-plane
-for m in platform costs probes tokens providers profiles access-users system releases tasks nodes; do
+for m in platform costs probes tokens providers node-groups profiles access-users \
+         system releases tasks nodes operations shell; do
   git worktree add ../wt-$m -b module/$m main
+  ln -s /Users/linkai/Documents/airport/airport-control-plane/node_modules ../wt-$m/node_modules
 done
 git worktree list
 ```
