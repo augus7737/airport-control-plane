@@ -76,8 +76,13 @@
   `src/http/validators.js`
 - 前端：总览卡在 `public/js/pages/overview-page.js`，SSH 面板在 `public/js/platform/platform-ssh-page.js`；
   两者由 `public/app.js` 装配，属共享装配区，窗口不要顺手改
-- 缺口：`/mirror`、`/sync` 没有矩阵行；`ssh-key/generate` 是单向的（只有 `platformSshKeyState` 可读，
-  没有复查已生成密钥的接口）；`probe_scheduler` 无手动触发接口（要新 ctx 依赖，找集成人）
+- 本轮已做：补只读复查口 `GET /api/v1/platform/ssh-key`（状态/算法/SHA256 指纹/时间/文件名，不含私钥材料与
+  公钥本体）；`ssh-key/generate` 的 `409` 错误码从 `bad_request` 改成语义正确的 `conflict`；
+  mirror/sync 前挡住会把制品写出 artifacts 目录的畸形 `version`；补 `test/platform-ssh-key-view.test.js`
+  与 `test/platform-sing-box-distribution.test.js`
+- 接口面新增：`GET /api/v1/platform/ssh-key`
+- 剩余缺口：`probe_scheduler` 无手动触发接口（要新 ctx 依赖，找集成人）；
+  `/mirror`、`/sync` 的矩阵行仍待集成人按交付报告插入
 - 注意：`platform-context` 是几乎所有前端页面的首屏数据源，字段是契约，删字段=全站回归。
 
 **nodes**
