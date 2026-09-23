@@ -176,7 +176,14 @@
   `POST /api/v1/config-releases/:id/rollback`
 - 依赖：`configReleaseStore`、`executeConfigRelease`、`buildPlatformContext`、`sortByUpdatedAt`、
   `safeDecodePathSegment`
-- 缺口：没有 `GET /api/v1/config-releases/:id`（回滚与前端都只能整表取回）。
+- 本轮已做：`GET /api/v1/config-releases/:id`（`200 { release, detail }`，`release` 与列表项同构但
+  `deployments[].artifacts` 走有界投影：只留摘要 + ≤600B 预览 + 长度；纯函数在
+  `src/domain/releases/detail.js`；404/坏编码 400 已进矩阵）
+- 剩余缺口：**`GET /api/v1/config-releases` 列表仍直出全量 `rendered_config`**（每条发布 × 每台节点的完整
+  配置文本，含用户凭证），比详情接口更值得关注；收紧会牵动前端渲染口径，需单独一轮
+- 其他：`deployments[].artifacts.sing_box.rendered_config` 是全文落库，`configReleaseStore` 会随发布数线性膨胀
+- “当前生效版本”判定两处都用 `find(status==="success")` 第一条（`config-releases.js` 与 `server.js` 发布尾部），
+  依赖 store 的 `unshift` 插入顺序而非 `updated_at`；顺序若被打乱，回滚的“已生效”判断可能与真实最新 success 不符
 - 领域：`src/domain/releases/{sing-box.js,verification.js,haproxy.js,rollback.js}`、
   测试 `test/release-verification.test.js`、`test/release-rollback-plan.test.js`
 - 前端：`public/releases.html` + `public/js/pages/releases-page.js`

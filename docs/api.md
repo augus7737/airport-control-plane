@@ -335,6 +335,14 @@ Notes:
 - 发布成功状态按校验后的实际结果判定，`rendered_only` 不计为成功；Hysteria2 发布要求 UDP/QUIC 复检通过。
 - 业务入口复检由控制面本地发起，失败的目标会重试：默认最多 3 次探测、每次间隔 2000 ms（`RELEASE_VERIFY_PROBE_ATTEMPTS`、`RELEASE_VERIFY_PROBE_RETRY_GAP_MS`）。宽限只延后重探失败目标，已通的节点不再等待；用尽预算仍不通即判为真实失败，不引入“降级”状态。
 
+### `GET /api/v1/config-releases/:id`
+
+`200 { release, detail }`，未命中 `404 not_found`，非法编码 `400 bad_request`。
+
+- `release` 的顶层字段与列表项同构（前端可复用列表渲染），但 `deployments[].artifacts.*` 是**有界投影**：去掉 `rendered_config` 全文与内联 `manifest`，只留 `engine`/`config_digest`/`config_path` + `rendered_config_bytes`、≤600B 的 `rendered_config_preview` 与 `rendered_config_truncated`/`manifest_omitted` 标记。
+- `detail` 给逐节点摘要（状态、note、长度）与整条发布的字节规模，全文出口指向已有通道：`detail.full_artifact_reference.operations_endpoint`（`/api/v1/operations/:id`）与 `subscription_endpoint`（`/sub/:token`）。本接口不搬运完整配置字节。
+- 注意：`GET /api/v1/config-releases` 列表**仍直出全量 `rendered_config`**（每条发布 × 每台节点的完整配置文本），是当前最大的响应体与敏感信息面，收紧与否待评估。
+
 ### `POST /api/v1/config-releases/:id/rollback`
 
 `201 { release, operation }`。请求体可选 `{ title, operator, note }`，缺省自动生成“回滚到 <版本>”标题与备注。
