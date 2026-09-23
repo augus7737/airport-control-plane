@@ -32,6 +32,9 @@ export async function serveStaticFile(reply, filePath, contentType, deps = {}) {
 
   try {
     const file = await readFileImpl(filePath, "utf8");
+    // 页面、样式、脚本都是同源裸文件，缓存住就会让改完 UI 的运营看到旧版式；
+    // 控制面是低并发内网工具，no-cache 换来的正确性比省几个请求更值。
+    reply.setHeader?.("cache-control", "no-cache");
     textResponseImpl(reply, 200, contentType, file);
     return true;
   } catch {
