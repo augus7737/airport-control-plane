@@ -3467,9 +3467,15 @@ const server = createServer(createSafeRequestHandler(async (request, reply) => {
       });
 
       if (!result.ok) {
-        jsonResponse(reply, 401, {
+        const tooManyAttempts = result.error === "too_many_attempts";
+        if (tooManyAttempts && result.retry_after_seconds) {
+          reply.setHeader("Retry-After", String(result.retry_after_seconds));
+        }
+
+        jsonResponse(reply, tooManyAttempts ? 429 : 401, {
           error: result.error,
           message: result.message,
+          retry_after_seconds: result.retry_after_seconds ?? null,
         });
         return;
       }

@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createLoginGuard } from "./login-guard.js";
 
 const DEFAULT_COOKIE_NAME = "airport_operator_session";
 const DEFAULT_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -161,10 +162,31 @@ function normalizePersistedSession(value) {
   };
 }
 
+// Deliberately ignores X-Forwarded-For: it is client-controlled, so trusting it
+// would let an attacker rotate the IP bucket simply by adding a header.
+function loginGuardKeys(username, request) {
+  const keys = [`u:${username || "(empty)"}`];
+  const remote = normalizeString(request?.socket?.remoteAddress)?.replace(/^::ffff:/, "");
+  if (remote) {
+    keys.push(`ip:${remote}`);
+  }
+
+  return keys;
+}
+
 export function createOperatorSessionAuth(options = {}) {
   const env = options.env ?? process.env;
   const logger = options.logger ?? console;
   const now = options.now ?? (() => Date.now());
+  const loginGuard =
+    options.loginGuard ??
+    createLoginGuard({
+      env,
+      now,
+      windowMs: options.loginWindowMs,
+      maxFailures: options.loginMaxFailures,
+      lockoutMs: options.loginLockoutMs,
+    });
 
   const configuredUsername =
     normalizeString(env.CONTROL_PLANE_AUTH_USERNAME) ??
@@ -393,7 +415,35 @@ export function createOperatorSessionAuth(options = {}) {
   function login({ username, password, request, reply }) {
     const normalizedUsername = normalizeString(username) ?? "";
     const normalizedPassword = String(password ?? "");
+    const guardKeys = loginGuardKeys(normalizedUsername, request);
+
+    const verdict = loginGuard.evaluate(guardKeys);
+    if (verdict.blocked) {
+      logger.warn(
+        `[auth] 登录尝试被限流拦截。username=${normalizedUsername || "(empty)"} remaining=${verdict.remaining_seconds}s`,
+      );
+      return {
+        ok: false,
+        error: "too_many_attempts",
+        message: `失败次数过多，请在 ${verdict.remaining_seconds} 秒后重试。`,
+        retry_after_seconds: verdict.remaining_seconds,
+      };
+    }
+
     if (!safeEqual(normalizedUsername, configuredUsername) || !safeEqual(normalizedPassword, configuredPassword)) {
+      const afterFailure = loginGuard.recordFailure(guardKeys);
+      if (afterFailure.blocked) {
+        logger.warn(
+          `[auth] 连续登录失败已触发锁定。username=${normalizedUsername || "(empty)"} remaining=${afterFailure.remaining_seconds}s`,
+        );
+        return {
+          ok: false,
+          error: "too_many_attempts",
+          message: `失败次数过多，请在 ${afterFailure.remaining_seconds} 秒后重试。`,
+          retry_after_seconds: afterFailure.remaining_seconds,
+        };
+      }
+
       return {
         ok: false,
         error: "invalid_credentials",
@@ -401,6 +451,7 @@ export function createOperatorSessionAuth(options = {}) {
       };
     }
 
+    loginGuard.recordSuccess(guardKeys);
     const session = createSession(configuredUsername);
     appendSetCookie(reply, sessionCookie(session.id, request));
 
@@ -605,6 +656,7 @@ export function createOperatorSessionAuth(options = {}) {
     configuredUsername,
     cookieName,
     usesFallbackCredentials,
+    loginGuard,
     sanitizeNextPath,
     currentSession,
     loadSessionStore,
