@@ -254,13 +254,20 @@ async function main() {
     protocol: "vless",
     listen_port: 443,
     transport: "tcp",
-    security: "tls",
-    tls_enabled: true,
+    security: "reality",
+    tls_enabled: false,
     reality_enabled: true,
     server_name: "www.cloudflare.com",
     mux_enabled: false,
     status: "active",
-    note: "新加坡 VLESS Reality 模板",
+    note: "新加坡 VLESS Reality 模板（证书与私钥路径为演示占位，需换成节点本地真实路径）",
+    template: {
+      reality: {
+        private_key_path: "/etc/sing-box/keys/demo-reality.key",
+        short_id: "ab665b55",
+        handshake: { server: "www.cloudflare.com", port: 443 },
+      },
+    },
   });
 
   const profileNrt = await step("profile:NRT VMess WS TLS", "/api/v1/proxy-profiles", {
@@ -274,18 +281,32 @@ async function main() {
     server_name: "cdn.example.com",
     mux_enabled: true,
     status: "active",
-    note: "日本 VMess + WebSocket 模板",
-    template: { transport: { type: "ws", path: "/ws" } },
+    note: "日本 VMess + WebSocket 模板（证书路径为演示占位，需换成节点本地真实路径）",
+    template: {
+      tls: {
+        certificate_path: "/etc/sing-box/certs/demo.example.com.crt",
+        key_path: "/etc/sing-box/certs/demo.example.com.key",
+        server_name: "cdn.example.com",
+      },
+      transport: { type: "ws", path: "/ws" },
+    },
   });
 
   const profileFra = await step("profile:FRA Hysteria2", "/api/v1/proxy-profiles", {
     name: "FRA Hysteria2 8443",
     protocol: "hysteria2",
     listen_port: 8443,
+    transport: "udp",
     security: "tls",
     tls_enabled: true,
     status: "active",
-    note: "欧洲 Hysteria2 模板",
+    note: "欧洲 Hysteria2 模板（证书路径为演示占位，需换成节点本地真实路径）",
+    template: {
+      tls: {
+        certificate_path: "/etc/sing-box/certs/demo.example.com.crt",
+        key_path: "/etc/sing-box/certs/demo.example.com.key",
+      },
+    },
   });
 
   const groupAll = await step("group:全部纳管节点", "/api/v1/node-groups", {

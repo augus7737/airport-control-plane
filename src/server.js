@@ -3642,8 +3642,16 @@ const server = createServer(createSafeRequestHandler(async (request, reply) => {
   );
   if (request.method === "GET" && singBoxArtifactMatch) {
     try {
-      const version = decodeURIComponent(singBoxArtifactMatch[1]);
-      const target = decodeURIComponent(singBoxArtifactMatch[2]);
+      const version = safeDecodePathSegment(singBoxArtifactMatch[1]);
+      const target = safeDecodePathSegment(singBoxArtifactMatch[2]);
+
+      if (!version || !target) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid artifact path",
+        });
+        return;
+      }
 
       if (!supportedSingBoxTargets.includes(target)) {
         jsonResponse(reply, 404, {
@@ -3653,7 +3661,16 @@ const server = createServer(createSafeRequestHandler(async (request, reply) => {
         return;
       }
 
-      const filePath = singBoxArtifactFilePath(version, target);
+      const filePath = path.resolve(singBoxArtifactFilePath(version, target));
+      // 该路由是节点侧匿名下载的公开入口，version 会参与拼路径：必须确认解析结果没逃出产物目录。
+      if (!filePath.startsWith(`${path.resolve(platformArtifactsDir)}${path.sep}`)) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid artifact version",
+        });
+        return;
+      }
+
       await sendBinaryFile(reply, filePath, "application/gzip", path.basename(filePath));
     } catch (error) {
       jsonResponse(reply, 404, {
