@@ -1,12 +1,29 @@
 name: airport-local-e2e
 
-x-node: &node
-  build:
-    context: .
-    dockerfile: Dockerfile.node
-  image: airport-local-node:dev
-  # 控制面用 /etc/machine-id 当节点指纹，镜像层里它三台相同，必须在启动时重建身份，
-  # 否则三台节点会互相覆盖成同一条记录。
+x-node-build: &node-build
+  context: .
+  dockerfile: Dockerfile.node
+
+# 镜像 tag 必须带架构后缀。三台节点曾共用 airport-local-node:dev，
+# 一次 `--platform linux/amd64` 实验把同一个 tag 覆盖成 amd64，之后容器重建全部悄悄变成
+# Rosetta x86_64，而控制面 facts 还是注册时记的 aarch64 —— 台账与现实不一致，测试结论不可信。
+x-node-arm: &node-arm
+  image: airport-local-node:arm64
+  platform: linux/arm64
+  build: *node-build
+
+# Debian + systemd 节点的运行形态：控制面用 /etc/machine-id 推导节点指纹，镜像层里三台相同，
+# 必须在启动时重建身份，否则多台节点会互相覆盖成同一条记录。
+x-node-debian: &node-debian
+  <<: *node-arm
+  privileged: true
+  stop_grace_period: 5s
+  tmpfs:
+    - /run
+    - /run/lock
+    - /tmp
+  volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup:rw
   entrypoint:
     - /bin/sh
     - -c
@@ -16,21 +33,14 @@ x-node: &node
       ln -sf /etc/machine-id /var/lib/dbus/machine-id
       ssh-keygen -A
       exec /sbin/init
-  privileged: true
-  stop_grace_period: 5s
-  tmpfs:
-    - /run
-    - /run/lock
-    - /tmp
-  volumes:
-    - /sys/fs/cgroup:/sys/fs/cgroup:rw
 
 services:
   control-plane:
     build:
       context: ../..
       dockerfile: docker/local-nodes/Dockerfile.dev
-    image: airport-control-plane:dev
+    image: airport-control-plane:arm64
+    platform: linux/arm64
     working_dir: /app
     command: ["npm", "run", "dev"]
     environment:
@@ -53,22 +63,44 @@ services:
       - node-hk
       - node-sg
       - node-us
+      - node-alpine
 
   node-hk:
-    <<: *node
+    <<: *node-debian
     hostname: node-hk
 
   node-sg:
-    <<: *node
+    <<: *node-debian
     hostname: node-sg
 
   node-us:
-    <<: *node
+    <<: *node-debian
     hostname: node-us
 
-# 注：不模拟 x86 节点。在 Apple Silicon 上用 platform: linux/amd64 跑 systemd 时，
-# sshd 的 ExecStartPre 与 /run/sshd 特权分离目录都不稳定，验证结论不可信；
-# amd64 路径请直接用真实 VPS 验证。
+  # Alpine 走 OpenRC：发布脚本里 `command -v systemctl` 失败后写 /etc/init.d/sing-box 的那条分支，
+  # 真实节点里占比很高（LXC 模板），必须有一台常驻节点专门盯着它。
+  node-alpine:
+    <<: *node-debian
+    image: airport-local-node-alpine:arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.node.alpine
+    hostname: node-alpine
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        rm -f /etc/machine-id
+        systemd-machine-id-setup 2>/dev/null || dd if=/dev/urandom bs=16 count=1 2>/dev/null | base64 | tr -d '\n=' >/etc/machine-id
+        ssh-keygen -A
+        # OpenRC 在没有 init 的容器里要靠 softlevel 标记才认账，否则 rc-service 直接报 no runlevel。
+        mkdir -p /run/openrc
+        touch /run/openrc/softlevel
+        exec /sbin/init
+
+# 注：不跑 amd64 节点容器。Apple Silicon 上用 platform: linux/amd64 跑 systemd 时，sshd 的
+# ExecStartPre 与 /run/sshd 特权分离目录都不稳定，验证结论不可信；amd64 路径用真实 VPS 验证，
+# 架构映射与镜像产物用 `docker run --platform linux/amd64` 的一次性检查覆盖（见 README）。
 
 volumes:
   airport-e2e-data:

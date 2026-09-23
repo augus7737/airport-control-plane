@@ -11,7 +11,7 @@ trap 'rm -f "$JAR"' EXIT
 # 每台节点 6 段： container|hostname|region|provider|role|public_ipv4
 # 三台容器共用宿主机出口 IP，会被发布前的端口冲突检查拦下，所以用 TEST-NET-3（203.0.113.0/24）
 # 给每台一个独立公网 IP 模拟真实 VPS；该地址不可达，业务端口探测失败属预期，不是产品缺陷。
-FLEET=${FLEET:-"node-hk|hk-01|香港|Vultr|direct|203.0.113.11|node-sg|sg-01|新加坡|RackNerd|direct|203.0.113.12|node-us|us-01|IAD|BandwagonHost|direct|203.0.113.13"}
+FLEET=${FLEET:-"node-hk|hk-01|香港|Vultr|direct|203.0.113.11|node-sg|sg-01|新加坡|RackNerd|direct|203.0.113.12|node-us|us-01|IAD|BandwagonHost|direct|203.0.113.13|node-alpine|tyo-alpine-01|东京|Oracle|direct|203.0.113.14"}
 
 if [ "${1:-}" = "--fresh" ]; then
   docker compose down -v >/dev/null 2>&1 || true
@@ -62,10 +62,39 @@ for ((i = 0; i < ${#SPEC[@]}; i += 6)); do
 done
 
 sleep 30
-curl -fsS -b "$JAR" "$API/api/v1/nodes" | python3 -c '
-import json,sys
-items = json.load(sys.stdin)["items"]
+
+# 容器实际架构与注册事实必须一致：曾经因为镜像 tag 被 amd64 覆盖，控制面记的是 aarch64、
+# 容器跑的却是 Rosetta x86_64，整批测试结论因此作废。这里显式比对，避免再次静默漂移。
+ARCH_PAIRS=()
+IFS='|' read -ra SPEC <<< "$FLEET"
+for ((i = 0; i < ${#SPEC[@]}; i += 6)); do
+  real=$(docker compose exec -T "${SPEC[i]}" uname -m 2>/dev/null | tr -d '[:space:]')
+  ARCH_PAIRS+=("${SPEC[i + 1]}=${real}")
+done
+
+NODES_JSON=$(mktemp)
+curl -fsS -b "$JAR" "$API/api/v1/nodes" >"$NODES_JSON"
+python3 - "$NODES_JSON" "${ARCH_PAIRS[@]}" <<'PY'
+import json, sys
+
+actual = dict(arg.split("=", 1) for arg in sys.argv[2:])
+items = json.load(open(sys.argv[1]))["items"]
 print(f"nodes={len(items)}")
+drift = 0
 for node in items:
-    print(" ", node["facts"]["hostname"], node["status"], node["health_score"], node.get("init_status"), node["labels"])
-'
+    facts = node["facts"]
+    hostname = facts["hostname"]
+    recorded = facts.get("arch")
+    real = actual.get(hostname)
+    flag = ""
+    if real and recorded and real != recorded:
+        flag = f"  <-- 架构漂移！容器实测 {real}"
+        drift += 1
+    print(" ", hostname, node["status"], node["health_score"],
+          facts.get("os_id"), facts.get("os_version"), recorded,
+          node.get("init_status"), flag)
+if drift:
+    sys.exit(f"有 {drift} 台节点的运行架构与注册事实不一致，请重建镜像/容器后再测")
+PY
+
+rm -f "$NODES_JSON"

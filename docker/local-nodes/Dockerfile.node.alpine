@@ -1,0 +1,26 @@
+ARG BASE_IMAGE=docker.m.daocloud.io/library/alpine:3.20
+
+FROM ${BASE_IMAGE}
+
+# Alpine 节点专门用来验证发布脚本的 OpenRC 分支：二进制安装 -> sing-box check -> /etc/init.d/sing-box。
+# apk 源在容器里由 reset-fleet 前不改，直接用阿里云镜像，国内直连 dl-cdn 会卡。
+RUN set -eu; \
+    sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories; \
+    apk add --no-cache \
+      ca-certificates \
+      curl \
+      iproute2 \
+      openssh \
+      openrc \
+      procps \
+      shadow \
+      tar; \
+    mkdir -p /run/sshd /etc/sing-box /var/log/sing-box /etc/init.d /run/openrc; \
+    printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\nUsePAM no\nPort 22\n' \
+      >/etc/ssh/sshd_config.d/90-airport.conf; \
+    rc-update add sshd default
+
+# busybox init 按 /etc/inittab 拉起 /etc/init.d/boot 与 default runlevel，OpenRC 才认账。
+STOPSIGNAL SIGTERM
+
+CMD ["/sbin/init"]
