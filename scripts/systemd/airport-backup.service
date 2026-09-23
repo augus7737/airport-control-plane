@@ -1,0 +1,19 @@
+[Unit]
+Description=备份 Airport 控制面 data 目录
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=airport
+Group=airport
+EnvironmentFile=-/etc/airport-control-plane/airport.env
+Environment=AIRPORT_DATA_DIR=/opt/airport-control-plane/data
+Environment=AIRPORT_BACKUP_DIR=/opt/airport-backups
+Environment=AIRPORT_APP_USER=airport
+ExecStart=/opt/airport-control-plane/scripts/backup-data-dir.sh backup
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=airport-backup
+
+[Install]
+WantedBy=multi-user.target
