@@ -294,8 +294,8 @@ Notes:
 ## Bootstrap tokens
 
 - `GET /api/v1/bootstrap-tokens`
-- `POST /api/v1/bootstrap-tokens`：`{ label, expires_at, max_uses, note }`，`201 { token }`
-- `PATCH /api/v1/bootstrap-tokens/:id`：仅 `status`（`active|disabled`）、`expires_at`、`max_uses`、`label`、`note`；提交 `token` 字段会被拒绝
+- `POST /api/v1/bootstrap-tokens`：`{ label, expires_at, max_uses, note }`，`201 { token }`；`token` 可显式指定（与既有值冲突时 `validation_failed`），`id` / `created_at` / `uses` / `last_used_*` 一律由服务端生成，请求里带了也会被忽略
+- `PATCH /api/v1/bootstrap-tokens/:id`：仅 `status`（`active|disabled`）、`expires_at`、`max_uses`、`label`、`note`；`token`、`id` 与用量审计字段不可写（沿用存量记录值）
 - 没有 `DELETE`；令牌明文当前仍存于 JSON（哈希化在 `docs/stability-roadmap.md` P2）
 
 ## Access users, profiles, groups

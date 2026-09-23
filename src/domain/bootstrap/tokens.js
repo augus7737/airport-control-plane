@@ -165,20 +165,21 @@ export function createBootstrapTokenDomain(dependencies) {
         : null;
 
     return {
-      id: existingToken?.id ?? payload.id ?? `token_${randomUUID()}`,
+      // id 与审计字段（created_at / uses / last_used_*）只由服务端决定：
+      // 接受调用方传入的 id 会让 store.set 覆盖既有令牌并重置其用量。
+      id: existingToken?.id ?? `token_${randomUUID()}`,
       token:
         existingToken?.token ??
         explicitToken ??
         generateBootstrapTokenValue(),
       label: payload.label ?? existingToken?.label ?? "Bootstrap 令牌",
       status: payload.status ?? existingToken?.status ?? "active",
-      created_at: existingToken?.created_at ?? payload.created_at ?? now,
+      created_at: existingToken?.created_at ?? now,
       expires_at: expiresAt,
       max_uses: Number.isFinite(maxUses) ? maxUses : null,
-      uses: existingToken?.uses ?? payload.uses ?? 0,
-      last_used_at: existingToken?.last_used_at ?? payload.last_used_at ?? null,
-      last_used_node_id:
-        existingToken?.last_used_node_id ?? payload.last_used_node_id ?? null,
+      uses: existingToken?.uses ?? 0,
+      last_used_at: existingToken?.last_used_at ?? null,
+      last_used_node_id: existingToken?.last_used_node_id ?? null,
       note: payload.note ?? existingToken?.note ?? null,
     };
   }
