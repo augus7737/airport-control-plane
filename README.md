@@ -11,7 +11,7 @@
 - 一行 `bootstrap.sh` 完成节点注册（Alpine / Debian-Ubuntu / RHEL family）
 - 平台 SSH 密钥托管与节点接管，TCP + SSH 两层探测，周期巡检调度
 - 初始化模板、系统模板、系统用户的批量下发与终端回显
-- 接入用户 / 协议模板 / 节点组 / 发布记录，`sing-box` 真实渲染 + 校验 + 回滚（VLESS / VMess / Hysteria2，TLS / Reality）
+- 接入用户 / 协议模板 / 节点组 / 发布记录，`sing-box` 真实渲染 + 校验 + 节点侧失败回滚，发布记录可回滚到任上一条成功发布（VLESS / VMess / Hysteria2，TLS / Reality）
 - 中转链路模型（直连 / 中转、入口端口与内部端口分离）
 - 资产台账（厂商、区域、到期、计费周期、流量、成本）与订阅分享页
 - 控制面 session 登录保护、SQLite 之前的 JSON 原子写入与串行写队列
@@ -50,7 +50,7 @@ npm run dev
 其他 npm 脚本：
 
 ```bash
-npm test           # node --test，当前 24 个测试文件 / 98 个用例
+npm test           # node --test，当前 25 个测试文件 / 110 个用例
 npm run check      # 对 src public/js scripts test 下每个 .js 逐文件 node --check，语法门禁
 npm run seed       # 生成/刷新本地演示数据（scripts/seed-local-demo.js）
 ```

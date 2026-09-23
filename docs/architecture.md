@@ -31,7 +31,7 @@ public/                  15 个 HTML 页面 + js/{pages,modals,cells,layout,stor
 data/                    每 store 一个 JSON 文件（gitignore，路径可用 AIRPORT_DATA_DIR 覆盖）
 scripts/                 bootstrap.sh、deploy-bare-metal.sh、deploy-production.sh、seed-local-demo.js
 docker/local-nodes/      本地假节点集群（Debian+systemd / Ubuntu / Alpine+OpenRC）与真实发布 E2E 脚本
-test/                    24 个 node:test 文件（含 route-table：真起服务比对 78 条路由响应）
+test/                    25 个 node:test 文件（含 route-table：真起服务比对 91 条路由响应）
 ```
 
 路由层的形状：`src/server.js` 依次执行登录页跳转、`/api/v1/auth/*`、鉴权门、`/healthz`、
