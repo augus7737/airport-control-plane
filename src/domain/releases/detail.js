@@ -101,7 +101,7 @@ function summarizeDeployment(deployment) {
   };
 }
 
-export function projectConfigReleaseForDetail(release) {
+export function projectConfigReleaseForList(release) {
   if (!release || typeof release !== "object") {
     return null;
   }
@@ -110,18 +110,25 @@ export function projectConfigReleaseForDetail(release) {
     ? release.deployments.map((deployment) => projectDeployment(deployment)).filter(Boolean)
     : [];
 
-  const boundedRelease = {
-    ...release,
-    deployments,
-  };
+  return { ...release, deployments };
+}
+
+export function projectConfigReleaseForDetail(release) {
+  if (!release || typeof release !== "object") {
+    return null;
+  }
+
+  const boundedRelease = projectConfigReleaseForList(release);
+  const deployments = boundedRelease.deployments;
 
   const renderedConfigBytes = deployments.reduce((total, deployment) => {
+    let sum = total;
     for (const artifact of Object.values(deployment.artifacts ?? {})) {
       if (typeof artifact?.rendered_config_bytes === "number") {
-        return total + artifact.rendered_config_bytes;
+        sum += artifact.rendered_config_bytes;
       }
     }
-    return total;
+    return sum;
   }, 0);
 
   const detail = {

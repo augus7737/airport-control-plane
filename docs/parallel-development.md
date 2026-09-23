@@ -116,6 +116,21 @@
 - 依赖：`listNodeProbes`/`sortProbes`/`probeStore`；`listDiagnostics`
 - 领域：`src/domain/probes/*`、`src/domain/diagnostics/node-quality.js`
 - 注意：只读展示口径，不产生写操作；调度在 `src/runtime/probe-scheduler.js`，属禁改区。
+- 本轮已做（零生产代码改动，纯口径固化）：`test/probe-quality.test.js`(24)、
+  `test/node-quality.test.js`(42)、`test/probe-diagnostics-routes.test.js`(9)。
+  已钉的现状：`?node_id=` 未命中是 `200 + {"items":[]}` 不是 404；失败探测按分档给分不落 0；
+  领域内**没有** TTL/staleness 概念，一条三天前的记录只要仍是最新，它的分数照写进 `node.health_score`。
+- 读码发现（未修，按严重度）：
+  1. `node-quality.js:983-1007` 异常兜底 upsert 的是闭包里的初始快照，会把执行中已落库的
+     `transport`/`preflight`/`runtime_blockers` 覆写回 null → 失败诊断看不出跑到哪一步。
+  2. `node-quality.js:700/956` `queued/running` 无超时回收（启动只收 `running|queued`→failed，
+     进程内挂死不重启就不收），期间该节点所有诊断被互斥。
+  3. `node-quality.js:909-945` 档位脚本非 0 退出码不参与判级：stdout 出现过一条 report_url 即 success。
+  4. `executor.js:1337` `probe_type` 不 trim、无白名单，未知值静默按 `ssh_auth` 跑且任务仍 success。
+  5. `executor.js:1196-1214` 单项探测"不适用"给高分却判 `success=false` → 节点 `failed`，
+     与 full_stack 同场景的 `degraded` 口径互相矛盾。
+  6. `node-quality.js:662-668` `sortDiagnostics` 用 `localeCompare` 字典序排时间戳，
+     `"2026-9-23" > "2026-10-01"`；`server.js:1321-1329` 的 `sortProbes` 同族且在禁改区不可单测。
 
 **bootstrap-tokens**
 - 可改：`src/http/routes/bootstrap-tokens.js`
@@ -184,9 +199,11 @@
 - 本轮已做：`GET /api/v1/config-releases/:id`（`200 { release, detail }`，`release` 与列表项同构但
   `deployments[].artifacts` 走有界投影：只留摘要 + ≤600B 预览 + 长度；纯函数在
   `src/domain/releases/detail.js`；404/坏编码 400 已进矩阵）
-- 剩余缺口：**`GET /api/v1/config-releases` 列表仍直出全量 `rendered_config`**（每条发布 × 每台节点的完整
-  配置文本，含用户凭证），比详情接口更值得关注；收紧会牵动前端渲染口径，需单独一轮
-- 其他：`deployments[].artifacts.sing_box.rendered_config` 是全文落库，`configReleaseStore` 会随发布数线性膨胀
+- 集成人追加（已合入）：列表 `GET /api/v1/config-releases` 改为共用同一份有界投影
+  （`projectConfigReleaseForList`），不再直出全量 `rendered_config`；前端零处读该字段，故无渲染口径变更。
+  同时修掉 `rendered_config_total_bytes` 只累加每节点第一个产物的下计数 bug。
+- 剩余缺口：`deployments[].artifacts.sing_box.rendered_config` 仍是**全文落库**，
+  `configReleaseStore` 随发布数线性膨胀（响应面已收紧，存储面未收）
 - “当前生效版本”判定两处都用 `find(status==="success")` 第一条（`config-releases.js` 与 `server.js` 发布尾部），
   依赖 store 的 `unshift` 插入顺序而非 `updated_at`；顺序若被打乱，回滚的“已生效”判断可能与真实最新 success 不符
 - 领域：`src/domain/releases/{sing-box.js,verification.js,haproxy.js,rollback.js}`、
@@ -280,6 +297,9 @@
   不得改动或重排已有行。
 禁止：git push、合并别的分支、跑 docker/local-nodes/reset-fleet.sh、
   设置 AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT=true。
+停实例只能按 PID：先 lsof -tiTCP:<port> -sTCP:LISTEN 拿到端口上的进程号，再 kill 那个号。
+  严禁 pkill -f "node src/server.js" 这类按命令行匹配杀法——本机同时挂着 8080 主实例和
+  别的窗口的实例，一把全杀过（8080 的子进程被杀过，靠 --watch 才复活）。
 收尾：npm run check && node --test 全绿，并给出改了哪些文件、接口面变化、
   route-table 矩阵新增行。
 ```

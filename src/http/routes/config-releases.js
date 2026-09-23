@@ -1,6 +1,6 @@
 import { validateConfigReleaseCreate } from "../../http/validators.js";
 import { jsonResponse, readJsonBody } from "../../utils/http.js";
-import { projectConfigReleaseForDetail } from "../../domain/releases/detail.js";
+import { projectConfigReleaseForDetail, projectConfigReleaseForList } from "../../domain/releases/detail.js";
 
 export function createConfigReleasesRoutes(ctx) {
   const {
@@ -13,8 +13,12 @@ export function createConfigReleasesRoutes(ctx) {
 
   return async function handleConfigReleasesRoutes({ request, reply, url }) {
     if (request.method === "GET" && url.pathname === "/api/v1/config-releases") {
+      // 列表也要走有界投影：store 里每条 release 的 deployments[].artifacts.*.rendered_config
+      // 是含用户凭证的完整配置，早期实现整表原样返回，节点一多就既是最大响应体也是最大泄面。
       jsonResponse(reply, 200, {
-        items: sortByUpdatedAt(configReleaseStore),
+        items: sortByUpdatedAt(configReleaseStore)
+          .map((item) => projectConfigReleaseForList(item))
+          .filter(Boolean),
       });
       return;
     }

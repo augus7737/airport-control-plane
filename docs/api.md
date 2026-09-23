@@ -326,6 +326,8 @@ Notes:
 
 ### `GET /api/v1/config-releases`
 
+`200 { items }`，按 `updated_at` 倒序，无分页（整表返回）。列表项与 `GET /api/v1/config-releases/:id` 的 `release` **同构且同样有界**：`deployments[].artifacts.*` 只含摘要，不含 `rendered_config` 全文与内联 `manifest`（见下）。
+
 ### `POST /api/v1/config-releases`
 
 `201 { release, task, operation }`。请求 `{ title, profile_id, access_user_ids[], node_group_ids[], node_ids[], operator, note }`。
@@ -341,7 +343,7 @@ Notes:
 
 - `release` 的顶层字段与列表项同构（前端可复用列表渲染），但 `deployments[].artifacts.*` 是**有界投影**：去掉 `rendered_config` 全文与内联 `manifest`，只留 `engine`/`config_digest`/`config_path` + `rendered_config_bytes`、≤600B 的 `rendered_config_preview` 与 `rendered_config_truncated`/`manifest_omitted` 标记。
 - `detail` 给逐节点摘要（状态、note、长度）与整条发布的字节规模，全文出口指向已有通道：`detail.full_artifact_reference.operations_endpoint`（`/api/v1/operations/:id`）与 `subscription_endpoint`（`/sub/:token`）。本接口不搬运完整配置字节。
-- 注意：`GET /api/v1/config-releases` 列表**仍直出全量 `rendered_config`**（每条发布 × 每台节点的完整配置文本），是当前最大的响应体与敏感信息面，收紧与否待评估。
+- 收紧口径同样适用于列表：`GET /api/v1/config-releases` 早期整表原样返回（每条发布 × 每台节点的完整渲染配置文本），是当时最大的响应体与敏感信息面，现已改为共用同一份有界投影（`projectConfigReleaseForList`）。发布记录的全文仍只走 operations / 订阅通道。
 
 ### `POST /api/v1/config-releases/:id/rollback`
 
