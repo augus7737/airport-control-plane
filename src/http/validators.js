@@ -1235,6 +1235,15 @@ export function validatePlatformSingBoxDistributionUpdate(payload) {
     errors.push("version must be a non-empty string");
   }
 
+  // version 会参与制品落盘与匿名下载的路径拼接（path.join 不吸收 `..`），脏值一旦入库就再也清不掉，
+  // 所以在写入口就锁成单个安全路径段，而不是只靠镜像/下载两个读出口守卫。
+  if (typeof payload.version === "string" && payload.version.trim()) {
+    const version = payload.version.trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(version) || version.includes("..")) {
+      errors.push("version must be a single safe artifact path segment");
+    }
+  }
+
   if (
     payload.install_path !== undefined &&
     (typeof payload.install_path !== "string" || !payload.install_path.trim())
