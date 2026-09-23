@@ -1,4 +1,5 @@
 import { cloneProxyProfile } from "../services/runtime-api.js";
+import { getReleaseReachability } from "../shared/core-formatters.js";
 
 function createEmptyProfileDraft() {
   return {
@@ -550,8 +551,12 @@ export function createProxyProfilesPageModule(dependencies) {
     const hiddenRelatedReleaseCount = relatedReleaseScope.length - relatedReleases.length;
     const relatedReleaseItems = relatedReleases.length
       ? relatedReleases
-          .map(
-            (release) => `
+          .map((release) => {
+            const reachability =
+              String(release.status || "").toLowerCase() === "failed"
+                ? null
+                : getReleaseReachability(release);
+            return `
               <article class="ops-soft-item">
                 <div class="ops-soft-main">
                   <strong>${escapeHtml(release.title || release.id)}</strong>
@@ -565,9 +570,19 @@ export function createProxyProfilesPageModule(dependencies) {
                   <span class="tiny">${formatDate(release.created_at)} · ${escapeHtml(
                     formatRelativeTime(release.created_at),
                   )}</span>
+                  ${
+                    reachability?.detail
+                      ? `<span class="tiny">${escapeHtml(reachability.detail)}</span>`
+                      : ""
+                  }
                 </div>
                 <div class="ops-table-actions">
                   <span class="${statusClassName(release.status)}">${statusText(release.status)}</span>
+                  ${
+                    reachability?.warn
+                      ? `<span class="badge badge-degraded">${escapeHtml(reachability.label)}</span>`
+                      : ""
+                  }
                   ${
                     release.operation_id
                       ? `<a class="button ghost" href="/terminal.html?operation_id=${encodeURIComponent(release.operation_id)}">查看回显</a>`
@@ -575,8 +590,8 @@ export function createProxyProfilesPageModule(dependencies) {
                   }
                 </div>
               </article>
-            `,
-          )
+            `;
+          })
           .join("")
       : `<div class="empty">${selectedProfile ? "当前模板还没有发布记录。" : "还没有协议模板发布记录。"}</div>`;
     const rows = filteredProfiles.length

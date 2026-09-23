@@ -5,11 +5,44 @@ export function createTerminalPageActions(dependencies) {
     documentRef = document,
     fetchImpl = fetch,
     getAccessMode,
+    getCollectionHealth = () => null,
     refreshOperations,
     renderCurrentContent,
     setOperations,
     windowRef = window,
   } = dependencies;
+
+  const IN_FLIGHT_OPERATION_STATUSES = new Set(["queued", "running"]);
+  const TERMINAL_POLL_INTERVAL_MS = 5_000;
+
+  function findActiveOperation() {
+    const id = appState.terminal.activeOperationId;
+    if (!id) {
+      return null;
+    }
+    return appState.operations.find((item) => item.id === id) || null;
+  }
+
+  function isInFlightOperation(operation) {
+    return IN_FLIGHT_OPERATION_STATUSES.has(String(operation?.status || "").toLowerCase());
+  }
+
+  function activeOperationSignature() {
+    const operation = findActiveOperation();
+    if (!operation) {
+      return "";
+    }
+    const targets = Array.isArray(operation.targets) ? operation.targets : [];
+    return [
+      `${operation.id}:${operation.status}:${operation.summary?.total ?? ""}:${operation.summary?.success ?? ""}:${operation.summary?.failed ?? ""}`,
+      ...targets.map((target) => {
+        const outputLength = Array.isArray(target?.output)
+          ? target.output.length
+          : String(target?.output ?? "").length;
+        return `${target?.node_id}:${target?.status}:${target?.finished_at ?? ""}:${outputLength}`;
+      }),
+    ].join("|");
+  }
 
   function syncActiveOperationUrl(operationId) {
     if (!windowRef?.location || !windowRef?.history?.replaceState) {
@@ -28,6 +61,63 @@ export function createTerminalPageActions(dependencies) {
   function rerenderWithClearedMessage() {
     appState.terminal.message = null;
     renderCurrentContent();
+  }
+
+  function stopOperationPoll() {
+    if (appState.terminal.pollTimer) {
+      windowRef.clearInterval(appState.terminal.pollTimer);
+      appState.terminal.pollTimer = null;
+    }
+  }
+
+  async function pollActiveOperation() {
+    if (!isInFlightOperation(findActiveOperation())) {
+      stopOperationPoll();
+      return;
+    }
+    if (appState.terminal.isPolling || documentRef.visibilityState === "hidden") {
+      return;
+    }
+
+    appState.terminal.isPolling = true;
+    try {
+      const snapshot = appState.operations;
+      await refreshOperations();
+      if (getCollectionHealth("operations")?.status === "error") {
+        // 读取失败时接口回传空集合，这里保留上一次结果，不把「拉取失败」显示成「没有执行记录」。
+        setOperations(snapshot);
+        return;
+      }
+      const signature = activeOperationSignature();
+      const finished = !isInFlightOperation(findActiveOperation());
+      if (finished) {
+        stopOperationPoll();
+        appState.terminal.message = {
+          type: "success",
+          text: "本轮执行已结束，下方回显为节点最终回传结果。",
+        };
+      }
+      if (finished || signature !== appState.terminal.lastPolledSignature) {
+        appState.terminal.lastPolledSignature = signature;
+        renderCurrentContent();
+      }
+    } finally {
+      appState.terminal.isPolling = false;
+    }
+  }
+
+  function syncOperationPoll() {
+    if (!isInFlightOperation(findActiveOperation())) {
+      stopOperationPoll();
+      return;
+    }
+    if (appState.terminal.pollTimer) {
+      return;
+    }
+    appState.terminal.lastPolledSignature = activeOperationSignature();
+    appState.terminal.pollTimer = windowRef.setInterval(() => {
+      void pollActiveOperation();
+    }, TERMINAL_POLL_INTERVAL_MS);
   }
 
   function setTerminalMode(mode) {
@@ -56,6 +146,7 @@ export function createTerminalPageActions(dependencies) {
   function setActiveOperation(operationId) {
     appState.terminal.activeOperationId = operationId;
     syncActiveOperationUrl(operationId);
+    syncOperationPoll();
     renderCurrentContent();
     const panel = documentRef.getElementById("terminal-output-panel");
     if (panel) {
@@ -105,6 +196,7 @@ export function createTerminalPageActions(dependencies) {
 
   async function refreshExecutionRecords() {
     await refreshOperations();
+    syncOperationPoll();
     appState.terminal.message = {
       type: "success",
       text: "执行记录与回显已刷新。",
@@ -158,6 +250,8 @@ export function createTerminalPageActions(dependencies) {
     }
 
     appState.terminal.submitting = true;
+    // 提交前先停表：上一轮的定时器若在本轮 fetch 期间触发，会把旧列表写回 appState.operations。
+    stopOperationPoll();
     try {
       const response = await fetchImpl("/api/v1/operations/execute", {
         method: "POST",
@@ -189,6 +283,7 @@ export function createTerminalPageActions(dependencies) {
       };
     } finally {
       appState.terminal.submitting = false;
+      syncOperationPoll();
       renderCurrentContent();
     }
   }
@@ -206,7 +301,9 @@ export function createTerminalPageActions(dependencies) {
     setTerminalScriptBody,
     setTerminalScriptName,
     setTerminalTitle,
+    stopOperationPoll,
     submitExecution,
+    syncOperationPoll,
     toggleNodeSelection,
   };
 }

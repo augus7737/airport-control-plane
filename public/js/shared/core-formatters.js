@@ -417,3 +417,47 @@ export function toNumberOrNull(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+const RELEASE_REACHABILITY_LABELS = {
+  success: "入口可达已验证",
+  partial: "入口可达部分通过",
+  failed: "入口可达未通过",
+  skipped: "入口可达未复检",
+};
+
+// 判定口径 C：release.status 只回答「配置有没有在节点生效」，业务端口能不能连是另一层。
+export function getReleaseReachability(release) {
+  const summary = release?.summary && typeof release.summary === "object" ? release.summary : {};
+  const status = String(
+    summary.reachability_status ?? release?.verification?.reachability_status ?? "",
+  ).toLowerCase();
+  if (!Object.prototype.hasOwnProperty.call(RELEASE_REACHABILITY_LABELS, status)) {
+    return null;
+  }
+
+  const failures = Array.isArray(summary.reachability_failures) ? summary.reachability_failures : [];
+  const nodeIds = [...new Set(failures.map((item) => item?.node_id).filter(Boolean))];
+  const reasonCodes = [...new Set(failures.map((item) => item?.reason_code).filter(Boolean))];
+  const reasons = reasonCodes.length
+    ? `（${reasonCodes.slice(0, 3).join(" / ")}${reasonCodes.length > 3 ? ` 等 ${reasonCodes.length} 类` : ""}）`
+    : "";
+  const nodeCount = nodeIds.length ? `${nodeIds.length} 台节点` : "部分节点";
+
+  let detail = "";
+  if (status === "failed") {
+    detail = `配置已生效，但 ${nodeCount}的业务入口没连通${reasons}。多为端口未放行 / 节点防火墙 / 控制面出口被风控，不一定是配置问题。`;
+  } else if (status === "partial") {
+    detail = `${nodeCount}的业务入口可达复检未确认${reasons}，其余节点已通过。`;
+  } else if (status === "skipped") {
+    detail = "本次复检没有覆盖业务端口，「可用」只表示配置已在节点生效。";
+  }
+
+  return {
+    detail,
+    label: RELEASE_REACHABILITY_LABELS[status],
+    nodeIds,
+    reasonCodes,
+    status,
+    warn: status === "failed" || status === "partial",
+  };
+}

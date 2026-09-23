@@ -97,6 +97,9 @@ export const appState = {
   configReleases: [],
   systemTemplateReleases: [],
   systemUserReleases: [],
+  dataHealth: {
+    sources: {},
+  },
   costs: {
     summary: null,
     nodes: [],
@@ -149,6 +152,9 @@ export const appState = {
     selectedNodeIds: [],
     activeOperationId: null,
     message: null,
+    pollTimer: null,
+    isPolling: false,
+    lastPolledSignature: null,
   },
   nodeTerminal: {
     command: "uname -a && uptime",
@@ -174,6 +180,21 @@ function notifyBootstrapStateChange() {
 
 export function registerRuntimeStoreHooks(hooks = {}) {
   runtimeStoreHooks.onBootstrapStateChange = hooks.onBootstrapStateChange || null;
+}
+
+export function recordCollectionHealth(source, { ok, error = null, now = new Date() } = {}) {
+  const at = now.toISOString();
+  const previous = appState.dataHealth.sources[source];
+  appState.dataHealth.sources[source] = {
+    status: ok ? "ok" : "error",
+    error: ok ? null : String(error || "unknown_error"),
+    checked_at: at,
+    ok_at: ok ? at : previous?.ok_at || null,
+  };
+}
+
+export function getCollectionHealth(source) {
+  return appState.dataHealth.sources[source] || null;
 }
 
 export function setBootstrapTokens(tokens) {

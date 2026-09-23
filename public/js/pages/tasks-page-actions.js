@@ -1,11 +1,14 @@
 const TASK_POLL_INTERVAL_MS = 15_000;
+const TASK_STALE_REFRESH_MS = 300_000;
 
 export function createTasksPageActions(dependencies) {
   const {
     appState,
     documentRef = document,
     fetchImpl = fetch,
+    getCollectionHealth = () => null,
     getNodeDisplayName = (node) => node?.id || "",
+    isUnauthorizedError = () => false,
     refreshRuntimeData,
     renderCurrentContent,
     windowRef = window,
@@ -28,6 +31,19 @@ export function createTasksPageActions(dependencies) {
   }
 
   const FOCUS_KEYS = ["data-task-select", "data-task-trigger", "data-task-init", "data-task-operation-toggle"];
+
+  const TASK_VIEW_SOURCES = {
+    tasks: "任务",
+    nodes: "节点",
+    probes: "探测",
+    "platform-context": "平台上下文",
+  };
+
+  function getFailedViewSources() {
+    return Object.keys(TASK_VIEW_SOURCES).filter(
+      (source) => getCollectionHealth(source)?.status === "error",
+    );
+  }
 
   function captureFocusKey(active) {
     if (!active || active === documentRef.body) {
@@ -184,8 +200,12 @@ export function createTasksPageActions(dependencies) {
   function hasInFlightTasks() {
     return appState.tasks.some((task) => {
       const status = String(task.status || "").toLowerCase();
-      return status === "running" || status === "queued";
+      return status === "running" || status === "queued" || status === "new";
     });
+  }
+
+  function hasProbeSchedulerRound() {
+    return Boolean(appState.platform?.probe_scheduler?.enabled);
   }
 
   function taskPoolSignature() {
@@ -207,26 +227,59 @@ export function createTasksPageActions(dependencies) {
       rerender();
     }
 
+    let keepViewport = false;
     try {
       await refreshRuntimeData();
       appState.taskCenter.lastRefreshedAt = new Date().toISOString();
       if (!silent) {
-        appState.taskCenter.message = {
-          type: "success",
-          text: "任务、节点和探测数据已刷新。",
-        };
+        const failedSources = getFailedViewSources();
+        appState.taskCenter.message = failedSources.length
+          ? {
+              type: "error",
+              text: `已刷新，但${failedSources.map((source) => TASK_VIEW_SOURCES[source]).join("、")}数据读取失败，这里的 0 不代表没有。`,
+            }
+          : {
+              type: "success",
+              text: "任务、节点和探测数据已刷新。",
+            };
       } else if (before === taskPoolSignature()) {
         // 数据没变，保持当前滚动与焦点，不打断正在读的人。
-        return;
+        keepViewport = true;
+      }
+    } catch (error) {
+      if (isUnauthorizedError(error)) {
+        appState.taskCenter.message = {
+          type: "error",
+          text: "登录已过期，重新登录后再刷新才能看到最新任务。",
+        };
+      } else {
+        appState.taskCenter.message = {
+          type: "error",
+          text: `刷新失败：${error?.message || "未知原因"}。当前列表可能已经不是最新。`,
+        };
       }
     } finally {
       appState.taskCenter.isRefreshing = false;
-      rerender();
+      if (!keepViewport) {
+        rerender();
+      }
     }
   }
 
+  function shouldPollTasks() {
+    return Boolean(appState.taskCenter.autoRefresh) && (hasInFlightTasks() || hasProbeSchedulerRound());
+  }
+
+  function dataAgeMs() {
+    const at = appState.taskCenter.lastRefreshedAt;
+    if (!at) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return Date.now() - new Date(at).getTime();
+  }
+
   function syncAutoRefreshPoll() {
-    const shouldPoll = Boolean(appState.taskCenter.autoRefresh) && hasInFlightTasks();
+    const shouldPoll = shouldPollTasks();
 
     if (!shouldPoll) {
       if (appState.taskCenter._pollTimer) {
@@ -244,7 +297,11 @@ export function createTasksPageActions(dependencies) {
       if (documentRef.visibilityState === "hidden") {
         return;
       }
-      if (!appState.taskCenter.autoRefresh || !hasInFlightTasks()) {
+      if (!shouldPollTasks()) {
+        return;
+      }
+      // 巡检在跑但没有在途任务时，按数据过期节奏收口，避免每 15 秒全量拉取。
+      if (!hasInFlightTasks() && dataAgeMs() < TASK_STALE_REFRESH_MS) {
         return;
       }
       void refreshTasksView({ silent: true });

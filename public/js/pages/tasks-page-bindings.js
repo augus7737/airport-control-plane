@@ -47,6 +47,10 @@ export function bindTasksPageEvents(dependencies) {
     actions.resetTaskFilters();
   });
 
+  documentRef.getElementById("task-load-retry")?.addEventListener("click", async () => {
+    await actions.refreshTasksView();
+  });
+
   documentRef.getElementById("task-refresh")?.addEventListener("click", async () => {
     await actions.refreshTasksView();
   });

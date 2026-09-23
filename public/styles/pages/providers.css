@@ -290,6 +290,15 @@ html[data-theme="light"] body[data-page="providers"] .checkbox {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
+/* 「另有 N 个未展示」必须一直看起来像占位而不是真标签：浅色分组规则会盖掉 .is-more，这里补回同权重覆盖。 */
+html[data-theme="light"] body[data-page="providers"] .provider-inline-tag.is-more {
+  border-color: var(--line-strong);
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+
 html[data-theme="light"] body[data-page="providers"] .provider-ledger-callout,
 html[data-theme="light"] body[data-page="providers"] .ops-empty-block {
   background:

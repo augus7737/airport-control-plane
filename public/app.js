@@ -83,6 +83,7 @@ import {
 import {
   appState,
   getBootstrapScriptUrl,
+  getCollectionHealth,
   getPlatformBaseUrl,
   getProbeSchedulerState,
   getPlatformSshKeyState,
@@ -134,6 +135,7 @@ import {
   buildLoginUrl,
   fetchWithAuth,
   getOperatorDisplayName,
+  isUnauthorizedError,
   logoutOperator,
   requireOperatorSession,
 } from "./js/auth/auth-client.js";
@@ -496,9 +498,11 @@ const { renderTasksPage, setupTasksPage } = createTasksPageModule({
   formatDuration,
   formatRelativeTime,
   formatTaskRound,
+  getCollectionHealth,
   getNodeDisplayName,
   getTaskDisplayTitle,
   getTaskSummary,
+  isUnauthorizedError,
   nodeDetailHref,
   page,
   probeReasonLabel,
@@ -656,6 +660,7 @@ const {
   formatRelativeTime,
   formatRouteSummary,
   getAccessMode,
+  getCollectionHealth,
   getNodeDisplayName,
   getRelayDisplayName,
   nodeShellScreenContent: (...args) => nodeShellRuntime?.nodeShellScreenContent(...args) || "",
@@ -674,6 +679,7 @@ const {
   statusText,
   summarizeOperationExitCode,
   summarizeOperationTransport,
+  windowRef: window,
 });
 nodeShellRuntime = createNodeShellRuntimeModule({
   appState,

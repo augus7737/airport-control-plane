@@ -1,4 +1,5 @@
 import {
+  recordCollectionHealth,
   setAccessUsers,
   setBootstrapTokens,
   setConfigReleases,
@@ -27,6 +28,12 @@ const browserOrigin =
   typeof window !== "undefined" && window.location ? window.location.origin : "";
 
 const emptyCollection = Object.freeze([]);
+
+function collectionSource(url) {
+  return String(url)
+    .replace(/^\/api\/v1\//, "")
+    .replace(/\//g, ".");
+}
 
 function createDefaultPlatformContext() {
   return {
@@ -74,17 +81,23 @@ function createDefaultPlatformContext() {
 }
 
 async function fetchCollection(url) {
+  const source = collectionSource(url);
   try {
     const response = await fetchWithAuth(url);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = await response.json();
-    return Array.isArray(payload.items) ? payload.items : emptyCollection;
+    if (!Array.isArray(payload?.items)) {
+      throw new Error(`HTTP ${response.status} 响应缺少 items 数组`);
+    }
+    recordCollectionHealth(source, { ok: true });
+    return payload.items;
   } catch (error) {
     if (isUnauthorizedError(error)) {
       throw error;
     }
+    recordCollectionHealth(source, { ok: false, error: error?.message });
     return emptyCollection;
   }
 }
@@ -175,17 +188,23 @@ export function getLiveConfigReleases() {
 }
 
 export async function getLiveCostSummary() {
+  const source = collectionSource("/api/v1/costs/summary");
   try {
     const response = await fetchWithAuth("/api/v1/costs/summary");
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const payload = await response.json();
-    return payload?.summary && typeof payload.summary === "object" ? payload.summary : null;
+    if (!payload?.summary || typeof payload.summary !== "object") {
+      throw new Error(`HTTP ${response.status} 响应缺少 summary 对象`);
+    }
+    recordCollectionHealth(source, { ok: true });
+    return payload.summary;
   } catch (error) {
     if (isUnauthorizedError(error)) {
       throw error;
     }
+    recordCollectionHealth(source, { ok: false, error: error?.message });
     return null;
   }
 }
@@ -215,16 +234,23 @@ export function getLiveSystemUserReleases() {
 }
 
 export async function getPlatformContext() {
+  const source = collectionSource("/api/v1/platform-context");
   try {
     const response = await fetchWithAuth("/api/v1/platform-context");
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    return await response.json();
+    const payload = await response.json();
+    if (!payload?.probe_scheduler) {
+      throw new Error(`HTTP ${response.status} 响应缺少 probe_scheduler`);
+    }
+    recordCollectionHealth(source, { ok: true });
+    return payload;
   } catch (error) {
     if (isUnauthorizedError(error)) {
       throw error;
     }
+    recordCollectionHealth(source, { ok: false, error: error?.message });
     return createDefaultPlatformContext();
   }
 }

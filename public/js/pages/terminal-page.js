@@ -3,6 +3,8 @@ import { createTerminalPageActions } from "./terminal-page-actions.js";
 import { bindTerminalPageEvents } from "./terminal-page-bindings.js";
 import { createTerminalPageStateModule } from "./terminal-page-state.js";
 
+const PENDING_TARGET_STATUSES = new Set(["pending", "queued", "running"]);
+
 export function createTerminalPageModule(dependencies) {
   const {
     appState,
@@ -17,6 +19,7 @@ export function createTerminalPageModule(dependencies) {
     formatRelativeTime,
     formatRouteSummary,
     getAccessMode,
+    getCollectionHealth = () => null,
     getNodeDisplayName,
     getRelayDisplayName,
     nodeShellScreenContent,
@@ -46,6 +49,19 @@ export function createTerminalPageModule(dependencies) {
     getNodeOperations,
   } = createTerminalPageStateModule({
     appState,
+  });
+
+  const actions = createTerminalPageActions({
+    appState,
+    applyTerminalPreset,
+    documentRef: document,
+    fetchImpl,
+    getAccessMode,
+    getCollectionHealth,
+    refreshOperations,
+    renderCurrentContent,
+    setOperations,
+    windowRef,
   });
 
   function syncTerminalOperationFromUrl(operations) {
@@ -148,6 +164,9 @@ export function createTerminalPageModule(dependencies) {
         ? activeOperation.targets
             .map((target) => {
               const outputText = normalizeOperationOutput(target.output);
+              const isTargetPending = PENDING_TARGET_STATUSES.has(
+                String(target.status || "").toLowerCase(),
+              );
               const targetDuration = formatDuration(
                 resolveDurationMs(
                   target,
@@ -181,7 +200,10 @@ export function createTerminalPageModule(dependencies) {
                     <span>${escapeHtml(activeOperation.id)}</span>
                   </div>
                   <pre class="terminal-screen">${escapeHtml(
-                    outputText || "[无输出] 后端未返回标准输出/错误输出内容。",
+                    outputText
+                      || (isTargetPending
+                        ? "执行中：节点尚未回传输出，页面每 5 秒自动刷新，完成后这里会显示回显。"
+                        : "[无输出] 后端未返回标准输出/错误输出内容。"),
                   )}</pre>
                 </div>
               </article>
@@ -189,6 +211,9 @@ export function createTerminalPageModule(dependencies) {
             })
             .join("")
         : '<div class="empty">还没有执行记录。你可以先在左侧选择节点并发起一轮批量命令或脚本。</div>';
+
+    // 有在途批次时挂上定时器，回显自己更新，不需要人守着点刷新。
+    actions.syncOperationPoll();
 
     return `
     <section class="metrics-grid fade-up">
@@ -500,18 +525,6 @@ export function createTerminalPageModule(dependencies) {
     if (page !== "terminal") {
       return;
     }
-
-    const actions = createTerminalPageActions({
-      appState,
-      applyTerminalPreset,
-      documentRef: document,
-      fetchImpl,
-      getAccessMode,
-      refreshOperations,
-      renderCurrentContent,
-      setOperations,
-      windowRef,
-    });
 
     bindTerminalPageEvents({
       actions,

@@ -55,6 +55,8 @@ const PAYLOAD_VALUE_LABELS = {
 
 const PROBE_MAX_VISIBLE_ROWS = 6;
 
+const STALE_DATA_SECONDS = 300;
+
 export function createTasksPageModule(dependencies) {
   const {
     appState,
@@ -65,9 +67,11 @@ export function createTasksPageModule(dependencies) {
     formatDuration,
     formatRelativeTime,
     formatTaskRound,
+    getCollectionHealth = () => null,
     getNodeDisplayName,
     getTaskDisplayTitle,
     getTaskSummary,
+    isUnauthorizedError = () => false,
     nodeDetailHref = (nodeId) => `/node.html?id=${encodeURIComponent(nodeId)}`,
     page,
     probeReasonLabel,
@@ -88,7 +92,9 @@ export function createTasksPageModule(dependencies) {
     appState,
     documentRef,
     fetchImpl,
+    getCollectionHealth,
     getNodeDisplayName,
+    isUnauthorizedError,
     refreshRuntimeData,
     renderCurrentContent,
     windowRef,
@@ -259,7 +265,19 @@ export function createTasksPageModule(dependencies) {
     return numericBatchSize > 0 ? `每轮 ${numericBatchSize} 台` : "每轮覆盖全部符合条件节点";
   }
 
-  function getProbeSchedulerPresentation(probeScheduler) {
+  function getProbeSchedulerPresentation(probeScheduler, platformHealth) {
+    if (platformHealth?.status === "error") {
+      return {
+        tone: "badge badge-degraded",
+        label: "巡检状态未知",
+        detail: `平台上下文读取失败（${platformHealth.error || "未知原因"}），此处的启用状态不可信。${
+          platformHealth.ok_at
+            ? `最近成功读取：${formatRelativeTime(platformHealth.ok_at)}。`
+            : "尚无成功读取记录。"
+        }`,
+      };
+    }
+
     if (!probeScheduler?.enabled) {
       return {
         tone: "badge badge-new",
@@ -413,7 +431,9 @@ export function createTasksPageModule(dependencies) {
   function renderTasksPage() {
     const tasks = appState.tasks;
     const probeScheduler = appState.platform?.probe_scheduler || null;
-    const probeSchedulerView = getProbeSchedulerPresentation(probeScheduler);
+    const tasksHealth = getCollectionHealth("tasks");
+    const platformHealth = getCollectionHealth("platform-context");
+    const probeSchedulerView = getProbeSchedulerPresentation(probeScheduler, platformHealth);
     const statusOf = (task) => String(task.status || "new").toLowerCase();
     const failedCount = tasks.filter((task) => statusOf(task) === "failed").length;
     const runningCount = tasks.filter((task) => statusOf(task) === "running").length;
@@ -448,7 +468,9 @@ export function createTasksPageModule(dependencies) {
             <div class="empty">${
               tasks.length > 0
                 ? "当前筛选条件下没有匹配任务。<button class=\"button ghost link-like\" type=\"button\" id=\"task-filters-reset-inline\">清空筛选</button>"
-                : "当前还没有真实任务。下一台新节点完成 bootstrap 后，这里会自动出现初始化和首探任务。"
+                : tasksHealth?.status === "error"
+                  ? `任务数据读取失败（${escapeHtml(tasksHealth.error || "未知原因")}），这里的 0 条不代表没有任务。<button class=\"button ghost link-like\" type=\"button\" id=\"task-load-retry\">重试</button>`
+                  : "当前还没有真实任务。下一台新节点完成 bootstrap 后，这里会自动出现初始化和首探任务。"
             }</div>
           </td>
         </tr>
@@ -686,6 +708,13 @@ export function createTasksPageModule(dependencies) {
       appState.taskCenter.lastRefreshedAt = new Date().toISOString();
     }
     const dataTime = formatDateTime(appState.taskCenter.lastRefreshedAt);
+    const dataAgeSeconds = appState.taskCenter.lastRefreshedAt
+      ? Math.max(
+          0,
+          Math.round((Date.now() - new Date(appState.taskCenter.lastRefreshedAt).getTime()) / 1000),
+        )
+      : null;
+    const dataStale = dataAgeSeconds != null && dataAgeSeconds > STALE_DATA_SECONDS;
 
     return `
       <section class="panel fade-up tasks-list-panel">
@@ -695,7 +724,7 @@ export function createTasksPageModule(dependencies) {
               <h3>任务池</h3>
               <p>按处置优先级排序：失败和在执行的任务排在最前。</p>
             </div>
-            <div class="provider-pill">${selectedTaskLabel ? `已选：${escapeHtml(selectedTaskLabel)}` : `共 ${filteredTasks.length} 条`}</div>
+            <div class="provider-pill">${selectedTaskLabel ? `已选：${escapeHtml(selectedTaskLabel)}` : `共 ${filteredTasks.length} 条${tasksHealth?.status === "error" ? " · 未确认" : ""}`}</div>
           </div>
           <div class="tasks-status-bar">
             <div class="tasks-counts">
@@ -747,9 +776,11 @@ export function createTasksPageModule(dependencies) {
           <div class="tasks-refresh-meta">
             <label class="tasks-auto-refresh-toggle">
               <input id="task-auto-refresh" type="checkbox"${appState.taskCenter.autoRefresh ? " checked" : ""} />
-              <span>有任务在跑时自动刷新</span>
+              <span>有任务未完成或巡检在跑时自动刷新</span>
             </label>
-            <span class="tiny muted" id="task-data-time">数据时间 ${escapeHtml(dataTime)}</span>
+            <span class="tiny muted${dataStale ? " is-stale" : ""}" id="task-data-time">数据时间 ${escapeHtml(dataTime)}${
+              dataStale ? ` · 已 ${Math.floor(dataAgeSeconds / 60)} 分钟未刷新，可能已过期` : ""
+            }</span>
           </div>
           ${
             appState.taskCenter.message

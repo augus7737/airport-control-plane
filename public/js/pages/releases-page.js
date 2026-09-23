@@ -2,6 +2,7 @@ import {
   findCostItemByReleaseId,
   formatCurrencyTotals,
 } from "../shared/cost-formatters.js";
+import { getReleaseReachability } from "../shared/core-formatters.js";
 
 function createEmptyGroupDraft() {
   return {
@@ -136,11 +137,18 @@ export function createReleasesPageModule(dependencies) {
               : [];
             const engine = deployment.artifact_engine || deployment.engine || null;
             const digest = deployment.config_digest || null;
+            const reachabilityWarn =
+              deployment.reachability === "failed" || deployment.reachability === "partial";
             return `
               <div class="release-deployment-row">
                 <div class="release-deployment-main">
                   <strong>${escapeHtml(deployment.node_name || deployment.node_id || "-")}</strong>
                   <span class="${statusClassName(deployment.status)}">${statusText(deployment.status)}</span>
+                  ${
+                    reachabilityWarn
+                      ? `<span class="badge badge-degraded">入口未通过</span>`
+                      : ""
+                  }
                   ${engine ? `<span class="pill">${escapeHtml(String(engine).toUpperCase())}</span>` : ""}
                   ${roles.length ? `<span class="tiny">角色 ${escapeHtml(roles.join(" / "))}</span>` : ""}
                 </div>
@@ -385,6 +393,11 @@ export function createReleasesPageModule(dependencies) {
           .map((release) => {
             const summary = getReleaseSummary(release);
             const canRollback = isRollbackTarget(release, effectiveReleaseByProfile);
+            // 生效层已经判失败的记录不需要再说可达性，避免两层警示叠在一起。
+            const reachability =
+              String(release.status || "").toLowerCase() === "failed"
+                ? null
+                : getReleaseReachability(release);
             const rollbackDiff = summary.rollback_diff && typeof summary.rollback_diff === "object"
               ? summary.rollback_diff
               : null;
@@ -406,7 +419,22 @@ export function createReleasesPageModule(dependencies) {
                 <td>
                   <div class="ops-inline-meta">
                     <span class="${statusClassName(release.status)}">${statusText(release.status)}</span>
+                    ${
+                      reachability?.warn
+                        ? `<span class="badge badge-degraded">${escapeHtml(reachability.label)}</span>`
+                        : ""
+                    }
+                    ${
+                      reachability?.status === "skipped"
+                        ? `<span class="pill">${escapeHtml(reachability.label)}</span>`
+                        : ""
+                    }
                     <span class="tiny">${escapeHtml(summary.delivery_mode || "snapshot_only")}</span>
+                    ${
+                      reachability?.detail
+                        ? `<span class="tiny">${escapeHtml(reachability.detail)}</span>`
+                        : ""
+                    }
                   </div>
                 </td>
                 <td>

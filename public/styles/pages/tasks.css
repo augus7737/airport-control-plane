@@ -122,6 +122,10 @@ body[data-page="tasks"] .tasks-refresh-meta {
   font-size: 0.8rem;
 }
 
+body[data-page="tasks"] .tasks-refresh-meta .is-stale {
+  color: var(--warning-text);
+}
+
 body[data-page="tasks"] .tasks-auto-refresh-toggle {
   display: inline-flex;
   align-items: center;
