@@ -72,7 +72,15 @@ const routes = [
   ["PATCH", "/api/v1/bootstrap-tokens/%", 400, "bad_request"],
   ["GET", "/api/v1/access-users/missing/share", 404, "not_found"],
   ["POST", "/api/v1/access-users", 400, "validation_failed"],
-  ["POST", "/api/v1/access-users", 400, "validation_failed", null, { name: "route-table-no-uuid", protocol: "vless" }],
+  ["POST", "/api/v1/access-users", 400, "validation_failed", null, { name: "route-table-bad-uuid", protocol: "vless", credential: { uuid: "not-a-uuid" } }],
+  [
+    "POST",
+    "/api/v1/access-users",
+    201,
+    null,
+    null,
+    { name: "route-table-generated-credential", protocol: "vless" },
+  ],
   [
     "POST",
     "/api/v1/access-users",

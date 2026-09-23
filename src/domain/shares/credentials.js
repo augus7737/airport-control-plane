@@ -1,15 +1,12 @@
-// 接入用户凭证的协议级校验（纯函数，不依赖 ctx / store）。
+// 接入用户凭证的协议级格式校验（纯函数，不依赖 ctx / store）。
 //
-// 背景：src/http/validators.js 只校验「凭证字段给了就必须是合法类型」，
-// 而前端按协议强制要求 uuid / password。本模块把「按协议必填 + 格式」这条
-// 服务端缺口补上，避免创建出没有 uuid 的 vless 用户、一路到发布/订阅渲染才炸。
-//
-// 与 validators.js 的分工（避免对同一字段重复报错）：
+// 分工（避免对同一字段重复报错）：
 // - validators.js 负责字段类型语义（credential 必须是对象、字段给了但为空串 /
 //   非字符串、alter_id 给了但非非负整数等）。
-// - 本模块负责协议级必填与格式：vless/vmess 的 uuid 必填且形如 UUID；
-//   hysteria2 的 password 必填且非空、长度 >= 8。
-// - 因此对「字段已给出但类型/空值不合法」的情况本模块保持沉默，交给 validators.js。
+// - 本模块负责**按协议的格式约束**：vless/vmess 给了 uuid 就必须形如 UUID；
+//   hysteria2 给了 password 就必须 >= 8 位。
+// - 两者都不做「必填」：buildAccessUserRecord（src/server.js）在凭证缺省时生成
+//   uuid / 随机密码，「留空由服务端生成」是有意的前端流程，不是缺口。
 
 const SUPPORTED_PROTOCOLS = new Set(["vless", "vmess", "hysteria2"]);
 
@@ -33,7 +30,8 @@ export function normalizeCredentialProtocol(protocol) {
 }
 
 /**
- * 按协议校验凭证，返回错误消息数组（空数组即通过）。
+ * 按协议校验已给出的凭证字段格式，返回错误消息数组（空数组即通过）。
+ * 凭证缺省不报错：服务端 buildAccessUserRecord 会生成 uuid / 随机密码。
  * @param {{ protocol?: unknown, credential?: unknown }} options
  * @returns {string[]}
  */
@@ -41,7 +39,7 @@ export function validateAccessUserCredential({ protocol, credential } = {}) {
   const errors = [];
   const resolved = normalizeCredentialProtocol(protocol);
 
-  // credential 缺失/为 null 时按空对象处理（走必填检查）；
+  // credential 缺失/为 null 时按空对象处理（无字段可校验，直接通过）；
   // 给出了但不是普通对象（字符串/数字/数组）由 validators.js 报
   // "credential must be an object"，此处不再重复。
   if (credential !== undefined && credential !== null && !isPlainObject(credential)) {
@@ -51,9 +49,7 @@ export function validateAccessUserCredential({ protocol, credential } = {}) {
 
   if (resolved === "hysteria2") {
     const password = cred.password;
-    if (password === undefined || password === null) {
-      errors.push("credential.password is required for hysteria2 users");
-    } else if (typeof password === "string" && password.trim()) {
+    if (typeof password === "string" && password.trim()) {
       if (password.trim().length < MIN_HYSTERIA2_PASSWORD_LENGTH) {
         errors.push("credential.password must be at least 8 characters for hysteria2 users");
       }
@@ -62,16 +58,14 @@ export function validateAccessUserCredential({ protocol, credential } = {}) {
     return errors;
   }
 
-  // vless / vmess：uuid 必填且形如 UUID。
+  // vless / vmess：给了 uuid 就必须是合法 UUID。
   const uuid = cred.uuid;
-  if (uuid === undefined || uuid === null) {
-    errors.push(`credential.uuid is required for ${resolved} users`);
-  } else if (typeof uuid === "string" && uuid.trim()) {
+  if (typeof uuid === "string" && uuid.trim()) {
     if (!UUID_PATTERN.test(uuid.trim())) {
       errors.push("credential.uuid must be a valid UUID");
     }
   }
-  // 空串 / 非字符串的 uuid 由 validators.js 报类型错误，这里不重复。
+  // 空串 / 非字符串 / 缺省的 uuid 分别由 validators.js 与记录构造器处理，这里不重复。
 
   // alter_id 沿用 validators.js 的非负整数语义；这里补 vmess 的协议级口径，
   // 消息与 validators.js 完全一致，路由层合并 details 时去重即可。

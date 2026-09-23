@@ -9,18 +9,13 @@ import {
 
 const VALID_UUID = "0f6c5a3e-7a1d-4c2b-9e5f-1b2c3d4e5f60";
 
-test("vless accepts a well-formed uuid and rejects a missing one", () => {
+test("vless validates a supplied uuid but stays silent when it is omitted", () => {
   assert.deepEqual(validateAccessUserCredential({ protocol: "vless", credential: { uuid: VALID_UUID } }), []);
 
-  assert.deepEqual(validateAccessUserCredential({ protocol: "vless" }), [
-    "credential.uuid is required for vless users",
-  ]);
-  assert.deepEqual(validateAccessUserCredential({ protocol: "vless", credential: {} }), [
-    "credential.uuid is required for vless users",
-  ]);
-  assert.deepEqual(validateAccessUserCredential({ protocol: "vless", credential: { uuid: null } }), [
-    "credential.uuid is required for vless users",
-  ]);
+  // 缺省时由 buildAccessUserRecord 生成 uuid，因此写入口不报必填。
+  assert.deepEqual(validateAccessUserCredential({ protocol: "vless" }), []);
+  assert.deepEqual(validateAccessUserCredential({ protocol: "vless", credential: {} }), []);
+  assert.deepEqual(validateAccessUserCredential({ protocol: "vless", credential: { uuid: null } }), []);
 });
 
 test("uuid format check accepts upper case and dash-free forms but rejects garbage", () => {
@@ -47,7 +42,7 @@ test("uuid format check accepts upper case and dash-free forms but rejects garba
   );
 });
 
-test("vmess requires a uuid and keeps alter_id semantics identical to validators.js", () => {
+test("vmess keeps alter_id semantics identical to validators.js", () => {
   assert.deepEqual(
     validateAccessUserCredential({ protocol: "vmess", credential: { uuid: VALID_UUID, alter_id: 0 } }),
     [],
@@ -71,14 +66,14 @@ test("vmess requires a uuid and keeps alter_id semantics identical to validators
   );
 });
 
-test("hysteria2 requires a password of at least 8 characters", () => {
+test("hysteria2 checks the length of a supplied password but allows the server to generate one", () => {
   assert.deepEqual(
     validateAccessUserCredential({ protocol: "hysteria2", credential: { password: "fake-pass-123" } }),
     [],
   );
-  assert.deepEqual(validateAccessUserCredential({ protocol: "hysteria2", credential: {} }), [
-    "credential.password is required for hysteria2 users",
-  ]);
+  // 留空由 buildAccessUserRecord 生成随机密码（前端占位文案即此口径）。
+  assert.deepEqual(validateAccessUserCredential({ protocol: "hysteria2", credential: {} }), []);
+  assert.deepEqual(validateAccessUserCredential({ protocol: "hysteria2" }), []);
   assert.deepEqual(validateAccessUserCredential({ protocol: "hysteria2", credential: { password: "s3cret" } }), [
     "credential.password must be at least 8 characters for hysteria2 users",
   ]);
@@ -94,8 +89,8 @@ test("unknown or missing protocol is treated as vless", () => {
   assert.equal(normalizeCredentialProtocol("trojan"), "vless");
   assert.equal(normalizeCredentialProtocol(undefined), "vless");
 
-  assert.deepEqual(validateAccessUserCredential({ protocol: "trojan", credential: {} }), [
-    "credential.uuid is required for vless users",
+  assert.deepEqual(validateAccessUserCredential({ protocol: "trojan", credential: { uuid: "nope" } }), [
+    "credential.uuid must be a valid UUID",
   ]);
 });
 
