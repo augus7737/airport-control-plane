@@ -22,8 +22,8 @@
 | P2.2 Cookie 安全策略 | ✅ 已完成 | `HttpOnly` + `SameSite=Lax` + `CONTROL_PLANE_SESSION_SECURE` / `x-forwarded-proto` 自动 `Secure`，滑动续期 |
 | P2.3 Token 脱敏（哈希化） | ⬜ 未实现 | `bootstrap-tokens.json` 仍存明文以支持一键复制 |
 | P2.4 敏感日志清理 | 🟡 部分完成 | 私钥与 Reality 私钥不落控制面配置；缺统一的日志脱敏与审查 |
-| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 23 个 `node:test` 文件 / 97 个用例；`npm test` / `npm run check`；核心远程执行端到端仍缺 |
-| P3.2 拆分 `src/server.js` | ⬜ 未开始 | 仍 5763 行，无 `src/routes`、`src/services` |
+| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 24 个 `node:test` 文件 / 98 个用例；`npm test` / `npm run check`（全树逐文件语法）；核心远程执行端到端仍缺 |
+| P3.2 拆分 `src/server.js` | 🟡 路由层已完成 | 16 个命名空间搬到 `src/http/routes/`（5763 → 3805 行），有 `test/route-table.test.js` 守路由；`src/services` 服务层未拆 |
 | P4.1 SQLite 迁移 | ⬜ 未开始 | 仍是 JSON 文件，无 SQL 依赖 |
 | P4.2 PostgreSQL 预留 | ⬜ 未开始 | repository 层尚未抽出 |
 
@@ -336,18 +336,7 @@ ReadWritePaths=/opt/airport-control-plane/data
 - 补充 `npm test`
 - 补充基础语法检查脚本
 
-建议脚本：
-
-```json
-{
-  "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "test": "node --test",
-    "check": "node --check src/server.js"
-  }
-}
-```
+现状（已完成）：脚本落地为 `"check": "find src public/js scripts test -name '*.js' -print0 | xargs -0 -n1 node --check"`，对全树逐文件做语法检查，而不只查 `src/server.js`。
 
 优先测试：
 
@@ -365,26 +354,23 @@ ReadWritePaths=/opt/airport-control-plane/data
 
 ### 2. 拆分 `src/server.js`
 
-当前问题：
+已完成的部分：路由层按命名空间拆出，16 个业务模块落在 `src/http/routes/*.js`，`src/server.js` 从 5763 行降到 3805 行，只保留启动装配、请求管线（鉴权门禁、`/healthz`、bootstrap 脚本、订阅、制品、静态资源、404）与实体构造；模块通过单一 `ctx` 取用宿主能力，纯函数直接 `import`。回归由 `test/route-table.test.js` 的接口矩阵守住，并行开发约束见 `docs/parallel-development.md`。
 
-- `src/server.js` 超过 5000 行
-- 路由、业务编排、迁移、执行逻辑混在一起
+剩余问题：
+
+- `src/server.js` 仍 3.8k 行，业务编排、周期巡检、迁移修复、实体构造混在一起
+- `ctx` 有 106 个键，模块对宿主的依赖面过宽
 
 建议顺序：
 
-1. `src/routes/auth-routes.js`
-2. `src/routes/node-routes.js`
-3. `src/routes/task-routes.js`
-4. `src/routes/bootstrap-routes.js`
-5. `src/routes/release-routes.js`
-6. `src/services/node-service.js`
-7. `src/services/task-service.js`
-8. `src/services/release-service.js`
+1. 把 `ctx` 里的纯函数下沉到 `src/utils/` 或 `src/domain/`，让模块直接 `import`（一次一个模块，改完跑门禁）
+2. 抽出 `src/services/`：先 node-service，再 release-service、task-service、probe-service
+3. 实体构造（`build*Record`）归入对应 domain 模块
 
 验收标准：
 
-- 拆分后路由行为不变
-- 每次拆分都有测试覆盖
+- 每次拆分前后 `npm run check` 与 `node --test` 全绿，且 `test/route-table.test.js` 矩阵不变
+- 单个模块的 `ctx` 键数只减不增
 
 ## P4：数据库化
 
@@ -463,9 +449,9 @@ ReadWritePaths=/opt/airport-control-plane/data
 
 ### 第四轮
 
-1. 增加测试脚本
-2. 补核心单测
-3. 拆分 `src/server.js`
+1. 增加测试脚本（已完成，含全树 `npm run check`）
+2. 补核心单测（已完成，24 文件 / 98 用例，含 `test/route-table.test.js` 路由矩阵回归）
+3. 拆分 `src/server.js`（路由层已完成：`src/http/routes/` 16 个模块；服务层与 `ctx` 瘦身未做）
 
 ### 第五轮
 

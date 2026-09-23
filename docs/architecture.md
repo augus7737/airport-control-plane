@@ -19,7 +19,8 @@
 单个 Node.js 进程（`node:http`，无 Web 框架）承载 API、任务执行、周期巡检、配置发布、订阅生成与 Web Shell 会话。前端是无打包链的静态多页面控制台，业务后端依赖只有 `qrcode`。
 
 ```
-src/server.js            启动装配 + 55 个路由模式 + 实体构造（5.7k 行，待拆分）
+src/server.js            启动装配 + 请求管线 + 实体构造（3.8k 行）
+src/http/routes/         16 个业务命名空间路由模块 + index.js 派发表（见 docs/parallel-development.md）
 src/domain/              领域逻辑：auth bootstrap costs diagnostics nodes operations
                          platform probes releases routes shares shell system tasks
 src/http/validators.js   入站 payload 校验
@@ -27,11 +28,18 @@ src/infrastructure/      json-file-store（原子写 + .bak）、store-persisten
 src/runtime/             startup（load + 幂等迁移 + 修复）、probe-scheduler
 src/utils/               http、request-handler（全局异常边界）、static-assets
 public/                  15 个 HTML 页面 + js/{pages,modals,cells,layout,store,shared,auth}
-data/                    每 store 一个 JSON 文件（gitignore）
+data/                    每 store 一个 JSON 文件（gitignore，路径可用 AIRPORT_DATA_DIR 覆盖）
 scripts/                 bootstrap.sh、deploy-bare-metal.sh、deploy-production.sh、seed-local-demo.js
 docker/local-nodes/      本地假节点集群（Debian+systemd / Ubuntu / Alpine+OpenRC）与真实发布 E2E 脚本
-test/                    23 个 node:test 文件
+test/                    24 个 node:test 文件（含 route-table：真起服务比对 78 条路由响应）
 ```
+
+路由层的形状：`src/server.js` 依次执行登录页跳转、`/api/v1/auth/*`、鉴权门、`/healthz`、
+`/bootstrap.sh`、`/bootstrap/enroll.sh`、`/sub/:token`、产物下载、静态资源，然后把请求交给
+`createApiRoutes(ctx)` 返回的 handler 数组；server.js 用 `reply.headersSent ||
+reply.writableEnded` 判断某个模块是否已经应答，未应答才继续下一个命名空间，最后 404。
+模块与宿主之间只有一个通道 `ctx`（store 数组、持久化函数、领域构造器），每个模块文件顶部的
+解构就是它的完整依赖清单。
 
 ### 请求边界
 
@@ -74,7 +82,7 @@ test/                    23 个 node:test 文件
 
 ### 内部边界拆分顺序
 
-1. HTTP 路由层（`src/routes/*`，目前不存在）
+1. HTTP 路由层（已完成，实际目录是 `src/http/routes/*`）
 2. 节点与 Endpoint 服务
 3. 任务执行与租约
 4. 探测与质量评分

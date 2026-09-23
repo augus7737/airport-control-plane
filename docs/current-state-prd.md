@@ -151,7 +151,7 @@
 - sing-box 配置在真实节点完成渲染、`sing-box check` 校验、重启激活与失败回滚
 - 控制面登录、回跳、登出、受保护 API 的 `401` 行为已在真实浏览器与 `curl` 下验证
 - 周期巡检在本地实例真实运行并沉淀 `scheduled_probe` 任务
-- 自动化测试：`npm test` 当前 23 个文件 / 97 个用例通过，覆盖 HTTP 边界（413、异常 Host、500 边界）、鉴权会话、JSON store 原子写、任务认领并发、批量执行上限、SSH 传输不回退本机、节点端点与事实归一、管理链路路由、流量方向、HY2 与 UDP 探测、发布复检、裸机部署脚本（apt/apk × systemd/OpenRC 分支、回滚边界、清理只删自建目录）、主题与前端选项等
+- 自动化测试：`npm test` 当前 24 个文件 / 98 个用例通过，覆盖 HTTP 边界（413、异常 Host、500 边界）、鉴权会话、路由表回归（`test/route-table.test.js` 对 78 行接口矩阵逐一打真实实例，断言状态码与机器码）、JSON store 原子写、任务认领并发、批量执行上限、SSH 传输不回退本机、节点端点与事实归一、管理链路路由、流量方向、HY2 与 UDP 探测、发布复检、裸机部署脚本（apt/apk × systemd/OpenRC 分支、回滚边界、清理只删自建目录）、主题与前端选项等
 
 如需复现演示数据：`npm run dev` 后执行 `npm run seed`（`scripts/seed-local-demo.js`，通过 HTTP 造厂商/节点/模板/用户/令牌），该脚本只用于本地演示，不属于生产链路。
 
@@ -192,7 +192,7 @@
 
 当前架构是一个典型的单机控制面 MVP：
 
-- 后端：单体 Node.js 服务（`node:http`，无 Web 框架；`src/server.js` 5.7k 行承载路由与实体构造）
+- 后端：单体 Node.js 服务（`node:http`，无 Web 框架；`src/server.js` 3.8k 行承载启动装配、请求管线与实体构造，业务路由按 16 个命名空间拆在 `src/http/routes/*.js`）
 - 运行方式：单进程集中承载 API、任务、探测、发布、分享与 Web Shell 会话
 - 前端：无打包链的静态多页面控制台 + 原生 ES module 依赖注入装配
 - 持久化：每实体一个 JSON 文件，原子写 + `.bak` + 单文件串行写队列 + 启动期修复

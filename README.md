@@ -20,7 +20,7 @@
 
 ## Tech shape
 
-- 零框架：单个 `node:http` 进程，全部路由在 `src/server.js`
+- 零框架：单个 `node:http` 进程；请求管线在 `src/server.js`，业务路由按命名空间拆到 `src/http/routes/*.js`
 - 前端：静态多页 + 原生 ES module，无构建步骤，样式走 `public/styles/tokens.css` 设计变量
 - 持久化：`data/*.json`，一 store 一文件，原子写入 + `.bak` 回退 + 启动修复
 - 唯一运行时依赖：`qrcode`
@@ -50,8 +50,8 @@ npm run dev
 其他 npm 脚本：
 
 ```bash
-npm test           # node --test，当前 23 个测试文件 / 97 个用例
-npm run check      # node --check src/server.js，语法门禁
+npm test           # node --test，当前 24 个测试文件 / 98 个用例
+npm run check      # 对 src public/js scripts test 下每个 .js 逐文件 node --check，语法门禁
 npm run seed       # 生成/刷新本地演示数据（scripts/seed-local-demo.js）
 ```
 
@@ -166,6 +166,7 @@ sudo bash scripts/deploy-bare-metal.sh update
 - `docs/current-state-prd.md`: 当前状态 PRD，实际交付能力的产品口径
 - `docs/architecture.md`: 现状实现结构与目标形态
 - `docs/api.md`: 完整 HTTP API 契约
+- `docs/parallel-development.md`: 模块边界卡片与多窗口并行开发约定
 - `docs/data-model.md`: 实体、字段、枚举与 store 清单
 - `docs/project-progress.md`: 交付进度与下一阶段优先级
 - `docs/project-assessment-and-roadmap.md`: 产品定位、全项目评估与长期路线

@@ -67,6 +67,21 @@
 - 修复真实运行暴露的问题：清理阶段只删脚本自己创建的下载目录，不再碰调用方的源码 checkout
 - 测试规模 20 文件 → 23 文件 / 97 用例
 
+## 进展（2026-09-23，路由层拆分与并行开发底座）
+
+- `src/server.js` 5763 → 3805 行：16 个业务命名空间的路由块逐字搬到
+  `src/http/routes/<ns>.js`，由 `createApiRoutes(ctx)` 按原出现顺序派发；请求管线
+  （登录页、`/api/v1/auth/*`、鉴权门、`/healthz`、bootstrap 脚本、订阅、产物下载、静态资源、404）
+  仍留在 `src/server.js`，顺序未变
+- 模块与宿主只靠 `ctx` 通信（store、持久化函数、领域构造器）；每个模块文件顶部的解构即其完整依赖清单
+- 新增 `test/route-table.test.js`：真起一个 `node src/server.js` 实例（`PORT=0` + 临时数据目录），
+  登录后按 78 条冻结矩阵比对状态码与 `error` 机器码，作为路由搬迁的回归网；测试规模 24 文件 / 98 用例
+- `AIRPORT_DATA_DIR` 此前被硬编码路径架空，现已生效；监听日志改打实际端口（`PORT=0` 可用）
+- `npm run check` 从只查 `src/server.js` 扩到全树逐文件 `node --check`
+  （`node --check a.js b.js` 只检查第一个文件，多文件门禁会假绿）
+- 新增 `docs/parallel-development.md`：模块边界卡片 + 边界提示词 + 多窗口并行的 worktree /
+  端口 / 数据目录 / 共享文件 / 合并顺序约定
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
@@ -106,7 +121,8 @@
 
 - JSON 无事务、跨文件一致性不足；SQLite 迁移仍是最大结构性欠债
 - SSH 主机指纹未持久化信任，中间人风险与密钥轮换确认缺失
-- `src/server.js` 仍 5763 行，路由/编排/实体构造混在一起
+- `src/server.js` 仍 3805 行：路由已按命名空间拆到 `src/http/routes/`，剩下的装配/编排/实体构造未拆
+- 路由模块的 `ctx` 偏重（nodes 38 项、access-users 19 项），纯函数依赖尚未下沉为直接 import
 - 无 `/readyz`、无结构化日志与 `request_id`、无服务端登录限流
 - 任务缺执行租约与取消；发布/探测失败无告警出口
 - `data/` 自动备份尚未实现（只有单文件 `.bak`）
@@ -117,5 +133,5 @@
 
 P0：SSH host key 信任与变更确认 → 通用任务租约/取消/重试 → `/readyz` + 结构化日志 + 登录限流 → 每日数据备份
 P1：JSON → SQLite（事务 + 唯一约束）→ Endpoint/Link/Route/RoutePool 实体化 → 国际出口与回国双向线路
-P2：拆分 `src/server.js` 路由层 → 统一协议兼容矩阵单一来源 → 告警与事件中心
+P2：路由 `ctx` 瘦身（纯函数下沉为直接 import）+ 抽出服务层 → 统一协议兼容矩阵单一来源 → 告警与事件中心
 P3：厂商 API 建机/替换 → 多管理员与 RBAC → 终端用户门户与配额

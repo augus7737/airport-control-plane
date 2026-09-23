@@ -1,7 +1,7 @@
 # API
 
-更新时间：2026-09-22
-适用范围：当前 `src/server.js` 已实现的全部 HTTP 接口（55 个路由模式）。本文只描述已经存在的行为；路线图中的能力见 `docs/project-assessment-and-roadmap.md`。
+更新时间：2026-09-23
+适用范围：当前已实现的全部 HTTP 接口（`src/server.js` 内联 13 个路由块 + `src/http/routes/` 16 个模块 43 个路由块）；业务路由在 `src/http/routes/<namespace>.js`，鉴权、`/healthz`、bootstrap 脚本、订阅、sing-box 制品与静态资源等管线接口在 `src/server.js`。本文只描述已经存在的行为；路线图中的能力见 `docs/project-assessment-and-roadmap.md`。
 
 ## Conventions
 
@@ -20,6 +20,31 @@
 - 请求体上限 1 MiB，超限连接立即销毁（`src/utils/http.js`）。
 - 无法解析的 `Host` 头会回退到 `localhost`，不反射任意主机名（`src/utils/request-handler.js`）。
 - 当前**没有** `/readyz`，也**没有**服务端登录限流；两者记录在 `docs/stability-roadmap.md`。
+
+## Route file map
+
+业务路由按命名空间一文件放在 `src/http/routes/`，由 `src/http/routes/index.js` 按下列顺序注册；命中判定是 `reply.headersSent || reply.writableEnded`，因此**URL 前缀不相交的模块之间顺序无关**，同一前缀内的顺序仍然有意义（`/nodes/:id` 系在 `/nodes/manual`、`/nodes/register` 之前）。
+
+| 文件 | URL 前缀 |
+| --- | --- |
+| `platform.js` | `/api/v1/platform-context`、`/api/v1/platform/*` |
+| `nodes.js` | `/api/v1/nodes*` |
+| `tasks.js` | `/api/v1/tasks*` |
+| `probes.js` | `/api/v1/probes` |
+| `diagnostics.js` | `/api/v1/diagnostics` |
+| `bootstrap-tokens.js` | `/api/v1/bootstrap-tokens*` |
+| `access-users.js` | `/api/v1/access-users*` |
+| `system-templates.js` | `/api/v1/system-templates*`、`/api/v1/system-template-releases` |
+| `system-users.js` | `/api/v1/system-users*`、`/api/v1/system-user-releases` |
+| `proxy-profiles.js` | `/api/v1/proxy-profiles*` |
+| `node-groups.js` | `/api/v1/node-groups*` |
+| `providers.js` | `/api/v1/providers*` |
+| `costs.js` | `/api/v1/costs/*` |
+| `config-releases.js` | `/api/v1/config-releases` |
+| `operations.js` | `/api/v1/operations*` |
+| `shell.js` | `/api/v1/shell/sessions*` |
+
+留在 `src/server.js` 的是请求管线本身：`/api/v1/auth/*`、鉴权门禁、`/healthz`、`/bootstrap.sh`、`/bootstrap/enroll.sh`、订阅 `/sub/:token`、`/api/v1/artifacts/sing-box/*`、静态资源与 `404`。并行开发约束见 `docs/parallel-development.md`。
 
 ## Authentication
 
