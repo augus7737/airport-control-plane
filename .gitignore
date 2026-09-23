@@ -1,4 +1,5 @@
-node_modules/
+# 不带斜杠：worktree 里的 node_modules 是符号链接，目录模式匹配不到
+node_modules
 __pycache__/
 .env
 .env.local
