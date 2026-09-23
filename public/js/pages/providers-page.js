@@ -287,13 +287,23 @@ export function createProvidersPageModule(dependencies) {
     });
   }
 
+  function getBoundNodeCount(providerId) {
+    return (Array.isArray(appState.nodes) ? appState.nodes : emptyCollection).filter(
+      (node) => node?.provider_id === providerId,
+    ).length;
+  }
+
   async function handleDelete(providerId) {
     const provider = appState.providers.find((item) => item.id === providerId);
     if (!provider) {
       return;
     }
 
-    const confirmed = windowRef.confirm(`确认删除云厂商“${provider.name}”吗？`);
+    const boundNodeCount = getBoundNodeCount(provider.id);
+    const confirmText = boundNodeCount > 0
+      ? `确认删除云厂商“${provider.name}”吗？该厂商下还有 ${boundNodeCount} 台节点，未解绑前无法删除。`
+      : `确认删除云厂商“${provider.name}”吗？`;
+    const confirmed = windowRef.confirm(confirmText);
     if (!confirmed) {
       return;
     }
@@ -310,10 +320,22 @@ export function createProvidersPageModule(dependencies) {
       await refreshRuntimeData();
       renderCurrentContent();
     } catch (error) {
-      state.message = {
-        type: "error",
-        text: error instanceof Error ? error.message : "删除云厂商失败",
-      };
+      const payload = error?.payload;
+      if (payload?.error === "provider_in_use") {
+        const nodeIds = Array.isArray(payload.details?.node_ids) ? payload.details.node_ids : [];
+        const shown = nodeIds.slice(0, 3).join("、");
+        state.message = {
+          type: "error",
+          text:
+            `删除失败：云厂商“${provider.name}”下还有节点在用，请先在节点侧解绑或删除这些节点。` +
+            (shown ? `示例节点：${shown}${payload.details?.truncated ? " 等" : ""}。` : ""),
+        };
+      } else {
+        state.message = {
+          type: "error",
+          text: error instanceof Error && error.message ? error.message : "删除云厂商失败",
+        };
+      }
       renderCurrentContent();
     }
   }

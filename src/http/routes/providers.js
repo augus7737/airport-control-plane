@@ -7,6 +7,7 @@ export function createProvidersRoutes(ctx) {
     findProviderById,
     findProviderByName,
     hasOwn,
+    nodeStore,
     persistProviderStore,
     providerStore,
     safeDecodePathSegment,
@@ -88,8 +89,17 @@ export function createProvidersRoutes(ctx) {
     }
 
     if (providerMatch && request.method === "PATCH") {
+      const providerId = safeDecodePathSegment(providerMatch[1]);
+
+      if (!providerId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid provider id",
+        });
+        return;
+      }
+
       try {
-        const providerId = decodeURIComponent(providerMatch[1]);
         const existingProvider = findProviderById(providerId);
 
         if (!existingProvider) {
@@ -142,13 +152,39 @@ export function createProvidersRoutes(ctx) {
     }
 
     if (providerMatch && request.method === "DELETE") {
-      const providerId = decodeURIComponent(providerMatch[1]);
+      const providerId = safeDecodePathSegment(providerMatch[1]);
+
+      if (!providerId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid provider id",
+        });
+        return;
+      }
+
       const existingProvider = findProviderById(providerId);
 
       if (!existingProvider) {
         jsonResponse(reply, 404, {
           error: "not_found",
           message: "provider not found",
+        });
+        return;
+      }
+
+      // 引用保护：节点台账仍绑定 provider_id 时不删除，避免成本与自动化入口悬空。
+      const referencingNodeIds = [...nodeStore.values()]
+        .filter((node) => node?.provider_id === providerId)
+        .map((node) => node.id);
+
+      if (referencingNodeIds.length > 0) {
+        jsonResponse(reply, 409, {
+          error: "provider_in_use",
+          message: `provider still has ${referencingNodeIds.length} bound node(s), unbind or delete them first`,
+          details: {
+            node_ids: referencingNodeIds.slice(0, 10),
+            truncated: referencingNodeIds.length > 10,
+          },
         });
         return;
       }
