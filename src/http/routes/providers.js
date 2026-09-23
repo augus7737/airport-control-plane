@@ -59,6 +59,24 @@ export function createProvidersRoutes(ctx) {
     }
 
     const providerMatch = url.pathname.match(/^\/api\/v1\/providers\/([^/]+)$/);
+    if (providerMatch && request.method === "GET") {
+      const providerId = decodeURIComponent(providerMatch[1]);
+      const existingProvider = findProviderById(providerId);
+
+      if (!existingProvider) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "provider not found",
+        });
+        return;
+      }
+
+      jsonResponse(reply, 200, {
+        provider: existingProvider,
+      });
+      return;
+    }
+
     if (providerMatch && request.method === "PATCH") {
       try {
         const providerId = decodeURIComponent(providerMatch[1]);
