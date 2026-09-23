@@ -79,6 +79,8 @@ const routes = [
   ["PATCH", "/api/v1/node-groups/missing", 404, "not_found"],
   ["DELETE", "/api/v1/node-groups/missing", 404, "not_found"],
   ["POST", "/api/v1/providers", 400, "validation_failed"],
+  ["GET", "/api/v1/providers/missing", 404, "not_found"],
+  ["GET", "/api/v1/providers/missing/nested", 404, "not_found"],
   ["PATCH", "/api/v1/providers/missing", 404, "not_found"],
   ["DELETE", "/api/v1/providers/missing", 404, "not_found"],
   ["POST", "/api/v1/config-releases", 400, "validation_failed"],
@@ -191,6 +193,47 @@ test("every registered route resolves to the same status and error code", async 
     }
 
     assert.deepEqual(mismatches, []);
+  } finally {
+    await server.stop();
+  }
+});
+
+// 矩阵里的 404 行无法区分“providers 路由自己回 404”和“落到全局兜底 404”，
+// 且探测实例的 provider store 是空的、矩阵本身没有建数据的通道，
+// 所以单资源读的 200/404 语义用这条独立用例覆盖（复用同一套临时实例与登录辅助函数）。
+test("GET /api/v1/providers/:id reads a single provider record", async () => {
+  const server = await startProbeServer();
+
+  try {
+    const cookie = await loginSession(server.baseUrl);
+    const headers = { "content-type": "application/json", cookie };
+
+    const created = await fetch(`${server.baseUrl}/api/v1/providers`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: `route-table-provider-${Date.now()}` }),
+    });
+    assert.equal(created.status, 201);
+    const { provider: createdProvider } = await created.json();
+    assert.ok(createdProvider?.id, "created provider must have an id");
+
+    const found = await fetch(
+      `${server.baseUrl}/api/v1/providers/${encodeURIComponent(createdProvider.id)}`,
+      { headers },
+    );
+    assert.equal(found.status, 200);
+    const foundBody = await found.json();
+    assert.equal(foundBody.error, undefined);
+    assert.deepEqual(foundBody.provider, createdProvider);
+
+    const missing = await fetch(`${server.baseUrl}/api/v1/providers/missing-id`, {
+      headers,
+    });
+    assert.equal(missing.status, 404);
+    const missingBody = await missing.json();
+    assert.equal(missingBody.error, "not_found");
+    // 与 PATCH/DELETE 的单资源 404 口径一致，而不是全局兜底（兜底无 message）
+    assert.equal(missingBody.message, "provider not found");
   } finally {
     await server.stop();
   }
