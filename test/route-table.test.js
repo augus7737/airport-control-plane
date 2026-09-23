@@ -98,6 +98,11 @@ const routes = [
   ["POST", "/api/v1/config-releases/missing-release/rollback", 404, "not_found"],
   ["POST", "/api/v1/config-releases/%/rollback", 400, "bad_request"],
   ["POST", "/api/v1/operations/execute", 400, "validation_failed"],
+  ["GET", "/api/v1/operations/missing-operation", 404, "not_found"],
+  ["GET", "/api/v1/operations/%", 400, "bad_request"],
+  // 只读过滤：未知 node_id 不返 404，与 GET /api/v1/probes?node_id= 的口径一致
+  ["GET", "/api/v1/operations?node_id=missing-node", 200, null],
+  ["GET", "/api/v1/operations/execute", 404, "not_found"],
   ["POST", "/api/v1/tasks/missing/bootstrap-complete", 404, "not_found"],
   ["GET", "/api/v1/shell/sessions/missing", 404, "not_found"],
   ["DELETE", "/api/v1/shell/sessions/missing", 404, "not_found"],
