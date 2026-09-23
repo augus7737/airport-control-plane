@@ -38,6 +38,7 @@ export function createNodesRoutes(ctx) {
     pruneTasksForNode,
     reconcileTaskStoreFromOperations,
     recordBootstrapTokenUsage,
+    safeDecodePathSegment,
     triggerDiagnostic,
     updateNodeAssetRecord,
     upsertTaskRecord,
@@ -55,6 +56,33 @@ export function createNodesRoutes(ctx) {
     }
 
     const nodeMatch = url.pathname.match(/^\/api\/v1\/nodes\/([^/]+)$/);
+    if (request.method === "GET" && nodeMatch) {
+      const nodeId = safeDecodePathSegment(nodeMatch[1]);
+
+      if (!nodeId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid node id",
+        });
+        return;
+      }
+
+      const existingNode = nodeStore.get(nodeId);
+
+      if (!existingNode) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "node not found",
+        });
+        return;
+      }
+
+      jsonResponse(reply, 200, {
+        node: existingNode,
+      });
+      return;
+    }
+
     if (request.method === "DELETE" && nodeMatch) {
       try {
         const nodeId = decodeURIComponent(nodeMatch[1]);

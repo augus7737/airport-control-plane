@@ -50,6 +50,8 @@ const routes = [
   ["GET", "/api/v1/platform/sing-box-distribution", 200, null],
   ["PATCH", "/api/v1/platform/sing-box-distribution", 200, null],
   ["POST", "/api/v1/platform/ssh-key/generate", 201, null],
+  ["GET", "/api/v1/nodes/missing", 404, "not_found"],
+  ["GET", "/api/v1/nodes/%", 400, "bad_request"],
   ["DELETE", "/api/v1/nodes/missing-node", 404, "not_found"],
   ["DELETE", "/api/v1/nodes/manual", 404, "not_found"],
   ["POST", "/api/v1/nodes/manual", 400, "validation_failed"],
@@ -241,6 +243,66 @@ test("GET /api/v1/providers/:id reads a single provider record", async () => {
     assert.equal(missingBody.error, "not_found");
     // 与 PATCH/DELETE 的单资源 404 口径一致，而不是全局兜底（兜底无 message）
     assert.equal(missingBody.message, "provider not found");
+  } finally {
+    await server.stop();
+  }
+});
+
+// 同上：nodes 的单资源读没有矩阵 200 行可依赖，这里用 POST /api/v1/nodes/manual
+// 造一条记录（该路由只跑 validateManualNode + buildManualNodeRecord，纯 store 写入，
+// 不依赖真节点、不起 shell、需要会话鉴权但不碰 bootstrap token）。
+test("GET /api/v1/nodes/:id reads a single node record", async () => {
+  const server = await startProbeServer();
+
+  try {
+    const cookie = await loginSession(server.baseUrl);
+    const headers = { "content-type": "application/json", cookie };
+
+    const created = await fetch(`${server.baseUrl}/api/v1/nodes/manual`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ hostname: `route-table-node-${Date.now()}` }),
+    });
+    assert.equal(created.status, 201);
+    const { node: createdNode } = await created.json();
+    assert.ok(createdNode?.id, "created node must have an id");
+
+    const found = await fetch(
+      `${server.baseUrl}/api/v1/nodes/${encodeURIComponent(createdNode.id)}`,
+      { headers },
+    );
+    assert.equal(found.status, 200);
+    const foundBody = await found.json();
+    assert.equal(foundBody.error, undefined);
+    // nodes 列表口径就是 nodeStore 原始记录（无 serializer），单资源读同样直出
+    assert.deepEqual(foundBody.node, createdNode);
+
+    const missing = await fetch(`${server.baseUrl}/api/v1/nodes/missing-id`, {
+      headers,
+    });
+    assert.equal(missing.status, 404);
+    const missingBody = await missing.json();
+    assert.equal(missingBody.error, "not_found");
+    // 与 DELETE 的单资源 404 口径一致，而不是全局兜底（兜底无 message）
+    assert.equal(missingBody.message, "node not found");
+
+    // 字面量 id 也被 (:id) 匹配：GET /nodes/manual 由本模块回 404（带 message），
+    // 不落全局兜底；POST 侧两个 manual-only 分支因方法不同不受影响
+    const manualLiteral = await fetch(`${server.baseUrl}/api/v1/nodes/manual`, {
+      headers,
+    });
+    assert.equal(manualLiteral.status, 404);
+    const manualLiteralBody = await manualLiteral.json();
+    assert.equal(manualLiteralBody.error, "not_found");
+    assert.equal(manualLiteralBody.message, "node not found");
+
+    const invalidId = await fetch(`${server.baseUrl}/api/v1/nodes/%`, {
+      headers,
+    });
+    assert.equal(invalidId.status, 400);
+    const invalidIdBody = await invalidId.json();
+    assert.equal(invalidIdBody.error, "bad_request");
+    assert.equal(invalidIdBody.message, "invalid node id");
   } finally {
     await server.stop();
   }
