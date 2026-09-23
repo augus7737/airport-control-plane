@@ -34,7 +34,7 @@
 | `platform-sing-box.json` | sing-box 分发配置（对象，非 `items`） | `src/domain/platform/sing-box-distribution.js` | — |
 | `artifacts/sing-box/` | 已镜像的二进制文件 | `src/server.js` | — |
 
-不入库的运行态：Web Shell 会话（仅进程内存）、sing-box 镜像与制品下载中间态。订阅不是实体，它是 `AccessUser.share_token` 加上当前生效发布派生出的输出。
+不入库的运行态：Web Shell 会话（仅进程内存）、sing-box 镜像与制品下载中间态、登录失败计数的桶表（`src/domain/auth/login-guard.js` 的 `buckets`，按用户名与客户端 IP 两组、上限 2000 键；**重启即清空失败计数与锁定**）。订阅不是实体，它是 `AccessUser.share_token` 加上当前生效发布派生出的输出。
 
 ## Node
 
@@ -208,6 +208,10 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 写成「配置已生效，但业务入口可达性复检未通过或未完成（…）: <reason_code>」。
 判定映射的唯一出口是纯函数 `resolveDeploymentOutcome(逐节点复检结果)`（同文件），发布尾部只消费它——
 因为发布逻辑在 `src/server.js` 里，import 即起服务，本身测不到。
+
+前端按同一分层渲染（`getReleaseReachability()`，`public/js/shared/core-formatters.js`）：`release.status` 只出主徽章，
+可达层在发布中心列表与协议模板的关联发布里独立出"入口可达未通过 / 部分通过 / 未复检"与一行说明，逐节点行加"入口未通过"；
+`success` 不产生额外噪音，字段缺失时不编造结论，生效层已判失败时不叠加可达层警示。`skipped` 的说明点明"可用"只表示配置已生效。
 
 ## SystemUser / SystemTemplate 与下发记录
 

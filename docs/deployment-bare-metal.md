@@ -126,6 +126,15 @@ AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT=false
 
 `AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT` 必须保持 `false`：打开后控制面会在本机 shell 执行节点命令，等于在服务器上直接跑下发脚本。
 
+登录失败计数默认开启（5 分钟窗口 / 10 次失败 / 锁 5 分钟，按用户名与客户端 IP 双桶），需要调整或关闭时：
+
+```bash
+CONTROL_PLANE_LOGIN_GUARD=true          # false 可整体关闭（只保留鉴权本身）
+CONTROL_PLANE_LOGIN_WINDOW_MS=300000    # 失败计数窗口
+CONTROL_PLANE_LOGIN_MAX_FAILURES=10     # 窗口内触发锁定的次数
+CONTROL_PLANE_LOGIN_LOCKOUT_MS=300000   # 锁定时长
+```
+
 发布后的代码和 `node_modules` 会设置为 `root:airport` 只读，运行用户 `airport` 只对 `/opt/airport-control-plane/data` 有写权限。`.git/`、旧 `.env.production` 和历史 `data-prod/` 保留原权限，不纳入发布代码的权限收紧。
 
 修改环境文件后重启并检查：
@@ -160,18 +169,32 @@ sudo tail -n 120 /var/log/airport-control-plane.log
 /opt/airport-control-plane/data
 ```
 
-建议至少备份：
+仓库自带快照脚本 `scripts/backup-data-dir.sh`（POSIX sh，Alpine 最小镜像可直接跑），四个动作：
 
-- `nodes.json`
-- `tasks.json`
-- `probes.json`
-- `operations.json`
-- `bootstrap-tokens.json`
-- `operator-sessions.json`
-- `platform-ssh/`
-- `artifacts/`
+| 动作 | 行为 |
+| --- | --- |
+| `backup` | 把整个 data 目录打成 `daily/airport-data-<时间戳>.tar.gz`（排除 `*.tmp`）并写 `.sha256` 伴生文件，随后按保留策略清理 |
+| `list` | 列出 daily / weekly 快照 |
+| `verify <路径>` | 先做 tar/gzip 可读性校验，再比对 `.sha256` |
+| `restore latest\|<路径>` | 恢复快照；**当前 data 目录整体挪走成 `data-pre-restore-<时间戳>`，不删除**，确认无误后再手工清理 |
 
-示例：
+保留策略是两级分桶：`daily/` 里超过 `AIRPORT_BACKUP_DAILY_KEEP`（默认 7）天的快照按 7 天分桶提升为 `weekly/`（每桶只留一份），`weekly/` 只保留最新 `AIRPORT_BACKUP_WEEKLY_KEEP`（默认 4）份。相关环境变量：`AIRPORT_DATA_DIR`、`AIRPORT_BACKUP_DIR`（未设时若 `/opt` 可写则用 `/opt/airport-backups`）、上面两个 KEEP、`AIRPORT_APP_USER`（属主校验）、`AIRPORT_BACKUP_FORCE`。
+
+定时任务用仓库里的 unit（部署脚本**不会**自动启用，需要手工打开）：
+
+```bash
+sudo cp scripts/systemd/airport-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now airport-backup.timer
+systemctl list-timers airport-backup.timer   # 每天 03:17 + 最长 15 分钟抖动，Persistent=true 会补跑
+```
+
+OpenRC / 无 systemd 的机器直接挂 crontab：
+
+```cron
+17 3 * * * AIRPORT_DATA_DIR=/opt/airport-control-plane/data AIRPORT_BACKUP_DIR=/opt/airport-backups /opt/airport-control-plane/scripts/backup-data-dir.sh backup
+```
+
+备份对象就是整个 data 目录（含 `nodes.json`、`tasks.json`、`probes.json`、`operations.json`、`bootstrap-tokens.json`、`operator-sessions.json`、`platform-ssh/`、`artifacts/`），不需要逐文件挑。临时归档可用：
 
 ```bash
 sudo tar -czf airport-control-plane-backup-$(date +%F).tar.gz -C /opt/airport-control-plane data

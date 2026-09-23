@@ -108,6 +108,8 @@ bash install.sh
 ## 数据持久化
 
 备份对象是整个数据目录（默认 `data-prod/`，systemd 路径为 `/opt/airport-control-plane/data`），
+快照 / 校验 / 一条命令恢复用 `scripts/backup-data-dir.sh`（`AIRPORT_DATA_DIR` 指到该目录即可，
+保留策略与 timer 启用方式见 `docs/deployment-bare-metal.md` 的「数据与备份」）。
 而不是单个文件：里面除各 store 的 JSON 台账外，还有平台 SSH 私钥、订阅制品和 `.bak` 副本。
 
 ```bash

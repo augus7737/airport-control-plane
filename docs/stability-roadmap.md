@@ -12,22 +12,22 @@
 | P0.3 请求体上限与 413 | ✅ 已完成 | `src/utils/http.js`：1 MiB、销毁连接、单次 resolve |
 | P0.4 裸机部署加固 | ✅ 已完成，且强于原建议 | `scripts/deploy-bare-metal.sh`：systemd 分支带 `Restart=on-failure`、`StartLimitBurst=5`、`MemoryMax=256M`、`NoNewPrivileges`、`PrivateTmp`、`ProtectSystem=strict`、`ReadWritePaths=<data>`；OpenRC 分支用 init 脚本 + `start_pre` 导出环境文件，无 `MemoryMax` 等价物 |
 | P0.4b 控制面多系统/多架构部署 | ✅ 已完成（amd64 待真机复验） | 同一脚本按 apt/apk × systemd/OpenRC 分支，覆盖 Ubuntu / Debian / Alpine × amd64 / arm64；无 checkout 时可 curl 拉取执行；两条 init 分支已在真实容器跑通 `install`，见 `docs/deployment-bare-metal.md` |
-| P0.5 自动备份 | ⬜ 未实现 | 只有单文件 `.bak`；无每日/每周备份与一条命令恢复 |
+| P0.5 自动备份 | ✅ 已完成（timer 需手工启用） | `scripts/backup-data-dir.sh`：`backup` / `restore latest\|<路径>` / `list` / `verify` 四个动作，daily 快照按 `AIRPORT_BACKUP_DAILY_KEEP`（默认 7 天）滚动并分桶提升到 weekly（`AIRPORT_BACKUP_WEEKLY_KEEP` 默认 4 份），归档带 sha256；`scripts/systemd/airport-backup.{service,timer}` 每天 03:17 + 随机延迟，`Persistent=true` 补跑。**`deploy-bare-metal.sh` 不启用该 timer**，需 `systemctl enable --now airport-backup.timer`；恢复流程未在真机演练 |
 | P1.0 多系统节点接入 | ✅ 主体完成 | bootstrap 与初始化模板覆盖 Alpine / Debian-Ubuntu / RHEL；发布期按包管理器补装运行时仍待验证 |
 | P1.1 `/readyz` | ⬜ 未实现 | 代码中不存在，`/healthz` 仍只表示进程存活 |
 | P1.2 结构化日志与 `request_id` | ⬜ 未实现 | 仍是零散 `console.*` |
 | P1.3 任务状态机标准化 | 🟡 部分完成 | 遗留 `running` 任务/诊断启动时标 `failed`（非 `interrupted`）；缺 `cancelled`、租约、取消与可靠重试 |
 | P1.4 Web Shell 资源限制 | 🟡 部分完成 | 有输出缓冲上限与空闲超时关闭；缺单用户/单节点会话数上限 |
-| P2.1 登录限流 | ⬜ 未实现 | 服务端无失败计数与锁定，仅前端有分支 |
+| P2.1 登录限流 | ✅ 已完成 | `src/domain/auth/login-guard.js`：按用户名桶与客户端 IP 桶双份独立计数（默认 5 分钟窗口 / 10 次失败 / 锁 5 分钟，`CONTROL_PLANE_LOGIN_*` 可调，`CONTROL_PLANE_LOGIN_GUARD=false` 可关），命中返回 `429` + `Retry-After` + `retry_after_seconds`，成功登录清桶；契约见 `docs/api.md` |
 | P2.2 Cookie 安全策略 | ✅ 已完成 | `HttpOnly` + `SameSite=Lax` + `CONTROL_PLANE_SESSION_SECURE` / `x-forwarded-proto` 自动 `Secure`，滑动续期 |
 | P2.3 Token 脱敏（哈希化） | ⬜ 未实现 | `bootstrap-tokens.json` 仍存明文以支持一键复制 |
 | P2.4 敏感日志清理 | 🟡 部分完成 | 私钥与 Reality 私钥不落控制面配置；缺统一的日志脱敏与审查 |
-| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 32 个 `node:test` 文件 / 173 个用例；`npm test` / `npm run check`（全树逐文件语法）；核心远程执行端到端仍缺 |
-| P3.2 拆分 `src/server.js` | 🟡 路由层已完成 | 16 个命名空间搬到 `src/http/routes/`（5763 → 3805 行，现为 3866 行），有 `test/route-table.test.js` 守路由；`src/services` 服务层未拆 |
+| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 44 个 `node:test` 文件 / 309 个用例；`npm test` / `npm run check`（全树逐文件语法）；核心远程执行端到端仍缺 |
+| P3.2 拆分 `src/server.js` | 🟡 路由层已完成 | 16 个命名空间搬到 `src/http/routes/`（5763 → 3805 行，现为 3864 行），有 `test/route-table.test.js` 守路由；`src/services` 服务层未拆 |
 | P4.1 SQLite 迁移 | ⬜ 未开始 | 仍是 JSON 文件，无 SQL 依赖 |
 | P4.2 PostgreSQL 预留 | ⬜ 未开始 | repository 层尚未抽出 |
 
-第一批最小改造包（原子写、写队列、413、裸机部署加固、测试脚本）已交付；**下一步最高价值是自动备份 + `/readyz` + 结构化日志 + 登录限流，然后进入 SQLite**。
+第一批最小改造包（原子写、写队列、413、裸机部署加固、测试脚本）与自动备份、登录限流已交付；**下一步最高价值是 `/readyz` + 结构化日志与 `request_id` + SSH 主机密钥信任（#54）+ 任务执行租约与取消**，然后进入 SQLite。
 
 ## 目标
 

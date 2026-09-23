@@ -173,6 +173,7 @@ sudo bash scripts/deploy-bare-metal.sh update
 - `docs/stability-roadmap.md`: 稳定化改造项与实施状态
 - `docs/duplication-audit.md`: 重复实现盘点与收敛落地情况
 - `docs/module-ui-optimization-plan.md`: 模块 UI 优化轮次记录
+- `docs/ui-layout-audit-2026-09-23.md`: 13 模块页面 UI / 布局合理性评估汇总（六宽度实测、跨页问题家族、排队窗口 A/C）
 - `docs/deployment-bare-metal.md`: 裸机部署（Ubuntu/Debian/Alpine × systemd/OpenRC，推荐）
 - `docs/deployment.md`: Docker / Compose 部署（可选兼容路径）
 - `docs/mvp.md`: 最初的里程碑规划（历史文档）

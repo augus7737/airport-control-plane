@@ -204,6 +204,26 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 规模：测试 40 文件 / 280 → **42 文件 / 291 用例**。
 
+## 进展（2026-09-23，13 模块 UI / 布局评估 + 窗口 B：假结论族收口）
+
+真机纳管因供应商故障暂停，本轮转向页面 UI 与布局合理性：13 个模块各派一个评估窗口（读代码 + 六宽度实测 390/720/900/1013/1440/1920），我只做取证、汇总与否掉不实结论，清单落在 **`docs/ui-layout-audit-2026-09-23.md`**。
+
+三条取证口径修正（影响全部判断）：`ox = scrollWidth − clientWidth = 0` 在 `body{overflow-x:clip}` 下**不能**证明无溢出；`.tiny` 全站只有颜色没有字号（次要说明落回 UA 16px）；4 个越界页共享同一条 DOM 链（`.panel` 从未拿到 `min-width:0`，表格 `min-width` 把 grid 轨道顶起来）。
+
+用户拍板：F1 走**逐页 `minmax(0,1fr)`**（不进共享层），本轮只做**窗口 B（假结论族）**，窗口 A（共享层）与窗口 C（破坏性动作确认 + 各模块单点）排队。
+
+- **B1（共享层根因）**：`runtime-api.js` 把每一次非 401 失败都吞成空集合、平台上下文失败回落 `probe_scheduler.enabled=false`，于是全站每个"0 条 / 未启用"都可能在说谎。现在三处取数点各自记录数据健康度（`dataHealth` + `recordCollectionHealth` / `getCollectionHealth`）并校验收体形状，调用方能区分"确实为 0"与"读不到"。
+- **B2（任务中心）**：空态拆成"有筛选 / 读取失败 / 真的没有"三分支并给重试入口，巡检状态新增"未知"，`hasInFlightTasks()` 补 `new`（此前全 failed 的实例永不轮询），刷新补 `catch`，"数据没变就不打断"改为事实，数据时间超 300s 标过期。
+- **B3（发布中心 / 协议模板）**：#24 定的分层口径 C 此前只落到后端，前端一个字没读 `reachability_status` → "sing-box 已生效但业务端口不通"仍显示绿色"可用"。现在按层渲染（`getReleaseReachability()` + 未通过/部分通过/未复检三种说法），生效层已判失败时不叠加可达层警示，配 6 项回归测试。
+- **B4（批量终端）**：在途批次每 5s 自动收口（读失败保留上一次结果，不渲染成"没有执行记录"），运行中不再打印"[无输出] 后端未返回…"。
+- 顺手修掉上一轮自身引入的回归：浅色主题下厂商页"另有 N 个未展示"虚线 chip 被高特异度分组规则盖得像真标签。
+
+本轮也**否掉/降级**了几条评估结论（弹窗"完全不可用键盘"、"节点详情初始化在加载时自动触发"、"发布中心动作列不可达 P0"），并修正两条机制描述：系统用户/模板下发的回落目标是**该记录自带的 `node_group_ids`**而非"默认组"；登录限流的后端**已经**把重试秒数送到前端，是 429 分支自己覆盖了文案。
+
+第十轮之前记在 `docs/module-ui-optimization-plan.md` 的"详情栏展开时隐藏说明列"这一手，本轮按证据重新定性为 P1：`note`（58–66 字的失败原因）全页只在被隐藏的那一列渲染，且 clamp 3 行无 ellipsis 无 title（@390 实测丢 21/15 字）——修在窗口 A。
+
+规模：测试 42 文件 / 291 → **44 文件 / 309 用例**（`npm run check` 全量 `node --check` 通过）。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
@@ -243,17 +263,17 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 - JSON 无事务、跨文件一致性不足；SQLite 迁移仍是最大结构性欠债
 - SSH 主机指纹未持久化信任，中间人风险与密钥轮换确认缺失
-- `src/server.js` 仍 3866 行：路由已按命名空间拆到 `src/http/routes/`，剩下的装配/编排/实体构造未拆
+- `src/server.js` 仍 3864 行：路由已按命名空间拆到 `src/http/routes/`，剩下的装配/编排/实体构造未拆
 - 路由模块的 `ctx` 偏重（nodes 40 项、access-users 19 项），纯函数依赖尚未下沉为直接 import
-- 无 `/readyz`、无结构化日志与 `request_id`、无服务端登录限流
+- 无 `/readyz`、无结构化日志与 `request_id`（登录限流与失败锁定已有）
 - 任务缺执行租约与取消；发布/探测失败无告警出口
-- `data/` 自动备份尚未实现（只有单文件 `.bak`）
+- `data/` 备份已就位（`scripts/backup-data-dir.sh` + `scripts/systemd/airport-backup.{service,timer}`），但 `deploy-bare-metal.sh` 不会启用该 timer，需手工 `systemctl enable --now`；恢复流程未在真机演练
 - Web Shell 无单用户/单节点会话数上限，仍非生产级 bastion
 - 裸机部署的 amd64 分支未在真机复验（本机 Docker 是 arm64，Rosetta 模拟 systemd 不可信），OpenRC 分支也没有 `MemoryMax` 等价物
 
 ## 下一阶段优先级
 
-P0：SSH host key 信任与变更确认 → 通用任务租约/取消/重试 → `/readyz` + 结构化日志 + 登录限流 → 每日数据备份
-P1：JSON → SQLite（事务 + 唯一约束）→ Endpoint/Link/Route/RoutePool 实体化 → 国际出口与回国双向线路
+P0：SSH host key 信任与变更确认 → 通用任务租约/取消/重试 → `/readyz` + 结构化日志 → 真机启用备份 timer 并演练恢复 → UI 窗口 C（4 处破坏性动作加确认、节点清单属性转义 bug、令牌有效期入口）
+P1：UI 窗口 A（逐页 `minmax(0,1fr)` 收口 F1、字号标度、dialog 语义与焦点、12 页缺页面标题层、断点统一、`.table-shell` 滚动线索、登录页两处）→ JSON → SQLite（事务 + 唯一约束）→ Endpoint/Link/Route/RoutePool 实体化 → 国际出口与回国双向线路
 P2：路由 `ctx` 瘦身（纯函数下沉为直接 import）+ 抽出服务层 → 统一协议兼容矩阵单一来源 → 告警与事件中心
 P3：厂商 API 建机/替换 → 多管理员与 RBAC → 终端用户门户与配额

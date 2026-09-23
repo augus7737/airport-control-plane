@@ -67,6 +67,10 @@ Operator auth env vars:
 - `CONTROL_PLANE_SESSION_TTL_MS`（默认 12 小时，下限 60 秒）
 - `CONTROL_PLANE_SESSION_SECURE`
 - `CONTROL_PLANE_SESSION_REFRESH_PERSIST_INTERVAL_MS`（默认 30000）
+- `CONTROL_PLANE_LOGIN_GUARD`（默认 `true`；`false` / `0` / `off` 可整体关闭失败计数）
+- `CONTROL_PLANE_LOGIN_WINDOW_MS`（失败计数窗口，默认 300000 = 5 分钟）
+- `CONTROL_PLANE_LOGIN_MAX_FAILURES`（窗口内触发锁定的失败次数，默认 10）
+- `CONTROL_PLANE_LOGIN_LOCKOUT_MS`（锁定时长，默认 300000 = 5 分钟）
 
 ## Auth
 
@@ -90,6 +94,14 @@ Operator auth env vars:
 ### `POST /api/v1/auth/login`
 
 公开。请求 `{ "username": "admin", "password": "...", "next": "/nodes.html" }`，成功写入 cookie 并返回 `{ authenticated, session, next_url }`；凭据错误返回 `401 { error: "invalid_credentials" }`。
+
+失败计数与锁定（`src/domain/auth/login-guard.js`）：按 **用户名桶 `u:<username>`** 与 **客户端 IP 桶 `ip:<remote>`**（`socket.remoteAddress`，去掉 `::ffff:` 前缀；不读 `x-forwarded-for`）两组独立计数，任一桶命中即拒。窗口内累计 `CONTROL_PLANE_LOGIN_MAX_FAILURES` 次失败后锁定该桶 `CONTROL_PLANE_LOGIN_LOCKOUT_MS`，锁定与窗口内失败都会拒：
+
+```json
+{ "error": "too_many_attempts", "message": "失败次数过多，请在 293 秒后重试。", "retry_after_seconds": 293 }
+```
+
+实际响应是 `429` + 同名 `Retry-After` 头（`src/server.js:3469-3477`；`invalid_credentials` 走 `401`，`retry_after_seconds` 为 `null`）；桶表另有 `maxTrackedKeys` 上限（默认 2000）防内存膨胀。成功登录清空该次用到的两个桶。
 
 ### `POST /api/v1/auth/logout`
 
