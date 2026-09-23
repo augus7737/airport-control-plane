@@ -257,9 +257,13 @@
 
 共享文件规则：
   src/server.js、src/http/routes/index.js、src/http/validators.js、
+  test/route-table.test.js、
   public/js/services/runtime-api.js、public/js/store/runtime-store.js、
   public/styles/** 一律只读。确实需要改，把要改的内容写成一段说明交给我，
   由主窗口在集成分支上落。
+  test/route-table.test.js 尤其如此：矩阵是同一个数组，两个窗口同时加行必撞。
+  新增/改动接口时把要加的行（"METHOD", path, status, errorCode, "anon"?, body?）
+  原样写在交付报告里，由集成人在合并时统一插入。
   唯一例外：runtime-api.js / runtime-store.js 允许**只在文件末尾追加**新导出，
   不得改动或重排已有行。
 禁止：git push、合并别的分支、跑 docker/local-nodes/reset-fleet.sh、
