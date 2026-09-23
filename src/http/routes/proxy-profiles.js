@@ -1,5 +1,12 @@
+import { validateSingBoxProfileTemplate } from "../../domain/releases/sing-box.js";
 import { validateProxyProfileCreate, validateProxyProfileUpdate } from "../../http/validators.js";
 import { jsonResponse, readJsonBody } from "../../utils/http.js";
+
+// 克隆出来的模板是「还没确认的副本」，语义上最贴近既有的 draft 枚举（状态枚举只有
+// draft / active / disabled，不能新造值）；core-formatters 已把 draft 渲染成「草稿」。
+const CLONE_NAME_SUFFIX = " 副本";
+const CLONED_PROFILE_STATUS = "draft";
+const MAX_CLONE_NAME_ATTEMPTS = 50;
 
 export function createProxyProfilesRoutes(ctx) {
   const {
@@ -12,6 +19,73 @@ export function createProxyProfilesRoutes(ctx) {
     safeDecodePathSegment,
     sortByUpdatedAt,
   } = ctx;
+
+  function profileNameKey(name) {
+    return String(name ?? "").trim().toLowerCase();
+  }
+
+  // 与 providers 的重名口径一致：trim + 大小写不敏感，PATCH 传 excludeId 排除自身。
+  function findProfileByName(name, { excludeId = null } = {}) {
+    const key = profileNameKey(name);
+    if (!key) {
+      return null;
+    }
+
+    return (
+      proxyProfileStore.find(
+        (item) => item.id !== excludeId && profileNameKey(item.name) === key,
+      ) ?? null
+    );
+  }
+
+  // 把「等到发布执行才炸」的模板语义校验提前到写入口：入参已经是持久化形态的记录。
+  function respondTemplateErrors(reply, profile) {
+    const errors = validateSingBoxProfileTemplate(profile);
+    if (errors.length === 0) {
+      return false;
+    }
+
+    jsonResponse(reply, 400, {
+      error: "validation_failed",
+      details: errors,
+    });
+    return true;
+  }
+
+  function respondNameConflict(reply, duplicateProfile) {
+    jsonResponse(reply, 409, {
+      error: "profile_name_conflict",
+      message: `profile name already exists: ${duplicateProfile.name}`,
+    });
+  }
+
+  function copyTemplate(value) {
+    if (value === null || typeof value !== "object") {
+      return {};
+    }
+
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return {};
+    }
+  }
+
+  // 副本名撞车就继续按「 副本 2」「 副本 3」递增，直到查重通过。
+  function nextCloneName(sourceName) {
+    const baseName = `${String(sourceName ?? "").trim() || "未命名模板"}${CLONE_NAME_SUFFIX}`;
+    let candidate = baseName;
+
+    for (
+      let attempt = 2;
+      findProfileByName(candidate) && attempt <= MAX_CLONE_NAME_ATTEMPTS;
+      attempt += 1
+    ) {
+      candidate = `${baseName} ${attempt}`;
+    }
+
+    return candidate;
+  }
 
   return async function handleProxyProfilesRoutes({ request, reply, url }) {
     if (request.method === "GET" && url.pathname === "/api/v1/proxy-profiles") {
@@ -35,6 +109,17 @@ export function createProxyProfilesRoutes(ctx) {
         }
 
         const profile = buildProxyProfileRecord(payload);
+
+        const duplicateProfile = findProfileByName(profile.name);
+        if (duplicateProfile) {
+          respondNameConflict(reply, duplicateProfile);
+          return;
+        }
+
+        if (respondTemplateErrors(reply, profile)) {
+          return;
+        }
+
         proxyProfileStore.unshift(profile);
         await persistProxyProfileStore();
 
@@ -47,6 +132,58 @@ export function createProxyProfilesRoutes(ctx) {
           message: error instanceof Error ? error.message : "unknown error",
         });
       }
+      return;
+    }
+
+    const cloneProfileMatch = url.pathname.match(/^\/api\/v1\/proxy-profiles\/([^/]+)\/clone$/);
+    if (cloneProfileMatch && request.method === "POST") {
+      const profileId = safeDecodePathSegment(cloneProfileMatch[1]);
+
+      if (!profileId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid profile id",
+        });
+        return;
+      }
+
+      const existingProfile = findProxyProfileById(profileId);
+
+      if (!existingProfile) {
+        jsonResponse(reply, 404, {
+          error: "not_found",
+          message: "profile not found",
+        });
+        return;
+      }
+
+      // 克隆走同一条写入口口径：新名字查重、模板语义校验都过才落盘。
+      const clonedProfile = buildProxyProfileRecord(
+        {
+          ...existingProfile,
+          name: nextCloneName(existingProfile.name),
+          status: CLONED_PROFILE_STATUS,
+          template: copyTemplate(existingProfile.template),
+        },
+        null,
+      );
+
+      const duplicateProfile = findProfileByName(clonedProfile.name);
+      if (duplicateProfile) {
+        respondNameConflict(reply, duplicateProfile);
+        return;
+      }
+
+      if (respondTemplateErrors(reply, clonedProfile)) {
+        return;
+      }
+
+      proxyProfileStore.unshift(clonedProfile);
+      await persistProxyProfileStore();
+
+      jsonResponse(reply, 201, {
+        profile: clonedProfile,
+      });
       return;
     }
 
@@ -80,7 +217,16 @@ export function createProxyProfilesRoutes(ctx) {
 
     if (proxyProfileMatch && request.method === "PATCH") {
       try {
-        const profileId = decodeURIComponent(proxyProfileMatch[1]);
+        const profileId = safeDecodePathSegment(proxyProfileMatch[1]);
+
+        if (!profileId) {
+          jsonResponse(reply, 400, {
+            error: "bad_request",
+            message: "invalid profile id",
+          });
+          return;
+        }
+
         const existingProfile = findProxyProfileById(profileId);
 
         if (!existingProfile) {
@@ -103,6 +249,19 @@ export function createProxyProfilesRoutes(ctx) {
         }
 
         const updatedProfile = buildProxyProfileRecord(payload, existingProfile);
+
+        const duplicateProfile = findProfileByName(updatedProfile.name, {
+          excludeId: profileId,
+        });
+        if (duplicateProfile) {
+          respondNameConflict(reply, duplicateProfile);
+          return;
+        }
+
+        if (respondTemplateErrors(reply, updatedProfile)) {
+          return;
+        }
+
         const index = proxyProfileStore.findIndex((item) => item.id === profileId);
         proxyProfileStore[index] = updatedProfile;
         await persistProxyProfileStore();
@@ -120,7 +279,16 @@ export function createProxyProfilesRoutes(ctx) {
     }
 
     if (proxyProfileMatch && request.method === "DELETE") {
-      const profileId = decodeURIComponent(proxyProfileMatch[1]);
+      const profileId = safeDecodePathSegment(proxyProfileMatch[1]);
+
+      if (!profileId) {
+        jsonResponse(reply, 400, {
+          error: "bad_request",
+          message: "invalid profile id",
+        });
+        return;
+      }
+
       const existingProfile = findProxyProfileById(profileId);
 
       if (!existingProfile) {

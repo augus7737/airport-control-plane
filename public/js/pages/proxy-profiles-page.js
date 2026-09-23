@@ -1,3 +1,5 @@
+import { cloneProxyProfile } from "../services/runtime-api.js";
+
 function createEmptyProfileDraft() {
   return {
     name: "",
@@ -480,6 +482,31 @@ export function createProxyProfilesPageModule(dependencies) {
     }
   }
 
+  async function handleClone(id) {
+    const profile = appState.proxyProfiles.find((item) => item.id === id);
+    if (!profile) {
+      return;
+    }
+
+    try {
+      const cloned = await cloneProxyProfile(profile.id);
+      await refreshRuntimeData();
+      state.selectedId = cloned?.id || state.selectedId;
+      state.message = {
+        type: "success",
+        text: `已克隆为草稿模板：${cloned?.name || profile.name || profile.id}`,
+      };
+      renderCurrentContent();
+      scrollToForm();
+    } catch (error) {
+      state.message = {
+        type: "error",
+        text: error instanceof Error ? error.message : "克隆协议模板失败",
+      };
+      renderCurrentContent();
+    }
+  }
+
   function renderProxyProfilesPage() {
     const selectedProfile = getSelectedProfile();
     const draft = getDraft(selectedProfile);
@@ -589,6 +616,7 @@ export function createProxyProfilesPageModule(dependencies) {
                 <td>
                   <div class="ops-table-actions">
                     <button class="button ghost" type="button" data-proxy-profile-edit="${escapeHtml(profile.id)}">编辑</button>
+                    <button class="button ghost" type="button" data-proxy-profile-clone="${escapeHtml(profile.id)}">克隆</button>
                     <button class="button ghost" type="button" data-proxy-profile-delete="${escapeHtml(profile.id)}">删除</button>
                   </div>
                 </td>
@@ -745,6 +773,7 @@ export function createProxyProfilesPageModule(dependencies) {
                     <label for="proxy-profile-status">状态</label>
                     <select id="proxy-profile-status" name="status">
                       <option value="active"${draft.status === "active" ? " selected" : ""}>可用</option>
+                      <option value="draft"${draft.status === "draft" ? " selected" : ""}>草稿</option>
                       <option value="disabled"${draft.status === "disabled" ? " selected" : ""}>停用</option>
                     </select>
                   </div>
@@ -1088,6 +1117,12 @@ export function createProxyProfilesPageModule(dependencies) {
         state.message = null;
         renderCurrentContent();
         scrollToForm();
+      });
+    });
+
+    documentRef.querySelectorAll("[data-proxy-profile-clone]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        handleClone(event.currentTarget.dataset.proxyProfileClone || "");
       });
     });
 

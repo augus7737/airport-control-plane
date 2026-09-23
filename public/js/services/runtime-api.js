@@ -526,3 +526,11 @@ export async function applySystemTemplate(payload) {
     operation: result.operation || null,
   };
 }
+
+// --- proxy-profiles 克隆（本模块新增，仅追加导出） ---
+export async function cloneProxyProfile(id) {
+  const result = await requestJson(`/api/v1/proxy-profiles/${encodeURIComponent(id)}/clone`, {
+    method: "POST",
+  });
+  return pickEntity(result, ["proxy_profile", "profile", "item"]) || result;
+}
