@@ -224,6 +224,18 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 规模：测试 42 文件 / 291 → **44 文件 / 309 用例**（`npm run check` 全量 `node --check` 通过）。
 
+## 进展（2026-09-24，同类开源调研：借鉴清单，未实施）
+
+回答"有没有同种类的开源平台"时顺手做了一轮源码级调研（三个只读窗口 + 主会话抽查复核），产出 **`docs/open-source-borrowing.md`**。**本轮零代码改动**，清单里每条都标了证据路径与可信度（`已复核` / `窗口报告` / `未证实`），`窗口报告` 项开工前必须自读。
+
+定位结论：销售/订阅型面板（Marzban、3x-ui、s-ui、Hiddify）中心是用户与收款，我们明确不做；真同类是 `ClickDevTech/CELERITY-panel`、`imrui/xray-pilot`、`ashvvvvv/mini-sb-agent` 这一代多节点纳管；**分层发布复检（生效/可达两层）、发布回滚、厂商成本台账与预算、可审计的任务中心与探测历史，四项没有开源对照物**。
+
+已亲自复核、可直接落到我们代码的做法（编号沿用该文档）：Reality 密钥对用内置 `crypto` 生成（A1，闭 #23）；探测历史按小时桶聚合 + 调度器 coalesce（A2）；配置漂移用"规范化后 hash + `base64 <` 读回 + `.tmp` 原子替换"（A3，**我们此前完全没有这个能力**）；可达层把"连接目标 / SNI / Host"三者解耦并断言回显身份、证书无效返回 503（A4）；状态翻转才告警 + 常量 `/readyz`（A5）；节点自报二进制支持面，避免"没编译"误判为"挂了"（A6）；SSH known_hosts TOFU 的完整语义（A7，#54）。
+
+同时记下三条**反参考**（明确不抄）：Marzban 每次重连现场拉节点证书当信任锚且不落地指纹（正是 #54 要避免的）、Hiddify 重启靠 `for i in {1..10} sleep 1` 硬等、CELERITY 完全没有 host-key 校验。
+
+调研过程也纠正了我自己前一版的两处错误：低星同类项目的 owner 当时按显示名推断，`CELERITY-project/*`、`rroula/xray-pilot`、`misakacpp/mini-sb-agent` 三个链接都错；`hiddifypanel` 也不在 `Hiddify-Manager` 仓库里，而是 `.gitmodules` 指向的独立仓库 `hiddify/Hiddify-Panel`。教训与 UI 评估轮同源：**外部结论必须抓到文件正文才算取证**。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
@@ -262,6 +274,7 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 ## 当前主要风险
 
 - JSON 无事务、跨文件一致性不足；SQLite 迁移仍是最大结构性欠债
+- **节点配置漂移不可见**：纳管后有人在机器上手改配置，控制面没有任何手段发现（`docs/open-source-borrowing.md` A3 给了低成本做法）
 - SSH 主机指纹未持久化信任，中间人风险与密钥轮换确认缺失
 - `src/server.js` 仍 3864 行：路由已按命名空间拆到 `src/http/routes/`，剩下的装配/编排/实体构造未拆
 - 路由模块的 `ctx` 偏重（nodes 40 项、access-users 19 项），纯函数依赖尚未下沉为直接 import
@@ -273,7 +286,7 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 ## 下一阶段优先级
 
-P0：SSH host key 信任与变更确认 → 通用任务租约/取消/重试 → `/readyz` + 结构化日志 → 真机启用备份 timer 并演练恢复 → UI 窗口 C（4 处破坏性动作加确认、节点清单属性转义 bug、令牌有效期入口）
-P1：UI 窗口 A（逐页 `minmax(0,1fr)` 收口 F1、字号标度、dialog 语义与焦点、12 页缺页面标题层、断点统一、`.table-shell` 滚动线索、登录页两处）→ JSON → SQLite（事务 + 唯一约束）→ Endpoint/Link/Route/RoutePool 实体化 → 国际出口与回国双向线路
+P0：Reality 密钥对自动生成（#23，纯内置 `crypto`，做法见 `docs/open-source-borrowing.md` A1）→ SSH host key 信任与变更确认 → 通用任务租约/取消/重试 → `/readyz` + 结构化日志 → 真机启用备份 timer 并演练恢复 → UI 窗口 C（4 处破坏性动作加确认、节点清单属性转义 bug、令牌有效期入口）
+P1：配置漂移检测（A3）与探测历史小时桶聚合（A2）→ UI 窗口 A（逐页 `minmax(0,1fr)` 收口 F1、字号标度、dialog 语义与焦点、12 页缺页面标题层、断点统一、`.table-shell` 滚动线索、登录页两处）→ JSON → SQLite（事务 + 唯一约束）→ Endpoint/Link/Route/RoutePool 实体化 → 国际出口与回国双向线路
 P2：路由 `ctx` 瘦身（纯函数下沉为直接 import）+ 抽出服务层 → 统一协议兼容矩阵单一来源 → 告警与事件中心
 P3：厂商 API 建机/替换 → 多管理员与 RBAC → 终端用户门户与配额

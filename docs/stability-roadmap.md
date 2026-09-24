@@ -1,7 +1,7 @@
 # 稳定运行改造路线图
 
-更新时间：2026-09-23
-文档性质：稳定性与工程质量路线图。逐项状态见下表，代码为最终事实。
+更新时间：2026-09-24
+文档性质：稳定性与工程质量路线图。逐项状态见下表，代码为最终事实。逐项缺口的开源借鉴对象集中在文末[附录：外部可借鉴清单](#附录外部可借鉴清单)。
 
 ## 实施状态
 
@@ -473,3 +473,22 @@ ReadWritePaths=/opt/airport-control-plane/data
 5. 每日数据备份
 
 这 5 项完成后，系统的数据安全和低配服务器稳定性会明显提升。
+
+---
+
+## 附录：外部可借鉴清单
+
+2026-09-24 对同类开源控制面（Marzban / Hiddify / s-ui / 3x-ui / CELERITY / xray-pilot / mini-sb-agent）做了一轮源码级调研，逐条借鉴项、外部证据路径、移植代价与**反参考**（明确不该抄的做法）独立成文，见 `docs/open-source-borrowing.md`。与本文逐项缺口的对应关系：
+
+| 本文项 | 借鉴结论 |
+| --- | --- |
+| P0.5 自动备份 | 补 manifest（归档内记录加密密钥指纹、restore 前预检）与 offsite（presigned PUT，不引 SDK）；`install.sh` / `deploy-bare-metal.sh` 自动启用 timer |
+| P1.1 `/readyz` | 同类都只有常量 `/health`，设计可保持极简：`{version, stores_loaded, scheduler_running, uptime_s}`；同时借"状态翻转才告警"的闩锁补上告警出口 |
+| P1.2 结构化日志 | **无开源可抄**——Marzban / Hiddify 同样只有默认 logger，不要指望外部参照，只能自研 |
+| P1.3 任务状态机 | 借 coalesce（上轮未跑完即跳过）与"只在状态跳变记审计"；**别借**它们的失败处理（Marzban 失败只写 message、无退避） |
+| P1.4 Web Shell 限制 | 借定长环形缓冲（`deque(maxlen=100)` 同语义）收敛输出占用 |
+| P2.3 Token 脱敏 | 外部只有一处对得上：API 密钥存 `keyHash` + `keyPrefix` + 列表投影时剔除哈希字段。bootstrap token 哈希化仍无对照 |
+| P2.4 敏感日志 | 借"读远端文件时 stderr 不参与内容"这一类卫生做法（避免错误信息污染落盘内容） |
+| P4.1 SQLite | 同类清一色 SQL；我们坚持 JSON 就是独一份，代价是要自备保留策略（探测历史按小时桶聚合 + 原始行滚动窗口） |
+
+未登记在本文、但由该轮调研新增的候选项：**配置漂移检测**、**Reality 密钥对自动生成**、**SSH 主机密钥 TOFU**（#54）、**节点 capabilities 自报**、**可达层判据分层**。它们的落点与代价评估见该文档 §2。

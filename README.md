@@ -160,6 +160,7 @@ sudo bash scripts/deploy-bare-metal.sh update
 - 更完整的任务调度（租约、取消、重试策略）
 - JSON → SQLite → PostgreSQL 的存储迁移
 - Prometheus blackbox_exporter 等外部探测执行器
+- 配置漂移检测、Reality 密钥自动生成、SSH 主机密钥 TOFU（借鉴对象与证据见 `docs/open-source-borrowing.md`）
 
 ## Documentation
 
@@ -174,6 +175,7 @@ sudo bash scripts/deploy-bare-metal.sh update
 - `docs/duplication-audit.md`: 重复实现盘点与收敛落地情况
 - `docs/module-ui-optimization-plan.md`: 模块 UI 优化轮次记录
 - `docs/ui-layout-audit-2026-09-23.md`: 13 模块页面 UI / 布局合理性评估汇总（六宽度实测、跨页问题家族、排队窗口 A/C）
+- `docs/open-source-borrowing.md`: 开源同类项目的可借鉴清单（外部证据 + 我们的落点 + 反参考）
 - `docs/deployment-bare-metal.md`: 裸机部署（Ubuntu/Debian/Alpine × systemd/OpenRC，推荐）
 - `docs/deployment.md`: Docker / Compose 部署（可选兼容路径）
 - `docs/mvp.md`: 最初的里程碑规划（历史文档）
