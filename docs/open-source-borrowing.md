@@ -122,5 +122,6 @@
 
 - **顺序**：A1 → A2 → A3 → A4 → A6 → A5 → A7，再回头看 B 组。前六项不需要真机，A5 的出站与 A7 的人工确认流需要你的授权与 UI 配合。
 - **门禁**：每项独立提交，改完跑 `npm run check` + `node --test`，A3/A4/A6 落新单测；A7 属 `src/domain/platform/ssh.js`（非我独占的共享层，但影响所有远程动作），必须单独一轮并配假集群复验。
-- **真机边界**：供应商（拼好鸡 / 56IDC）恢复之前，A3/A7 只能做到"实现 + 容器验证"。不要把它们标成"已完成"，口径同 `docs/module-ui-optimization-plan.md` 的 deferred 清单。
+- **真机边界**：拼好鸡供应商已恢复，但旗下 3 台 LXC 的可用性仍需取证后才能采信——2026-09-24 被动探测确认三台 sshd 均可达（NAT 口 `22010`、两台 `22`），但台账里三者 `status=degraded`、`last_seen_at` 为空，即**从未完成一次 SSH 纳管**；且控制面没有 host key 基线，无法区分"原机"与"已重装"。A3/A7 在纳管打通之前只能做到"实现 + 假容器验证"，别标成"已完成"，口径同 `docs/module-ui-optimization-plan.md` 的 deferred 清单。
+- **纳管顺序已改**：原计划"控制台跑一行 bootstrap"经实测不成立——控制面无公网回连地址（`PLATFORM_PUBLIC_BASE_URL` 未设、本机无 `cloudflared`/`tailscale`/`ngrok`/`frpc`、无可当跳板的公网机），且平台 SSH 密钥仍是 `missing / can_generate`，注册成功也写不进公钥。三台的入站 SSH 已实测可达，所以真实卡点只有一条：**平台公钥进节点 root 的 `authorized_keys`**，不需要把控制面暴露到公网。顺序改为 控制台只读探测判生死 → 生成密钥 → 装公钥 → 控制面直连 SSH 验证（A7 的 TOFU 正好在这一步开始积累基线）。
 - **不要**把 B/C 组任一 `窗口报告` 项直接开工：它们的文件正文我未逐条核验，历史上这类报告出现过"结论对、机制错"的情况。
