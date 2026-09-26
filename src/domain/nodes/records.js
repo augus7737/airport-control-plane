@@ -985,7 +985,7 @@ export function createNodeRecordBuilders({
         sourceValue(payload, "provider_id", existingNode?.provider_id ?? null),
         null,
       ),
-      source: existingNode?.source ?? "bootstrap",
+      source: "bootstrap",
       bootstrap_token_id: existingNode?.bootstrap_token_id ?? null,
       facts,
       commercial: buildCommercialRecord(payload.commercial, existingNode?.commercial),

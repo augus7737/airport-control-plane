@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   validateAssetUpdate,
   validateManualNode,
+  validateRegistration,
 } from "../src/http/validators.js";
 
 test("manual node validator accepts endpoint model fields", () => {
@@ -68,3 +69,41 @@ test("asset update validator rejects invalid endpoint ports", () => {
   ]);
 });
 
+
+test("registration accepts minimal self-reported facts", () => {
+  const errors = validateRegistration({
+    bootstrap_token: "token-value",
+    fingerprint: "sha256:aa11bb22",
+    facts: {
+      hostname: "probe-us-n1",
+      public_ipv4: "203.0.113.77",
+      os_id: "debian",
+      cpu_cores: null,
+      memory_mb: null,
+      disk_gb: null,
+      ssh_port: null,
+    },
+  });
+
+  assert.deepEqual(errors, []);
+});
+
+test("registration still rejects non-numeric resource facts", () => {
+  const errors = validateRegistration({
+    bootstrap_token: "token-value",
+    fingerprint: "sha256:aa11bb22",
+    facts: {
+      hostname: "probe-us-n1",
+      public_ipv4: "203.0.113.77",
+      cpu_cores: "two",
+      memory_mb: -1,
+      ssh_port: 70000,
+    },
+  });
+
+  assert.deepEqual(errors, [
+    "facts.cpu_cores must be a non-negative number",
+    "facts.memory_mb must be a non-negative number",
+    "facts.ssh_port must be an integer between 1 and 65535",
+  ]);
+});

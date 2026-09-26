@@ -545,15 +545,17 @@ export function createNodesRoutes(ctx) {
         }
 
         const nodeStatus = String(node.status || "new").toLowerCase();
-        const initTask =
-          nodeStatus === "active"
-            ? latestNodeTask(node.id, "init_alpine")
-            : ensureNodeInitTask(node, {
-                template: defaultInitTemplateForNode(node),
-                trigger: existingNode ? "bootstrap_refresh" : "bootstrap_register",
-                reason: existingNode ? "bootstrap_refresh" : "bootstrap_register",
-              });
-        const scheduleInitTask = nodeStatus === "active" ? null : initTask;
+        // A manual shell carries an operator-set status, not evidence it was ever managed.
+        const neverRegistered = !existingNode || existingNode.source === "manual";
+        const skipInitTask = nodeStatus === "active" && !neverRegistered;
+        const initTask = skipInitTask
+          ? latestNodeTask(node.id, "init_alpine")
+          : ensureNodeInitTask(node, {
+              template: defaultInitTemplateForNode(node),
+              trigger: neverRegistered ? "bootstrap_register" : "bootstrap_refresh",
+              reason: neverRegistered ? "bootstrap_register" : "bootstrap_refresh",
+            });
+        const scheduleInitTask = skipInitTask ? null : initTask;
         const platformKeyState = await platformSshKeyState();
 
         await Promise.all([persistNodeStore(), persistBootstrapTokens(), persistTaskStore()]);

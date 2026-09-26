@@ -175,6 +175,14 @@ export function createNodeFactsDomain(dependencies = {}) {
     return Number.isFinite(value) ? value : 0;
   }
 
+  function registrationExactAddressMatches(nodes, incomingFacts) {
+    return nodes.filter(
+      (node) =>
+        registrationHostnameMatch(node?.facts, incomingFacts) &&
+        registrationAddressMatch(node?.facts, incomingFacts),
+    );
+  }
+
   function findExistingBootstrapNode(payload) {
     const exactNodeId = index.get(payload.fingerprint);
     const exactNode = exactNodeId ? store.get(exactNodeId) : null;
@@ -204,13 +212,15 @@ export function createNodeFactsDomain(dependencies = {}) {
       }
     }
 
-    const exactAddressMatches = bootstrapNodes.filter(
-      (node) =>
-        registrationHostnameMatch(node?.facts, incomingFacts) &&
-        registrationAddressMatch(node?.facts, incomingFacts),
-    );
+    const exactAddressMatches = registrationExactAddressMatches(bootstrapNodes, incomingFacts);
     if (exactAddressMatches.length === 1) {
       return exactAddressMatches[0];
+    }
+
+    const manualNodes = [...store.values()].filter((node) => node?.source === "manual");
+    const adoptionMatches = registrationExactAddressMatches(manualNodes, incomingFacts);
+    if (adoptionMatches.length === 1) {
+      return adoptionMatches[0];
     }
 
     const legacySignature = buildLegacyRegistrationSignature(incomingFacts);

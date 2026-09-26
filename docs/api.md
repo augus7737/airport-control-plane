@@ -140,7 +140,16 @@ Operator auth env vars:
 
 ### `POST /api/v1/nodes/register`
 
-公开，bootstrap token 校验。创建或按 `fingerprint` 更新节点，返回 `{ node, bootstrap, actions[] }`。
+公开，bootstrap token 校验。创建或更新节点，返回 `{ node, bootstrap, actions[] }`。
+
+匹配既有节点（`findExistingBootstrapNode`）按以下顺序，命中即复用同一行：
+
+1. `fingerprint` 精确命中索引；
+2. `facts.machine_id` 在 `source: bootstrap` 行中唯一命中；
+3. `facts.primary_mac` 在 `source: bootstrap` 行中唯一命中；
+4. `hostname` **且**任一地址（`public_ipv4` / `public_ipv6` / `private_ipv4`）在 `source: bootstrap` 行中唯一命中；
+5. 同上条件在 `source: manual` 行中唯一命中 → **收养该手工壳**：`source` 翻成 `bootstrap`、`fingerprint` 与 facts 填实，`commercial`（价格/备注）与 `management` 映射原样保留；
+6. 兜底按 legacy 签名（`hostname|arch|kernel|cpu|memory|disk`）匹配 bootstrap 行，再用地址收窄，仍多义则取最近活动的一行。
 
 ```json
 {
@@ -174,7 +183,9 @@ Notes:
 - `facts.public_ipv4` / `public_ipv6` 描述控制面应当连入的 **SSH 入口地址**，不是节点出站 IP。
 - NAT / LXC / 端口映射场景必须显式上报外部入口：`ssh_port` 是控制面可达的映射端口，容器内部 `sshd` 端口写入 `management.ssh_internal_port`。
 - 节点没有显式 `ssh_port` 时控制面使用默认端口 `22`；`bootstrap.sh` 除非传 `--ssh-port`，否则保留机器现有 `sshd` 端口。
-- 初始化模板按 `os_name` / `os_id` / `os_family` / `os_version` 自动选择 `alpine-base`、`debian-base`、`rhel-base`。
+- `cpu_cores` / `memory_mb` / `disk_gb` / `ssh_port` 缺失或为 `null` 都算"未上报"，只有给了非数值/负数才 `400 validation_failed`；因此精简环境（缺 `awk`、读不到 `/proc/meminfo`）也能只报 hostname + 地址完成注册。
+- 初始化模板按 `os_name` / `os_id` / `os_family` / `os_version` 自动选择 `alpine-base`、`debian-base`、`rhel-base`；文本都识别不出时兜底 `alpine-base`，所以 OS 事实必须由节点自报而不是靠人工壳猜。
+- 已 `active` 的 bootstrap 节点再次注册只刷新 facts，不会重排初始化任务；**收养的手工壳例外**——它的高状态来自人工录入，首次注册一定会建初始化任务（trigger `bootstrap_register`）。
 - `actions[].install_ssh_key` 只在平台已有可用公钥时出现。
 
 ### `POST /api/v1/nodes/manual`

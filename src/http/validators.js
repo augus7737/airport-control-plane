@@ -349,10 +349,7 @@ export function validateRegistration(payload) {
   }
 
   for (const field of ["cpu_cores", "memory_mb", "disk_gb", "ssh_port"]) {
-    const value = payload.facts[field];
-    if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
-      errors.push(`facts.${field} must be a non-negative number`);
-    }
+    validateNullableNonNegativeNumberField(errors, payload.facts[field], `facts.${field}`);
   }
 
   if (

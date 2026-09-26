@@ -50,8 +50,8 @@
 ```
 
 - `status`：`new | active | degraded | failed`（`disabled` / `retired` 在代码里没有写入路径）。
-- `source`：`bootstrap | manual`。手工录入默认 `active`。
-- `fingerprint` 唯一，用于注册去重。
+- `source`：`bootstrap | manual`。手工录入默认 `active`；`manual` 行被节点自报注册按 hostname + 地址精确收养后翻成 `bootstrap`，此后走同一条自上报刷新路径。
+- `fingerprint` 唯一，用于注册去重；手工壳录入时没有 `fingerprint`，靠 hostname + 地址匹配收养（见 `docs/api.md` 的注册匹配顺序）。
 
 ### facts（节点自报或人工覆盖的机器事实）
 

@@ -239,3 +239,41 @@ test("asset update null legacy fields preserve explicit management business and 
   assert.equal(updated.endpoints.service_listen.port, 443);
   assert.equal(updated.endpoints.service_listen.protocol, "hysteria2");
 });
+
+test("bootstrap registration adopts a manual node and keeps its billing record", () => {
+  const builders = createBuilders();
+  const manualNode = builders.buildManualNodeRecord({
+    hostname: "us-n1",
+    public_ipv4: "64.112.41.173",
+    ssh_port: 22,
+    billing_amount: 3.5,
+    billing_currency: "HMB",
+    billing_cycle: "月付",
+    note: "供应商控制台录入",
+    management: {
+      ssh_host: "64.112.41.173",
+      ssh_port: 22,
+      ssh_user: "root",
+    },
+  });
+  assert.equal(manualNode.source, "manual");
+
+  const registered = builders.buildNodeRecord(
+    {
+      fingerprint: "sha256:reported-fingerprint",
+      facts: {
+        hostname: "us-n1",
+        public_ipv4: "64.112.41.173",
+        machine_id: "8d1f2c3e4b5a6978",
+      },
+    },
+    manualNode,
+  );
+
+  assert.equal(registered.source, "bootstrap");
+  assert.equal(registered.id, manualNode.id);
+  assert.equal(registered.fingerprint, "sha256:reported-fingerprint");
+  assert.equal(registered.commercial.billing_currency, "HMB");
+  assert.equal(registered.commercial.note, "供应商控制台录入");
+  assert.equal(registered.management.ssh_user, "root");
+});
