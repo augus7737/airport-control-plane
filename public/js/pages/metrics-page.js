@@ -234,6 +234,8 @@ export function createMetricsPageModule(dependencies) {
     const summary = sample?.summary || {};
     const displayName = getNodeDisplayName(node);
     const hostLabel = sample?.hostname || node.id;
+    // 有的厂商把容器主机名给成 UUID，光看名字分不清是哪台，所以副行固定给归属
+    const ownershipLabel = `${node.labels?.provider || "未标记"} / ${node.labels?.region || "-"}`;
 
     const quotaPct = Number.isFinite(summary.cpu_quota_pct) ? summary.cpu_quota_pct : null;
     const cpuPct = ratioPct(summary.cpu_used_pct, quotaPct ?? 100);
@@ -314,12 +316,8 @@ export function createMetricsPageModule(dependencies) {
         <div class="panel-body">
           <div class="metric-card-head">
             <div class="node-meta">
-              <a class="node-name" href="${escapeHtml(nodeDetailHref(node.id))}">${escapeHtml(displayName)}</a>
-              ${
-                hostLabel === displayName
-                  ? ""
-                  : `<span class="node-id mono">${escapeHtml(hostLabel)}</span>`
-              }
+              <a class="node-name" href="${escapeHtml(nodeDetailHref(node.id))}" title="${escapeHtml(hostLabel)}">${escapeHtml(displayName)}</a>
+              <span class="node-id" title="${escapeHtml(ownershipLabel)}">${escapeHtml(ownershipLabel)}</span>
             </div>
             <span class="${statusClassName(node.status)}">${escapeHtml(statusText(node.status))}</span>
           </div>
