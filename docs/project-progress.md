@@ -286,13 +286,30 @@ systemd 用 `is-enabled`，无 systemd 走 `rc-update show default` 匹配，两
 拿三份假 `rc-update` 输出跑出来的：`enabled / disabled / unknown` 三条分支各自命中。
 测试 323 → **325**（`test/release-boot-state.test.js`）。
 
+**真机闭环（2026-09-26 15:36 UTC，巴西那台 Alpine/OpenRC 容器）**：明文 VLESS 模板发布后，节点真实输出里
+`[publish] stage=rendered → validation=passed → boot=enabled → activation=running → result=applied` 一条不落，
+生效层四项（rendered / config_validation / activation / subscription_entry）全 passed；
+`rc-update show default` 在机器上独立复核到 `sing-box | default`，不是标记自证。随后**整机重启**：
+`/proc/uptime` 从 62 天回到 1947s（与下发 `reboot` 的时刻精确对齐），sing-box 以 **PID 111** 被 OpenRC 拉起，
+`rc-service sing-box status` = started，配置 md5 与重启前一致，`:::8443` 重新在听。开机自启这条链路是**真跑通的**。
+
+两条附带取证，都不好看但都是事实：
+
+- **可达层仍红，且与自启无关**：`business_entry_tcp_failed`，而从控制面直连该公网 IP 的 8443 是 connection refused
+  —— 容器内确实在听，是厂商 NAT 没把这个口映射出来（#78 的现场版本）。发布记录因此整体 `failed`，
+  这正是判定口径 C 想要的分层效果：**能用"配置已生效"这句话，不能用"订阅可用"**。
+- **容器里的 `uptime` 命令不可信**：busybox `uptime` 走 `sysinfo()`，读到的是**宿主**的 62 天；同机 `/proc/uptime` 是 32 分钟。
+  判定"这台到底重启没有"必须用 `/proc/uptime` 或 boot_id。`scripts/node/metrics-collect.sh:77` 取的就是 `/proc/uptime`，
+  所以监控侧口径本来是对的；这次差点被 `uptime` 带偏的是我。另：停机约 2 分钟，落在两次 5 分钟采样之间，
+  **监控没有任何一条失败样本**——短于采集周期的宕机现在不可见，这是采样周期的固有下限，不是缺陷。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
 2. 节点执行一行接入命令 → 上报事实 → 去重建档 → 回传公钥与初始化动作
 3. 控制面按管理链路（直连 / 中转 / `tcp_forward`/`exec_nc`）SSH 接管，执行初始化、系统用户、系统模板、批量操作
 4. 周期巡检与手动复探写入健康状态，管理链路与业务链路分段
-5. 选择接入用户 + 协议模板 + 节点组 → 渲染 sing-box 配置 → 校验 → 下发 → 重启 → 失败回滚
+5. 选择接入用户 + 协议模板 + 节点组 → 渲染 sing-box 配置 → 校验 → 下发 → 重启 → 失败回滚；开机自启状态回读，并已用整机重启复验自启生效
 6. 按“最近一次有效发布 + 线路解析结果”输出节点级订阅、聚合订阅、二维码
 
 ## 阶段进度
