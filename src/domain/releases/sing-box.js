@@ -735,6 +735,30 @@ EOF_SYSTEMD
   return 0
 }
 
+# enable 那两步都是 || true 吞错的，所以自启状态必须单独回读一次：
+# 只看 result=applied 会把"这次跑起来了但重启后不会自启"标成绿灯。
+report_singbox_boot_state() {
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    if systemctl is-enabled sing-box >/dev/null 2>&1; then
+      echo "[publish] boot=enabled"
+    else
+      echo "[publish] boot=disabled"
+    fi
+    return 0
+  fi
+
+  if command -v rc-update >/dev/null 2>&1; then
+    if rc-update show default 2>/dev/null | grep -Eq '^[[:space:]]*sing-box[[:space:]]*[|]'; then
+      echo "[publish] boot=enabled"
+    else
+      echo "[publish] boot=disabled"
+    fi
+    return 0
+  fi
+
+  echo "[publish] boot=unknown"
+}
+
 ${binaryLookupSection}
 
 install -d -m 755 "$AIRPORT_DIR" "$RELEASE_DIR" "$(dirname "$SINGBOX_CONFIG_FILE")"
@@ -803,6 +827,7 @@ else
 fi
 
 cp "$STAGED_CONFIG_FILE" "$SINGBOX_CONFIG_FILE"
+report_singbox_boot_state || true
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   if systemctl restart sing-box >/dev/null 2>&1; then
@@ -948,6 +973,13 @@ export function describeSingBoxTargetOutcome(target) {
 
   if (String(target?.status || "").toLowerCase() === "success") {
     if (result === "applied") {
+      const boot = extractPublishMarker(outputLines, "boot");
+      if (boot === "disabled") {
+        return `${successLabel}已校验并重载，但服务未设为开机自启，重启后不会自动拉起。`;
+      }
+      if (boot === "unknown") {
+        return `${successLabel}已校验并重载，但开机自启状态未确认。`;
+      }
       return `${successLabel}已校验并重载。`;
     }
 

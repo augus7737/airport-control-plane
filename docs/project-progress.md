@@ -270,6 +270,22 @@ A2（`docs/open-source-borrowing.md`）**没有因此关闭**：本轮的小时�
 
 规模：测试 44 文件 / 309 → **45 文件 / 316 用例**（孤立提交树复核；共享工作树里另有窗口未提交的 5 条用例，合起来读作 321）；路由矩阵 133 → **138 行**（`/metrics.html`、`/metrics`、`GET /api/v1/metrics`、`GET …/collect` 404、`POST …/collect` 400）；`src/server.js` 3866 → **3924 行**。
 
+## 进展（2026-09-26，发布链路：开机自启状态回读）
+
+`src/domain/releases/sing-box.js` 里 systemd 的 `systemctl enable` 与 OpenRC 的 `rc-update add` 都带 `|| true`，
+enable 失败不会让发布变红，而 `result=applied` 只证明"这次重启后进程在"，不证明"机器重启后还会自启"。
+新增 `report_singbox_boot_state`（配置切换之后、激活之前跑一次）回读真实状态并打 `[publish] boot=enabled|disabled|unknown`：
+systemd 用 `is-enabled`，无 systemd 走 `rc-update show default` 匹配，两条都没有才给 `unknown`。
+`describeSingBoxTargetOutcome` 据此把 `applied` 的文案分成三档——未自启时明确写"重启后不会自动拉起"，
+旧节点没有该标记时保持原口径不猜。**没有**把 boot 状态并入 `EFFECTIVENESS_CHECK_NAMES` 的判定链，
+所以发布记录的状态机不变，只多一条可读证据。`src/domain/releases/haproxy.js:218` 是同一个 `|| true` 盲区，本轮未动。
+
+一个只在真机上暴露的坑（已进回归用例）：shell 片段写在 JS 模板字面量里时，`\|` 会被 JS 吃掉变成一个裸 `|`，
+于是 `grep -Eq '^...sing-box[[:space:]]*|'` 成了"任意内容或空"的恒真备选分支——**任何**节点的 rc-update 输出都会被判成已自启。
+改成字符类 `[|]`，并加了不依赖 shell 的字符串断言。验证是在 `alpine:3.20`（busybox ash + busybox grep）里
+拿三份假 `rc-update` 输出跑出来的：`enabled / disabled / unknown` 三条分支各自命中。
+测试 323 → **325**（`test/release-boot-state.test.js`）。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
