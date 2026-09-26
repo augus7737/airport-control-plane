@@ -107,6 +107,18 @@ export const appState = {
     releases: [],
     accessUsers: [],
   },
+  metrics: {
+    buckets: [],
+    samples: [],
+    failures: [],
+    scheduler: null,
+    autoRefresh: true,
+    isRefreshing: false,
+    isCollecting: false,
+    lastCollectedAt: null,
+    lastCollectMessage: null,
+    _refreshTimer: null,
+  },
   platform: createDefaultPlatformState(),
   assetEditor: {
     targetNodeId: null,
@@ -436,6 +448,16 @@ export function setCostReleases(items) {
 
 export function setCostAccessUsers(items) {
   appState.costs.accessUsers = Array.isArray(items) ? [...items] : [];
+}
+
+export function setMetrics(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  // 逐项赋值而不是整体替换：autoRefresh/采集中这类本页状态不能被刷新抹掉
+  appState.metrics.buckets = Array.isArray(source.buckets) ? [...source.buckets] : [];
+  appState.metrics.samples = Array.isArray(source.samples) ? [...source.samples] : [];
+  appState.metrics.failures = Array.isArray(source.failures) ? [...source.failures] : [];
+  appState.metrics.scheduler =
+    source.scheduler && typeof source.scheduler === "object" ? { ...source.scheduler } : null;
 }
 
 export function sortConfigReleases(configReleases) {

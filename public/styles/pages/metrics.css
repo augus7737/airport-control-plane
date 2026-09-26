@@ -1,0 +1,268 @@
+body[data-page="metrics"] .metrics-grid .panel-body {
+  gap: 6px;
+}
+
+body[data-page="metrics"] .metrics-workspace {
+  align-items: start;
+}
+
+body[data-page="metrics"] .metric-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+body[data-page="metrics"] .metric-collect-note {
+  margin: 4px 0 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.07);
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+body[data-page="metrics"] .metric-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+body[data-page="metrics"] .metric-card {
+  display: flex;
+  flex-direction: column;
+}
+
+body[data-page="metrics"] .metric-card .panel-body {
+  display: grid;
+  gap: 14px;
+}
+
+body[data-page="metrics"] .metric-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body[data-page="metrics"] .metric-card-head .node-meta {
+  min-width: 0;
+}
+
+body[data-page="metrics"] .metric-card-head .node-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="metrics"] .metric-card-head .node-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+body[data-page="metrics"] .metric-meters {
+  display: grid;
+  gap: 12px;
+}
+
+body[data-page="metrics"] .metric-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+body[data-page="metrics"] .metric-meter-head strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+}
+
+body[data-page="metrics"] .metric-meter-foot {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-page="metrics"] .bar > span.tone-warn {
+  background: linear-gradient(90deg, var(--cyan), var(--yellow));
+}
+
+body[data-page="metrics"] .bar > span.tone-danger {
+  background: linear-gradient(90deg, var(--yellow), var(--red));
+}
+
+/* 未知态不能画成 0%：轨道改成虚线空槽，运维一眼能分清"没采到"和"真的是空" */
+body[data-page="metrics"] .meter-unknown .bar {
+  background: transparent;
+  outline: 1px dashed var(--line-strong);
+  outline-offset: -1px;
+}
+
+body[data-page="metrics"] .metric-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+body[data-page="metrics"] .metric-fact {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.05);
+}
+
+body[data-page="metrics"] .metric-fact span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+body[data-page="metrics"] .metric-fact strong {
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-page="metrics"] .metric-alerts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+body[data-page="metrics"] .metric-chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+body[data-page="metrics"] .metric-chip.warn {
+  color: var(--warning-text);
+  background: var(--yellow-soft);
+}
+
+body[data-page="metrics"] .metric-chip.danger {
+  color: var(--danger-text);
+  background: var(--red-soft);
+}
+
+body[data-page="metrics"] .metric-spark {
+  display: grid;
+  gap: 4px;
+}
+
+body[data-page="metrics"] .metric-spark-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+body[data-page="metrics"] .metric-spark-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 44px;
+  /* 空闲节点的柱子高度接近 0，没有基线看起来像整块缺失 */
+  border-bottom: 1px solid var(--line);
+}
+
+body[data-page="metrics"] .metric-spark-bars i {
+  flex: 1 1 0;
+  min-width: 6px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, var(--cyan), rgba(56, 189, 248, 0.35));
+}
+
+body[data-page="metrics"] .metric-spark-bars i.tone-warn {
+  background: linear-gradient(180deg, var(--yellow), rgba(251, 191, 36, 0.35));
+}
+
+body[data-page="metrics"] .metric-spark-bars i.tone-danger {
+  background: linear-gradient(180deg, var(--red), rgba(248, 113, 113, 0.35));
+}
+
+body[data-page="metrics"] .metric-spark-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+body[data-page="metrics"] .metric-listeners {
+  padding: 9px 11px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+}
+
+body[data-page="metrics"] .metric-listeners.ok {
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+body[data-page="metrics"] .metric-listeners.warn {
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: var(--yellow-soft);
+  display: grid;
+  gap: 7px;
+}
+
+body[data-page="metrics"] .metric-listener-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+body[data-page="metrics"] .metric-port {
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(13, 21, 36, 0.5);
+  font-size: 0.72rem;
+}
+
+body[data-page="metrics"] .metric-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+body[data-page="metrics"] .metric-card-failure {
+  color: var(--danger-text);
+}
+
+body[data-page="metrics"] .metric-card-empty {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+body[data-page="metrics"] .metric-raw {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(13, 21, 36, 0.6);
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@media (max-width: 720px) {
+  body[data-page="metrics"] .metric-card-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -3,6 +3,7 @@ import { createBootstrapTokensRoutes } from "./bootstrap-tokens.js";
 import { createConfigReleasesRoutes } from "./config-releases.js";
 import { createCostsRoutes } from "./costs.js";
 import { createDiagnosticsRoutes } from "./diagnostics.js";
+import { createMetricsRoutes } from "./metrics.js";
 import { createNodeGroupsRoutes } from "./node-groups.js";
 import { createNodesRoutes } from "./nodes.js";
 import { createOperationsRoutes } from "./operations.js";
@@ -26,6 +27,7 @@ export function createApiRoutes(ctx) {
     createNodesRoutes(ctx),
     createTasksRoutes(ctx),
     createProbesRoutes(ctx),
+    createMetricsRoutes(ctx),
     createDiagnosticsRoutes(ctx),
     createBootstrapTokensRoutes(ctx),
     createAccessUsersRoutes(ctx),

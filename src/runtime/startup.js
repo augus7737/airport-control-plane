@@ -9,6 +9,7 @@ export function createServerStartupRuntime(dependencies) {
     loadBootstrapTokens,
     loadConfigReleaseStore,
     loadDiagnosticStore,
+    loadMetricStore,
     loadNodeStore,
     loadNodeGroupStore,
     loadOperationStore,
@@ -24,6 +25,7 @@ export function createServerStartupRuntime(dependencies) {
     loadTaskStore,
     ensureDefaultSystemTemplates,
     reconcileTaskStoreFromOperations,
+    startMetricsScheduler,
     startProbeScheduler,
   } = dependencies;
 
@@ -36,6 +38,7 @@ export function createServerStartupRuntime(dependencies) {
     await loadOperationStore();
     await loadTaskStore();
     await loadProbeStore();
+    await loadMetricStore?.();
     await loadDiagnosticStore?.();
     await loadBootstrapTokens();
     await loadOperatorSessionStore?.();
@@ -53,6 +56,7 @@ export function createServerStartupRuntime(dependencies) {
     await ensureBootstrapInitTasks();
     listen();
     startProbeScheduler?.();
+    startMetricsScheduler?.();
   }
 
   return {

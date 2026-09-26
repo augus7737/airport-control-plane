@@ -110,6 +110,7 @@ import {
   createSystemTemplate,
   createSystemUser,
   applySystemTemplate,
+  collectNodeMetrics,
   deleteAccessUser,
   deleteNodeGroup,
   deleteProvider,
@@ -119,6 +120,7 @@ import {
   getAccessUserShare,
   hydrateRuntimeStore,
   regenerateAccessUserShareToken,
+  refreshMetrics,
   refreshOperations,
   refreshRuntimeData,
   rollbackConfigRelease,
@@ -149,6 +151,7 @@ import { createAccessUsersPageModule } from "./js/pages/access-users-page.js";
 import { createNodeCellHelpersModule } from "./js/pages/node-cell-helpers.js";
 import { createNodeDetailPageRenderer } from "./js/pages/node-detail-page.js";
 import { createNodeShellPageModule } from "./js/pages/node-shell-page.js";
+import { createMetricsPageModule } from "./js/pages/metrics-page.js";
 import { createNodesPageModule } from "./js/pages/nodes-page.js";
 import { createProvidersPageModule } from "./js/pages/providers-page.js";
 import { createPageRenderRuntime } from "./js/pages/page-render-runtime.js";
@@ -212,6 +215,14 @@ const pageMeta = {
     actions: [
       { label: "批量执行", kind: "default", href: "/terminal.html" },
       { label: "管理系统模板", kind: "default", href: "/system-templates.html" },
+    ],
+  },
+  metrics: {
+    title: "节点监控",
+    subtitle: "看每台机器实际被配额卡在哪：CPU、内存、磁盘、流量，以及谁在监听端口。",
+    actions: [
+      { label: "刷新", kind: "default", id: "metrics-reload" },
+      { label: "全部采集", kind: "primary", id: "metrics-collect-all" },
     ],
   },
   terminal: {
@@ -517,6 +528,22 @@ const { renderTasksPage, setupTasksPage } = createTasksPageModule({
   taskStatusText,
   windowRef: window,
 });
+const { renderMetricsPage, setupMetricsPage } = createMetricsPageModule({
+  appState,
+  collectNodeMetrics,
+  documentRef: document,
+  escapeHtml,
+  formatRelativeTime,
+  getCollectionHealth,
+  getNodeDisplayName,
+  nodeDetailHref,
+  page,
+  refreshMetrics,
+  renderCurrentContent,
+  statusClassName,
+  statusText,
+  windowRef: window,
+});
 const { renderProvidersPage, setupProvidersPage } = createProvidersPageModule({
   appState,
   createProvider,
@@ -778,6 +805,7 @@ const navGroups = [
       { key: "nodes", label: "节点清单", href: "/nodes.html" },
       { key: "terminal", label: "运维终端", href: "/terminal.html" },
       { key: "tasks", label: "任务中心", href: "/tasks.html" },
+      { key: "metrics", label: "节点监控", href: "/metrics.html" },
     ],
   },
   {
@@ -851,7 +879,9 @@ pageRenderRuntime = createPageRenderRuntime({
   page,
   pageMeta,
   refreshBootstrapCommandDom,
+  refreshMetrics,
   renderAccessUsersPage,
+  renderMetricsPage,
   renderNodeDetail,
   renderNodeShellPage,
   renderNodesPage,
@@ -868,6 +898,7 @@ pageRenderRuntime = createPageRenderRuntime({
   setupAccessUsersPage,
   setupAssetModal,
   setupManualModal,
+  setupMetricsPage,
   setupModal,
   setupNodeDeleteActions,
   setupNodeDetailActions,

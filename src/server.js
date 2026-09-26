@@ -76,6 +76,8 @@ import {
 } from "./domain/costs/normalize.js";
 import { createStorePersistenceInfrastructure } from "./infrastructure/store-persistence.js";
 import { createProbeSchedulerRuntime } from "./runtime/probe-scheduler.js";
+import { createMetricsSchedulerRuntime } from "./runtime/metrics-scheduler.js";
+import { createMetricsCollectorDomain } from "./domain/metrics/collector.js";
 import { createServerStartupRuntime } from "./runtime/startup.js";
 import { createSafeRequestHandler, resolveRequestUrl } from "./utils/request-handler.js";
 import { createApiRoutes } from "./http/routes/index.js";
@@ -89,6 +91,7 @@ const nodesFile = path.join(dataDir, "nodes.json");
 const operationsFile = path.join(dataDir, "operations.json");
 const tasksFile = path.join(dataDir, "tasks.json");
 const probesFile = path.join(dataDir, "probes.json");
+const metricsFile = path.join(dataDir, "metrics.json");
 const diagnosticsFile = path.join(dataDir, "diagnostics.json");
 const bootstrapTokensFile = path.join(dataDir, "bootstrap-tokens.json");
 const operatorSessionsFile = path.join(dataDir, "operator-sessions.json");
@@ -163,6 +166,17 @@ const autoProbeMinGapMs = Number.parseInt(
   10,
 );
 const autoProbeJitterMs = Number.parseInt(process.env.AUTO_PROBE_JITTER_MS ?? "10000", 10);
+const metricsEnabled = String(process.env.AIRPORT_METRICS_ENABLED ?? "true").toLowerCase() !== "false";
+const metricsIntervalMs = Number.parseInt(
+  process.env.AIRPORT_METRICS_INTERVAL_MS ?? `${5 * 60 * 1000}`,
+  10,
+);
+const metricsJitterMs = Number.parseInt(process.env.AIRPORT_METRICS_JITTER_MS ?? "15000", 10);
+const metricsCollectTimeoutMs = Number.parseInt(
+  process.env.AIRPORT_METRICS_TIMEOUT_MS ?? "30000",
+  10,
+);
+const metricsNodeScriptFile = path.join(scriptsDir, "node", "metrics-collect.sh");
 let persistOperatorSessions = async () => {};
 const operatorAuth = createOperatorSessionAuth({
   env: process.env,
@@ -174,6 +188,8 @@ const fingerprintIndex = new Map();
 const operationStore = [];
 const taskStore = [];
 const probeStore = [];
+const metricsBucketStore = [];
+const metricsSampleStore = [];
 const diagnosticStore = [];
 const shellSessionStore = new Map();
 const bootstrapTokenStore = new Map();
@@ -873,6 +889,7 @@ const {
   loadAccessUserStore,
   loadConfigReleaseStore,
   loadDiagnosticStore,
+  loadMetricStore,
   loadNodeStore,
   loadNodeGroupStore,
   loadOperationStore,
@@ -888,6 +905,7 @@ const {
   persistAccessUserStore,
   persistConfigReleaseStore,
   persistDiagnosticStore,
+  persistMetricStore,
   persistNodeStore,
   persistNodeGroupStore,
   persistOperationStore,
@@ -910,6 +928,9 @@ const {
   diagnosticsFile,
   fingerprintIndex,
   mkdir,
+  metricsBucketStore,
+  metricsFile,
+  metricsSampleStore,
   nodeStore,
   nodeGroupStore,
   nodeGroupsFile,
@@ -1238,6 +1259,37 @@ const {
   persistTaskStore,
   taskStore,
   upsertTaskRecord,
+});
+
+const {
+  collectMetrics,
+  listMetricBuckets,
+  listMetricSamples,
+} = createMetricsCollectorDomain({
+  cwdProvider: () => process.cwd(),
+  collectTimeoutMs: metricsCollectTimeoutMs,
+  getNodeById: (nodeId) => nodeStore.get(nodeId),
+  listNodes: () => [...nodeStore.values()],
+  metricsBucketStore,
+  metricsSampleStore,
+  nowIso,
+  persistMetricStore,
+  readFile,
+  resolveExecutionTransport: async (node) => resolveExecutionTransport(node),
+  scriptPath: metricsNodeScriptFile,
+  spawn,
+});
+
+const {
+  getMetricsSchedulerState,
+  startMetricsScheduler,
+} = createMetricsSchedulerRuntime({
+  collectMetrics,
+  enabled: metricsEnabled,
+  intervalMs: metricsIntervalMs,
+  jitterMs: metricsJitterMs,
+  listNodes: () => [...nodeStore.values()],
+  nowIso,
 });
 
 async function buildPlatformContext(url) {
@@ -3733,11 +3785,13 @@ const apiRoutes = createApiRoutes({
   buildSystemUserRecord,
   closeShellSession,
   closeShellSessionsForNode,
+  collectMetrics,
   collectSystemUserConflictMessages,
   configReleaseStore,
   createShellSession,
   defaultInitTemplateForNode,
   detachRelayNodeReferences,
+  getMetricsSchedulerState,
   ensureBootstrapAutoProbe,
   ensureNodeInitTask,
   executeBootstrapInitTask,
@@ -3762,7 +3816,11 @@ const apiRoutes = createApiRoutes({
   isBootstrapTokenExhaustedError,
   latestNodeTask,
   listDiagnostics,
+  listMetricBuckets,
+  listMetricSamples,
   listNodeProbes,
+  metricSampleLimit: 40,
+  metricsSampleStore,
   mirrorPlatformSingBoxArtifact,
   missingIds,
   nodeGroupStore,
@@ -3834,6 +3892,7 @@ const { start } = createServerStartupRuntime({
     });
   },
   startProbeScheduler,
+  startMetricsScheduler,
   loadAccessUserStore: async () => {
     await loadAccessUserStore();
     await ensureAccessUserShareTokens();
@@ -3842,6 +3901,7 @@ const { start } = createServerStartupRuntime({
   loadOperatorSessionStore,
   loadConfigReleaseStore,
   loadDiagnosticStore,
+  loadMetricStore,
   loadNodeStore,
   loadNodeGroupStore,
   loadOperationStore,

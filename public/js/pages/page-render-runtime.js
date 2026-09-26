@@ -5,7 +5,9 @@ export function createPageRenderRuntime({
   page,
   pageMeta,
   refreshBootstrapCommandDom,
+  refreshMetrics,
   renderAccessUsersPage,
+  renderMetricsPage,
   renderNodeDetail,
   renderNodeShellPage,
   renderNodesPage,
@@ -22,6 +24,7 @@ export function createPageRenderRuntime({
   setupAccessUsersPage,
   setupAssetModal,
   setupManualModal,
+  setupMetricsPage,
   setupModal,
   setupNodeDeleteActions,
   setupNodeDetailActions,
@@ -70,6 +73,8 @@ export function createPageRenderRuntime({
       pageContent.innerHTML = renderNodeShellPage(appState.nodes, appState.operations);
     } else if (page === "tasks") {
       pageContent.innerHTML = renderTasksPage();
+    } else if (page === "metrics") {
+      pageContent.innerHTML = renderMetricsPage();
     } else if (page === "terminal") {
       pageContent.innerHTML = renderTerminalPage(appState.nodes, appState.operations);
     } else if (page === "tokens") {
@@ -86,6 +91,7 @@ export function createPageRenderRuntime({
     setupNodeDetailActions();
     setupNodeTerminal();
     setupTasksPage();
+    setupMetricsPage();
     setupTokensPage();
     setupAccessUsersPage();
     setupSystemUsersPage();
@@ -121,6 +127,10 @@ export function createPageRenderRuntime({
     }
 
     await hydrateRuntimeStore();
+    if (page === "metrics") {
+      // 样本载荷比别的列表页大，只在监控页取，不进全站 hydrate
+      await refreshMetrics();
+    }
     renderCurrentContent();
 
     setupModal();

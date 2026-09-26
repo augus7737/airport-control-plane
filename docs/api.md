@@ -1,7 +1,7 @@
 # API
 
-更新时间：2026-09-23
-适用范围：当前已实现的全部 HTTP 接口（`src/server.js` 内联 13 个路由块 + `src/http/routes/` 16 个模块 43 个路由块）；业务路由在 `src/http/routes/<namespace>.js`，鉴权、`/healthz`、bootstrap 脚本、订阅、sing-box 制品与静态资源等管线接口在 `src/server.js`。本文只描述已经存在的行为；路线图中的能力见 `docs/project-assessment-and-roadmap.md`。
+更新时间：2026-09-26
+适用范围：当前已实现的全部 HTTP 接口（`src/server.js` 内联路由块 + `src/http/routes/` 17 个模块）；业务路由在 `src/http/routes/<namespace>.js`，鉴权、`/healthz`、bootstrap 脚本、订阅、sing-box 制品与静态资源等管线接口在 `src/server.js`。本文只描述已经存在的行为；路线图中的能力见 `docs/project-assessment-and-roadmap.md`。
 
 ## Conventions
 
@@ -31,6 +31,7 @@
 | `nodes.js` | `/api/v1/nodes*` |
 | `tasks.js` | `/api/v1/tasks*` |
 | `probes.js` | `/api/v1/probes` |
+| `metrics.js` | `/api/v1/metrics*` |
 | `diagnostics.js` | `/api/v1/diagnostics` |
 | `bootstrap-tokens.js` | `/api/v1/bootstrap-tokens*` |
 | `access-users.js` | `/api/v1/access-users*` |
@@ -288,6 +289,16 @@ Notes:
 
 返回最近探测结果（上限 500 条）。顶层 `latency_ms` 是该探测类型的主耗时，必须结合 `latency_source`（`management_tcp` / `management_ssh_e2e` / `business_entry_tcp` / `relay_upstream_tcp` / `ssh_auth`）判断口径；SSH 接管耗时不代表业务网络 RTT。`reason_code` 与失败阶段的中文口径统一在 `public/js/shared/probe-formatters.js`。
 
+## Metrics
+
+### `POST /api/v1/metrics/collect`
+
+请求体 `{ "node_ids": [] }`。空数组表示"全部 `active|degraded|failed` 节点"；含未知 id 时整次请求 `400 { error: "validation_failed" }`，不做部分执行。响应 `{ collected_at, total, success, failed, samples[] }`，**采集失败也返回 `200`**，失败以 `samples[].status != "success"` 表达（不混成 HTTP 层错误，否则页面分不清"没数据"和"节点离线"）。每台节点是一次 SSH `sh -s` 管道执行 `scripts/node/metrics-collect.sh`，只读、不装常驻 agent；口径全部走 cgroup v2（容器内 `/proc/meminfo` 与 `nproc` 是宿主值）。
+
+### `GET /api/v1/metrics?node_id=&limit=`
+
+返回 `{ buckets, samples, failures, scheduler }`。`buckets` 是按节点、按小时聚合的结果（`sample_count`、`*_avg`/`*_max`、`oom_kill_seen`、`net_rx_bytes`/`net_tx_bytes`）；计数型指标的增量需要同一小时内至少两个点，**只有一个样本时增量是 `null` 而不是 `0`**。`limit` 默认 40、上限 200，只作用于 `samples`。`failures` 是最近 10 条非成功采样记录（含 `error` 与 `raw_excerpt`）。`scheduler` 反映定时采集状态（`enabled`、`interval_ms`、`next_run_at`、`last_run_summary`），`AIRPORT_METRICS_ENABLED=false` 时为关闭态而非缺失。
+
 ## Operations and Web Shell
 
 ### `GET /api/v1/operations`
@@ -411,7 +422,7 @@ Notes:
 
 ## Env variables
 
-`PORT`(8080)、`PLATFORM_PUBLIC_KEY`、`PLATFORM_SSH_PRIVATE_KEY_PATH`、`PLATFORM_PUBLIC_BASE_URL`、`CLIENT_PUBLIC_BASE_URL`、`NODE_SSH_USER`(root)、`DEMO_SHELL_BINARY`、`OPERATION_HISTORY_LIMIT`(1000)、`OPERATION_EXECUTION_TIMEOUT_MS`(300000)、`OPERATION_OUTPUT_LIMIT_BYTES`(128000)、`OPERATION_TARGET_CONCURRENCY`(3)、`SSH_CONNECT_TIMEOUT_SECONDS`(15)、`PROBE_TCP_TIMEOUT_MS`(4000)、`PROBE_SSH_TIMEOUT_MS`(12000)、`RELEASE_VERIFY_PROBE_ATTEMPTS`(3)、`RELEASE_VERIFY_PROBE_RETRY_GAP_MS`(2000)、`AUTO_PROBE_ENABLED`(true)、`AUTO_PROBE_INTERVAL_MS`(3600000)、`AUTO_PROBE_MIN_GAP_MS`(3600000)、`AUTO_PROBE_BATCH_SIZE`(0)、`AUTO_PROBE_JITTER_MS`(10000)、`AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT`(未设置)、`AIRPORT_DATA_DIR`(仓库内 `data/`)、以及上一节列出的鉴权变量。
+`PORT`(8080)、`PLATFORM_PUBLIC_KEY`、`PLATFORM_SSH_PRIVATE_KEY_PATH`、`PLATFORM_PUBLIC_BASE_URL`、`CLIENT_PUBLIC_BASE_URL`、`NODE_SSH_USER`(root)、`DEMO_SHELL_BINARY`、`OPERATION_HISTORY_LIMIT`(1000)、`OPERATION_EXECUTION_TIMEOUT_MS`(300000)、`OPERATION_OUTPUT_LIMIT_BYTES`(128000)、`OPERATION_TARGET_CONCURRENCY`(3)、`SSH_CONNECT_TIMEOUT_SECONDS`(15)、`PROBE_TCP_TIMEOUT_MS`(4000)、`PROBE_SSH_TIMEOUT_MS`(12000)、`RELEASE_VERIFY_PROBE_ATTEMPTS`(3)、`RELEASE_VERIFY_PROBE_RETRY_GAP_MS`(2000)、`AUTO_PROBE_ENABLED`(true)、`AUTO_PROBE_INTERVAL_MS`(3600000)、`AUTO_PROBE_MIN_GAP_MS`(3600000)、`AUTO_PROBE_BATCH_SIZE`(0)、`AUTO_PROBE_JITTER_MS`(10000)、`AIRPORT_METRICS_ENABLED`(true)、`AIRPORT_METRICS_INTERVAL_MS`(300000)、`AIRPORT_METRICS_JITTER_MS`(15000)、`AIRPORT_METRICS_TIMEOUT_MS`(30000)、`AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT`(未设置)、`AIRPORT_DATA_DIR`(仓库内 `data/`)、以及上一节列出的鉴权变量。
 
 ## Not implemented
 

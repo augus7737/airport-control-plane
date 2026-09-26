@@ -1,12 +1,12 @@
 # 数据模型
 
-更新时间：2026-09-22
+更新时间：2026-09-26
 适用范围：当前代码实际持久化的实体与字段（`src/server.js` + `src/domain/**`）。文中字段均以代码构造为准。
 
 ## 持久化形态
 
-- 没有 SQL、没有 SQLite。每个 store 一个 JSON 文件，路径固定为仓库内 `data/`，无环境变量可改。
-- 除 `platform-sing-box.json` 是对象外，所有文件形状都是 `{ "items": [ ... ] }`。
+- 没有 SQL、没有 SQLite。每个 store 一个 JSON 文件，默认目录是仓库内 `data/`，可用 `AIRPORT_DATA_DIR` 改到别处（`src/server.js:89`），并行开发/验证靠它隔离实例。
+- 除 `platform-sing-box.json` 是对象外，所有文件形状都是 `{ "items": [ ... ] }`；`metrics.json` 额外带一个同级的 `samples` 数组（桶与原始样本同文件读写，避免两次落盘互相追不上）。
 - 写入流程：临时文件 → `fsync` → 原子 `rename` → 保留上一版 `.bak`；主文件损坏时启动阶段回读备份（`src/infrastructure/json-file-store.js`）。
 - 每个文件一条串行写队列，避免并发覆盖（`src/infrastructure/store-persistence.js`）。
 - 没有迁移表。“迁移”是启动时幂等修复函数：管理链路字段迁移、厂商地域归一、节点-厂商关联迁移、内置系统模板种子、bootstrap 初始化任务补齐。
@@ -21,6 +21,7 @@
 | `tasks.json` | Task | `src/domain/tasks/store.js` | 200 |
 | `probes.json` | ProbeResult | `src/domain/probes/executor.js` | 500 |
 | `diagnostics.json` | NodeDiagnostic | `src/domain/diagnostics/node-quality.js` | 200 |
+| `metrics.json` | MetricBucket（`items`）+ MetricSample（`samples`） | `src/domain/metrics/collector.js` | 桶按 30 天裁剪；样本 240 条 |
 | `operations.json` | OperationRun | `src/domain/operations/executor.js` | `OPERATION_HISTORY_LIMIT`，默认 1000 |
 | `bootstrap-tokens.json` | BootstrapToken | `src/domain/bootstrap/tokens.js` | 无 |
 | `operator-sessions.json` | OperatorSession | `src/domain/auth/session.js` | 过期即清理 |
@@ -118,6 +119,32 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 - `latency_source`：`management_tcp | management_ssh_e2e | business_entry_tcp | relay_upstream_tcp | ssh_auth | relay_direct_tcp_skipped`。
 - `reason_code` 是稳定枚举（如 `probe_target_missing`、`business_route_unpublished`、`relay_udp_not_supported`、`udp_timeout`），中文文案只在 `public/js/shared/probe-formatters.js` 维护一份，前端不再各自硬编码。
 - 探测完成只更新健康字段，不用旧节点快照回写资产字段。
+
+## MetricSample / MetricBucket
+
+节点资源采样的两种形态，同存 `metrics.json`。样本是原始事实，桶是按小时的聚合结果；两者都由 `src/domain/metrics/collector.js` 产出，采集脚本是 `scripts/node/metrics-collect.sh`（POSIX sh + busybox applet，经 SSH `sh -s` 管道执行，节点上不装常驻 agent）。
+
+```
+MetricSample
+{ id, node_id, hostname, collected_at, finished_at, duration_ms,
+  status(success|unavailable|timeout|...), error,
+  transport_kind, transport_label,
+  metrics{...}, processes[], listeners[], summary{...}, raw_excerpt }
+
+MetricBucket（存盘是累计键，接口输出是聚合键）
+{ node_id, hour: "YYYY-MM-DDTHH", count, failed_count, started_at, updated_at,
+  sum_* / max_* / last_* / first_* }
+→ GET 时映射为 { sample_count, cpu_used_pct_avg|_max, mem_used_avg_bytes|_max_bytes,
+  mem_limit_bytes, mem_events_max, oom_kill_seen, cpu_nr_throttled_max,
+  loadavg_1m_avg|_max, disk_used_mb, disk_total_mb, net_rx_bytes, net_tx_bytes, ... }
+```
+
+- **口径必须是 cgroup v2**：LXC 容器里 `/proc/meminfo` 常被替换成假常量，`free`/`nproc` 读到的是宿主值。脚本仍会输出 `proc_memtotal_kb` 作为对照，但产品口径不采信它。
+- `cpu_used_pct` 保留两位小数。这些容器常年空闲，整数百分比会让所有节点都读成 0，看起来像监控坏了。
+- 计数型指标（`net_rx_bytes`/`net_tx_bytes`）按同小时内首末差值出增量；**该小时只有 1 个样本时增量是 `null`**，不是 `0`。
+- `mem_events_max`、`cpu_nr_throttled` 是 cgroup 自容器创建起的累计值，只有窗口内增量才说明"现在还在发生"；`oom_kill_seen` 是该小时的粘性标记。
+- 失败样本会入库（`status != "success"`，带 `error` 与 `raw_excerpt`），并在该小时桶上只累加 `failed_count`、不进入 `count`（`count` 是均值分母）。页面据此区分"采集失败"与"节点没有跑"。
+- 保留量：样本 240 条（`metricSampleLimit`），桶按小时裁剪到 30 天。
 
 ## NodeDiagnostic
 

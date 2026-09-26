@@ -16,6 +16,9 @@ export function createStorePersistenceInfrastructure(dependencies) {
     diagnosticsFile,
     fingerprintIndex,
     mkdir,
+    metricsBucketStore,
+    metricsFile,
+    metricsSampleStore,
     nodeStore,
     nodeGroupStore,
     nodeGroupsFile,
@@ -279,6 +282,35 @@ export function createStorePersistenceInfrastructure(dependencies) {
       const items = Array.isArray(payload.items) ? payload.items : [];
       probeStore.length = 0;
       probeStore.push(...items);
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        await ensureDataDir();
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  async function persistMetricStore() {
+    const payload = {
+      items: metricsBucketStore,
+      samples: metricsSampleStore,
+    };
+    await persistJsonFile(metricsFile, payload);
+  }
+
+  async function loadMetricStore() {
+    try {
+      const payload = await readJsonFile(metricsFile);
+      metricsBucketStore.length = 0;
+      metricsSampleStore.length = 0;
+      if (Array.isArray(payload.items)) {
+        metricsBucketStore.push(...payload.items);
+      }
+      if (Array.isArray(payload.samples)) {
+        metricsSampleStore.push(...payload.samples);
+      }
     } catch (error) {
       if (isMissingFileError(error)) {
         await ensureDataDir();
@@ -554,6 +586,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     loadAccessUserStore,
     loadConfigReleaseStore,
     loadDiagnosticStore,
+    loadMetricStore,
     loadNodeStore,
     loadNodeGroupStore,
     loadOperationStore,
@@ -571,6 +604,7 @@ export function createStorePersistenceInfrastructure(dependencies) {
     persistDiagnosticStore,
     persistNodeStore,
     persistNodeGroupStore,
+    persistMetricStore,
     persistOperationStore,
     persistOperatorSessionStore,
     persistProviderStore,

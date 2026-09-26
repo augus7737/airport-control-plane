@@ -1,6 +1,6 @@
 # 项目进度
 
-更新时间：2026-09-23
+更新时间：2026-09-26
 基线提交：`c77d27f`（2026-09-23 假节点按架构固定镜像 tag，并加入 Alpine/OpenRC 节点）+ 本轮控制面裸机部署改造；`46544c0`（2026-08-21）及之前的积累见下方“近期进展”
 
 ## 当前定位
@@ -236,6 +236,39 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 调研过程也纠正了我自己前一版的两处错误：低星同类项目的 owner 当时按显示名推断，`CELERITY-project/*`、`rroula/xray-pilot`、`misakacpp/mini-sb-agent` 三个链接都错；`hiddifypanel` 也不在 `Hiddify-Manager` 仓库里，而是 `.gitmodules` 指向的独立仓库 `hiddify/Hiddify-Panel`。教训与 UI 评估轮同源：**外部结论必须抓到文件正文才算取证**。
 
+## 进展（2026-09-26，节点资源监控：cgroup 口径采集 + 小时桶 + `/metrics.html`）
+
+节点侧不装常驻 agent，也没有可信的 `/proc/meminfo`：LXC 容器里 `free`、`nproc`、meminfo 报的都是**宿主**值。
+唯一诚实的口径是 cgroup v2，所以 `scripts/node/metrics-collect.sh`（145 行纯 POSIX/busybox，`sh -s` 管道下发，不装包）
+只读 `/sys/fs/cgroup/` 下的 `memory.max|memory.current|memory.events|cpu.max|cpu.stat`、`df` 和 `netstat`，
+输出 `key=value` 快照；解析、聚合、落盘全在控制面 `src/domain/metrics/collector.js`（502 行）。
+
+接口与调度：
+
+- `POST /api/v1/metrics/collect`：`node_ids` 留空＝对全部 `active/degraded/failed` 节点采集；未知 id **整条请求 400**（不做部分接受）；单节点采集失败仍回 `200`，但留下一条 `status` 非 success 的样本。
+- `GET /api/v1/metrics?node_id=&limit=`：返回小时桶，`limit` 默认 40 / 上限 200，`failures[]` 带最近 10 条非成功样本。
+- 周期采集复用探测调度器的形态：`AIRPORT_METRICS_ENABLED`(true)、`INTERVAL_MS`(300000)、`JITTER_MS`(15000)、`TIMEOUT_MS`(30000)，默认 5 分钟一次。
+- 净流量按桶内首末两点做差，不足 2 点该小时给 `null` 而不是 `0`；`cpu_nr_throttled` / `mem_events_*` 是**累计**计数器，只有窗口差值有意义。
+- 修掉一处死状态：`recordSample` 原来在 `status!=="success"` 时直接 `return`，桶根本拿不到，于是 `bucket.failed_count` 永远写不进去——前端"采集失败"这条信号在旧代码里是不可能出现的。现在失败只累加 `failed_count`、**不进 `count`**（`count` 是均值分母，掺失败点会稀释平均值）。
+- 容量：样本 240 条封顶，桶按 30 天裁剪；`metrics.json` 是唯一带兄弟数组 `samples` 的 store。
+
+前端 `/metrics.html`（Operate 模式，一节点一卡：CPU/内存/磁盘三条配额计 + CPU 趋势柱 + 本小时净流量 + 告警 chip + 外来监听端口 + 顶部四个统计）。取证后改掉的口径问题：
+
+- 内存条读 `summary.mem_limit_bytes`、磁盘读 `summary.disk_used_pct`——**后端两个字段都不存在**，两条计永远画"-"。改为 `mem_max_bytes` 与 `ratioPct(disk_used_mb, disk_total_mb)`，与桶口径同源。
+- 累计计数器原来当告警用，每张卡每次都挂 chip。改成窗口增量并写明 `· 近 N 小时`（`小时跨度`由首末桶反推），累计值只放 `title`；OOM chip 改为点名发生的小时。
+- 这些机器常年 CPU <1%，按配额出图是一条 1.76px 的平线。柱子高度按**窗口峰值**归一并给 12% 下限，颜色仍按占配额比例——趋势可读，严重程度也不被夸大；标题标"按窗口峰值归一 + 峰值 X%"，并给柱区加基线，避免空闲节点看起来像整块缺失。
+- 本小时只有 1 次采样时增量算不出来，原来显示 0 冒充"没有流量"。现在退到最近一个有区间的小时，并把标题改成 `<时刻>流量`。
+- 外来监听端口去重，netstat 被截断的程序名清理干净（`658/bin/xray-linux-` → `xray-linux`）；全是平台进程时说"监听 1 个端口（22），全部由平台服务持有"。
+- 顶部"需关注"与卡片 `tone-danger` 用同一条阈值线（配额 ≥90% / 有失败记录 / 端口被非平台进程监听），首屏数字必须能指到需要点开的机器。
+
+验证边界：拿 BR/US/JP **三台真机各自真实抓到的采集输出**灌进临时实例（`AIRPORT_DATA_DIR` 隔离），浏览器实测 1440/900/720/480 无横向溢出。US 的 93% 内存按 `tone-danger` 渲染，"外来监听 3/4 个端口"列出 `62789 · xray-linux`、`12942 · xray-linux`、`56316 · x-ui` —— 这正是 #73/#74 要的证据；BR/JP 均为"监听 1 个端口（22），全部由平台服务持有"。**截图通道本机不可用**（`NATIVE_BROWSER_VIEWPORT_UNAVAILABLE`），逐条比的是 DOM 与 computed style，视觉效果需人工确认。
+
+8080 实例（用户日常看的那台）在 `--watch` 自动重载后已经**按 5 分钟节奏真的在跑采集**：`data/metrics.json` 从 11:37Z 起每轮给 6 台节点各写一条样本。但这 6 台全是 `source: "manual"` 的台账记录、`last_seen_at` 为 `null`（从未纳管、没有 SSH 信任基线），所以 84 条样本逐条 `status="unavailable" / error="当前节点缺少可用执行通道"`，桶里只有 `failed_count`。**调度与落盘是真的，页面在这台上现在必然整屏"暂无可用数据"** —— 卡点是纳管（#67），不是监控代码；有纳管真机的是 HK VPS 实例，那里的渲染还需单独确认。
+
+A2（`docs/open-source-borrowing.md`）**没有因此关闭**：本轮的小时桶是**节点资源**采样，`probes.json` 的探测历史仍是单数组、无上限聚合。
+
+规模：测试 44 文件 / 309 → **45 文件 / 321 用例**；路由矩阵 133 → **138 行**（`/metrics.html`、`/metrics`、`GET /api/v1/metrics`、`GET …/collect` 404、`POST …/collect` 400）；`src/server.js` 3866 → **3924 行**。
+
 ## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
@@ -250,16 +283,16 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 | 阶段 | 状态 | 完成度 |
 | --- | --- | --- |
 | P0 节点纳管底座 | 已跑通 | 88% |
-| P1 节点接管与运维 | 已跑通，SSH 主机指纹信任仍缺 | 70% |
+| P1 节点接管与运维 | 已跑通；资源采样定时链路已在真实例上跑起来，但只对有 SSH 通道的节点出数，SSH 主机指纹信任仍缺 | 70% |
 | P2 任务与状态闭环 | 进行中；缺租约、取消、可靠重试、任务详情页 | 65% |
 | P2.5 统一配置发布 | 已跑通 VLESS/VMess/Reality/HY2；缺多跳与 RoutePool | 72% |
 | P3 自动化与扩缩容 | 初期；只有台账与成本，无告警/自愈/建机 | 18% |
 
 ## 模块完成度
 
-前端：总览 80 · 节点清单 78 · 节点详情 80 · 任务中心 72 · 运维终端 70 · Web Shell 62 · 注册令牌 80 · 接入用户 68 · 协议模板 70 · 发布中心 68 · 系统用户 66 · 系统模板 66 · 中转拓扑 62 · 云厂商 35 · 登录 85
+前端：总览 80 · 节点清单 78 · 节点详情 80 · 任务中心 72 · 节点监控 65 · 运维终端 70 · Web Shell 62 · 注册令牌 80 · 接入用户 68 · 协议模板 70 · 发布中心 68 · 系统用户 66 · 系统模板 66 · 中转拓扑 62 · 云厂商 35 · 登录 85
 
-后端：纳管链路 78 · SSH 接管 68 · 探测系统 70 · 批量执行 66 · 任务系统 62 · 统一发布 70 · 系统用户下发 68 · 系统模板下发 66 · 资产编辑/删除 82 · 分享订阅 70 · 持久化与恢复 52 · 鉴权与审计 45 · 自愈与自动化 22 · 厂商自动扩缩容 0
+后端：纳管链路 78 · SSH 接管 68 · 探测系统 70 · 节点资源采样 60 · 批量执行 66 · 任务系统 62 · 统一发布 70 · 系统用户下发 68 · 系统模板下发 66 · 资产编辑/删除 82 · 分享订阅 70 · 持久化与恢复 52 · 鉴权与审计 45 · 自愈与自动化 22 · 厂商自动扩缩容 0
 
 ## 当前本地数据快照（非生产事实）
 
@@ -280,6 +313,7 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 - 路由模块的 `ctx` 偏重（nodes 40 项、access-users 19 项），纯函数依赖尚未下沉为直接 import
 - 无 `/readyz`、无结构化日志与 `request_id`（登录限流与失败锁定已有）
 - 任务缺执行租约与取消；发布/探测失败无告警出口
+- 节点资源监控只到"页面能看"：没有阈值告警出口，且**只有纳管节点能出数**——8080 台账里的 6 台真机没有 SSH 通道，页面对它们是整屏"暂无可用数据"
 - `data/` 备份已就位（`scripts/backup-data-dir.sh` + `scripts/systemd/airport-backup.{service,timer}`），但 `deploy-bare-metal.sh` 不会启用该 timer，需手工 `systemctl enable --now`；恢复流程未在真机演练
 - Web Shell 无单用户/单节点会话数上限，仍非生产级 bastion
 - 裸机部署的 amd64 分支未在真机复验（本机 Docker 是 arm64，Rosetta 模拟 systemd 不可信），OpenRC 分支也没有 `MemoryMax` 等价物
@@ -287,6 +321,6 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 ## 下一阶段优先级
 
 P0：Reality 密钥对自动生成（#23，纯内置 `crypto`，做法见 `docs/open-source-borrowing.md` A1）→ SSH host key 信任与变更确认 → 通用任务租约/取消/重试 → `/readyz` + 结构化日志 → 真机启用备份 timer 并演练恢复 → UI 窗口 C（4 处破坏性动作加确认、节点清单属性转义 bug、令牌有效期入口）
-P1：配置漂移检测（A3）与探测历史小时桶聚合（A2）→ UI 窗口 A（逐页 `minmax(0,1fr)` 收口 F1、字号标度、dialog 语义与焦点、12 页缺页面标题层、断点统一、`.table-shell` 滚动线索、登录页两处）→ JSON → SQLite（事务 + 唯一约束）→ Endpoint/Link/Route/RoutePool 实体化 → 国际出口与回国双向线路
+P1：配置漂移检测（A3）与探测历史小时桶聚合（A2，仍是 `probes.json`，节点资源桶已另立）→ 监控数据的下一步：监听清单回写节点台账并标外来进程（#74，页面已给出证据）、facts 资源口径统一到 cgroup（#77）、NAT 端口映射建模（#78）→ UI 窗口 A（逐页 `minmax(0,1fr)` 收口 F1、字号标度、dialog 语义与焦点、12 页缺页面标题层、断点统一、`.table-shell` 滚动线索、登录页两处）→ JSON → SQLite（事务 + 唯一约束）→ Endpoint/Link/Route/RoutePool 实体化 → 国际出口与回国双向线路
 P2：路由 `ctx` 瘦身（纯函数下沉为直接 import）+ 抽出服务层 → 统一协议兼容矩阵单一来源 → 告警与事件中心
 P3：厂商 API 建机/替换 → 多管理员与 RBAC → 终端用户门户与配额

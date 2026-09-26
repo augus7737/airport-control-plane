@@ -354,7 +354,7 @@ ReadWritePaths=/opt/airport-control-plane/data
 
 ### 2. 拆分 `src/server.js`
 
-已完成的部分：路由层按命名空间拆出，16 个业务模块落在 `src/http/routes/*.js`，`src/server.js` 从 5763 行降到 3805 行（本轮接口与加固补齐后为 3866 行），只保留启动装配、请求管线（鉴权门禁、`/healthz`、bootstrap 脚本、订阅、制品、静态资源、404）与实体构造；模块通过单一 `ctx` 取用宿主能力，纯函数直接 `import`。回归由 `test/route-table.test.js` 的接口矩阵守住，并行开发约束见 `docs/parallel-development.md`。
+已完成的部分：路由层按命名空间拆出，17 个业务模块落在 `src/http/routes/*.js`，`src/server.js` 从 5763 行降到 3805 行（2026-09-26 节点资源采样接口与调度接入后为 3924 行），只保留启动装配、请求管线（鉴权门禁、`/healthz`、bootstrap 脚本、订阅、制品、静态资源、404）与实体构造；模块通过单一 `ctx` 取用宿主能力，纯函数直接 `import`。回归由 `test/route-table.test.js` 的接口矩阵守住，并行开发约束见 `docs/parallel-development.md`。
 
 剩余问题：
 

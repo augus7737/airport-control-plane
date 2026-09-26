@@ -19,19 +19,20 @@
 单个 Node.js 进程（`node:http`，无 Web 框架）承载 API、任务执行、周期巡检、配置发布、订阅生成与 Web Shell 会话。前端是无打包链的静态多页面控制台，业务后端依赖只有 `qrcode`。
 
 ```
-src/server.js            启动装配 + 请求管线 + 实体构造（3.8k 行）
-src/http/routes/         16 个业务命名空间路由模块 + index.js 派发表（见 docs/parallel-development.md）
-src/domain/              领域逻辑：auth bootstrap costs diagnostics nodes operations
+src/server.js            启动装配 + 请求管线 + 实体构造（3.9k 行）
+src/http/routes/         17 个业务命名空间路由模块 + index.js 派发表（见 docs/parallel-development.md）
+src/domain/              领域逻辑：auth bootstrap costs diagnostics metrics nodes operations
                          platform probes releases routes shares shell system tasks
 src/http/validators.js   入站 payload 校验
 src/infrastructure/      json-file-store（原子写 + .bak）、store-persistence（写队列、启动修复）
-src/runtime/             startup（load + 幂等迁移 + 修复）、probe-scheduler
+src/runtime/             startup（load + 幂等迁移 + 修复）、probe-scheduler、metrics-scheduler
 src/utils/               http、request-handler（全局异常边界）、static-assets
-public/                  15 个 HTML 页面 + js/{pages,modals,cells,layout,store,shared,auth}
+public/                  16 个 HTML 页面 + js/{pages,modals,cells,layout,store,shared,auth}
 data/                    每 store 一个 JSON 文件（gitignore，路径可用 AIRPORT_DATA_DIR 覆盖）
 scripts/                 bootstrap.sh、deploy-bare-metal.sh、deploy-production.sh、seed-local-demo.js
+                         node/metrics-collect.sh（下发到节点执行的 cgroup 只读采集脚本）
 docker/local-nodes/      本地假节点集群（Debian+systemd / Ubuntu / Alpine+OpenRC）与真实发布 E2E 脚本
-test/                    32 个 node:test 文件（含 route-table：真起服务比对 128 条路由响应）
+test/                    45 个 node:test 文件（含 route-table：真起服务比对 138 条路由响应）
 ```
 
 路由层的形状：`src/server.js` 依次执行登录页跳转、`/api/v1/auth/*`、鉴权门、`/healthz`、
@@ -50,7 +51,7 @@ reply.writableEnded` 判断某个模块是否已经应答，未应答才继续�
 ```
 控制平面  API + 实体构造 + 发布计划 + 任务编排           已实现，单进程
 数据平面  节点侧 sing-box / HAProxy / TCP 转发            已实现，由发布写入并重启
-观测平面  周期巡检 + 手动复探 + 节点诊断 + 健康分          已实现，无告警
+观测平面  周期巡检 + 手动复探 + 节点诊断 + 健康分 + 周期资源采样（cgroup 口径、小时桶）  已实现，无告警
 ```
 
 ### 关键数据事实

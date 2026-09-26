@@ -1,4 +1,5 @@
 import {
+  appState,
   recordCollectionHealth,
   setAccessUsers,
   setBootstrapTokens,
@@ -9,6 +10,7 @@ import {
   setCostReleases,
   setCostSummary,
   setDiagnostics,
+  setMetrics,
   setNodeGroups,
   setNodes,
   setOperations,
@@ -225,6 +227,37 @@ export function getLiveCostAccessUsers() {
   return fetchCollection("/api/v1/costs/access-users");
 }
 
+export async function getLiveMetrics() {
+  const source = collectionSource("/api/v1/metrics");
+  try {
+    const response = await fetchWithAuth("/api/v1/metrics");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    if (!Array.isArray(payload?.buckets) || !Array.isArray(payload?.samples)) {
+      throw new Error(`HTTP ${response.status} 响应缺少 buckets/samples`);
+    }
+    recordCollectionHealth(source, { ok: true });
+    return {
+      buckets: payload.buckets,
+      samples: payload.samples,
+      failures: Array.isArray(payload.failures) ? payload.failures : [],
+      scheduler: payload.scheduler || null,
+    };
+  } catch (error) {
+    if (isUnauthorizedError(error)) {
+      throw error;
+    }
+    recordCollectionHealth(source, { ok: false, error: error?.message });
+    return { buckets: [], samples: [], failures: [], scheduler: null };
+  }
+}
+
+export async function collectNodeMetrics(nodeIds = []) {
+  return requestJson("/api/v1/metrics/collect", jsonRequest({ node_ids: nodeIds }));
+}
+
 export function getLiveSystemTemplateReleases() {
   return fetchCollection("/api/v1/system-template-releases");
 }
@@ -389,6 +422,15 @@ export async function hydrateRuntimeStore() {
   setCostProviders(costProviders);
   setCostReleases(costReleases);
   setCostAccessUsers(costAccessUsers);
+}
+
+export async function refreshMetrics() {
+  appState.metrics.isRefreshing = true;
+  try {
+    setMetrics(await getLiveMetrics());
+  } finally {
+    appState.metrics.isRefreshing = false;
+  }
 }
 
 export async function refreshOperations() {

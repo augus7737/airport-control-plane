@@ -10,6 +10,7 @@
 
 - 一行 `bootstrap.sh` 完成节点注册（Alpine / Debian-Ubuntu / RHEL family）
 - 平台 SSH 密钥托管与节点接管，TCP + SSH 两层探测，周期巡检调度
+- 节点资源采样：周期下发只读脚本按 cgroup v2 口径取 CPU/内存/磁盘/净流量与监听清单，小时桶落盘，`metrics.html` 展示（不装常驻 agent）
 - 初始化模板、系统模板、系统用户的批量下发与终端回显
 - 接入用户 / 协议模板 / 节点组 / 发布记录，`sing-box` 真实渲染 + 校验 + 节点侧失败回滚，发布记录可回滚到任上一条成功发布（VLESS / VMess / Hysteria2，TLS / Reality）
 - 中转链路模型（直连 / 中转、入口端口与内部端口分离）
@@ -61,7 +62,7 @@ npm run seed       # 生成/刷新本地演示数据（scripts/seed-local-demo.j
 
 `public/` 下的页面与侧栏分组：
 
-- 节点运维：`index.html` 总览、`nodes.html` 节点清单、`node.html` 节点详情、`shell.html` 单节点 Web Shell、`terminal.html` 批量终端、`routes.html` 中转拓扑、`tasks.html` 任务中心
+- 节点运维：`index.html` 总览、`nodes.html` 节点清单、`node.html` 节点详情、`shell.html` 单节点 Web Shell、`terminal.html` 批量终端、`routes.html` 中转拓扑、`tasks.html` 任务中心、`metrics.html` 节点监控
 - 配置发布：`access-users.html` 接入用户、`proxy-profiles.html` 协议模板、`releases.html` 发布中心、`system-users.html` 系统用户、`system-templates.html` 系统模板
 - 系统管理：`tokens.html` 注册令牌、`providers.html` 云厂商与成本
 - 无需登录：`login.html`、`/bootstrap.sh`、`/bootstrap/enroll.sh`、健康检查、公开制品下载

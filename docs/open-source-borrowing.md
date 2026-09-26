@@ -1,6 +1,6 @@
 # 开源同类项目可借鉴清单
 
-更新时间：2026-09-24
+更新时间：2026-09-24（2026-09-26 只增量更新 A2 的状态：节点资源侧小时桶已落地，`probes.json` 探测历史仍未处理。其余条目本轮未复核，保持原样；其中 `⬜ 未实现` 类标记可能已过期，开工前按当前代码重验）
 文档性质：外部参照与候选改造清单。**本轮只做调研，未改动任何代码**；本文所列"落点"是候选位置，不是已实施的计划。
 关联文档：`docs/stability-roadmap.md`（缺口权威状态）、`docs/project-progress.md`（风险清单）、`docs/ui-layout-audit-2026-09-23.md`
 
@@ -46,6 +46,7 @@
 - 证据：`Gozargah/Marzban:app/jobs/record_usages.py`（`已复核`）——`created_at` 用 `strftime('%Y-%m-%dT%H:00:00')` 截到小时，先 insert-if-missing 再 `+=` 累加，**行数天然封顶**；注册处 `scheduler.add_job(..., coalesce=True, max_instances=1)`，上轮未跑完就跳过而不堆积。
 - 我们的落点：`src/runtime/probe-scheduler.js`（231 行）加同语义的重叠保护；`probes.json` 拆成"原始近 N 小时 + 小时桶汇总"双层落盘，`docs/data-model.md` 同步登记新 store。
 - 代价：**低**。注意别破坏现有 `test/` 里对探测历史的断言。
+- 状态（2026-09-26）：**一半已落地，且落地的是另一半场景**。重叠保护两个调度器都有（`probe-scheduler.js:130`、`metrics-scheduler.js:52` 各自 `state.running` 短路）。小时桶这套已用于**节点资源采样**：`src/domain/metrics/collector.js` + `data/metrics.json`（桶 30 天裁剪、样本 240 条封顶），新 store 已登记进 `docs/data-model.md`。**`probes.json` 本身仍是单一数组、无上限**（`src/server.js` 里 `probeStore` 没有任何裁剪/聚合），所以本项按探测历史口径仍未关闭；好消息是桶的读写形状、增量口径与失败样本处理已被验证过，剩下的是搬运而不是设计。
 
 ### A3 配置漂移检测 —— 我们完全没有的能力
 
@@ -107,7 +108,7 @@
 | 缺口（权威状态见 `docs/stability-roadmap.md`） | 本文章节 | 状态 |
 | --- | --- | --- |
 | #23 Reality 密钥对生成 | A1 | 待办 → 可低成本闭 |
-| 探测历史无限增长 | A2 | 未登记 → 建议登记 |
+| 探测历史无限增长 | A2 | 仍未处理（`probeStore` 无上限）；节点资源侧的同形制小时桶已于 2026-09-26 落地，可直接复用其口径 |
 | 配置漂移（无对应待办） | A3 | 新增能力 |
 | 口径 C 的可达层判据（#24/#43/#50 的延续） | A4 | 已实施分层，判据可升级 |
 | P1.1 `/readyz` + 无告警出口 | A5 | ⬜ 未实现 |
