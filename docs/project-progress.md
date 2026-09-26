@@ -267,7 +267,7 @@ proxy-profiles、access-users、costs），各自在 `../wt-*` 独立 worktree �
 
 A2（`docs/open-source-borrowing.md`）**没有因此关闭**：本轮的小时桶是**节点资源**采样，`probes.json` 的探测历史仍是单数组、无上限聚合。
 
-规模：测试 44 文件 / 309 → **45 文件 / 321 用例**；路由矩阵 133 → **138 行**（`/metrics.html`、`/metrics`、`GET /api/v1/metrics`、`GET …/collect` 404、`POST …/collect` 400）；`src/server.js` 3866 → **3924 行**。
+规模：测试 44 文件 / 309 → **45 文件 / 316 用例**（孤立提交树复核；共享工作树里另有窗口未提交的 5 条用例，合起来读作 321）；路由矩阵 133 → **138 行**（`/metrics.html`、`/metrics`、`GET /api/v1/metrics`、`GET …/collect` 404、`POST …/collect` 400）；`src/server.js` 3866 → **3924 行**。
 
 ## 已跑通的主链路
 
