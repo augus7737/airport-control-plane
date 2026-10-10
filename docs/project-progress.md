@@ -333,8 +333,14 @@ systemd 用 `is-enabled`，无 systemd 走 `rc-update show default` 匹配，两
 新增 `test/probe-layer-status.test.js` 3 项、`test/probe-formatters.test.js` +1；当前全量是 47 个测试文件，含并窗落下的文件）。
 改口径后 `test/probe-quality.test.js` 恰好炸出 4 条失败，全部是旧混淆的固化，逐条按新口径改写而不是放宽断言；
 新增的"按层合并"用例专门钉住陈旧 `layer_status` 不被整块覆盖。
-**浏览器与真机均未复验**：本轮只跑了自动化门禁。真机效果要等 HK 实例部署后的下一次巡检——预期 BR 从 `failed` 翻成
-`active`、业务口照样红、`layer_status.failed_layer = "business"`。
+
+**真机已复验（2026-10-10 08:15 UTC，HK 实例部署 `9b1dab9` 后的第一轮 `scheduled_probe`）**：巴西那台从 `failed`
+翻成 `active`，`layer_status` 落库为 `management=ready / business=unreachable / relay_upstream=not_applicable`、
+`failed_layer=business`；**它那条巡检任务照样是 `failed`**，日志新两行写作
+`节点状态 active（只看管理链路），健康分 32` 与 `失败层 business（tcp_connection_refused）`。
+未发布的另两台是 `business=not_applicable` + 任务 `success` + `失败层 无`。
+HK 那台跑的是 Node **v20.20.2**（本地 v24），部署脚本只重跑 `npm run check` 门禁。**浏览器观感未复验**——
+页面需要登录，静态资源确认已是新代码，实际渲染要人工看 `http://38.147.170.154:8080`。
 
 未做：#72（探测成功即 `active` 会掩盖初始化失败）**本轮刻意不动**。`ensureBootstrapInitTasks` 把 `new|degraded`
 都当作需要补初始化任务，若让管理链路成功不再压回初始化失败态，每轮巡检都会为同一节点反复拉起 init 任务；
