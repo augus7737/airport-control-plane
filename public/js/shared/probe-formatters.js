@@ -429,3 +429,44 @@ export function formatProbeStageCompact(probe) {
 
   return "TCP 已通";
 }
+
+const PROBE_LAYERS = [
+  { key: "management", label: "管理链路" },
+  { key: "business", label: "业务入口" },
+  { key: "relay_upstream", label: "入口上游" },
+];
+
+const PROBE_LAYER_STATES = {
+  ready: "通",
+  unreachable: "不通",
+  not_applicable: "不适用",
+  unknown: "未取证",
+};
+
+function probeLayerStateLabel(state) {
+  return PROBE_LAYER_STATES[String(state || "").toLowerCase()] || "未取证";
+}
+
+// 节点状态只看管理链路，所以业务层的故障必须单独说出来，否则绿色会被读成"正在服务用户"。
+export function formatNodeLayerAlert(node) {
+  const status = node?.layer_status;
+  const layer = PROBE_LAYERS.find((item) => item.key === status?.failed_layer);
+  if (!layer || layer.key === "management") {
+    return "";
+  }
+
+  const reasonCode = status[layer.key]?.reason_code;
+  const reason = reasonCode ? probeReasonLabel(reasonCode) : "";
+  return reason ? `${layer.label}不通 · ${reason}` : `${layer.label}不通`;
+}
+
+export function formatNodeLayerStatus(node) {
+  const status = node?.layer_status;
+  if (!status) {
+    return "";
+  }
+
+  return PROBE_LAYERS.map((layer) => {
+    return `${layer.label} ${probeLayerStateLabel(status[layer.key]?.state)}`;
+  }).join(" / ");
+}

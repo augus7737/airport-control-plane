@@ -133,6 +133,8 @@ Operator auth env vars:
 
 返回全量节点。前端一次拉取后在本地派生筛选与拓扑。
 
+节点行的 `status` 只表达**管理链路**（能否 SSH 接管），业务入口与 relay 上游的读数在 `layer_status` 里分层给（`ready|unreachable|not_applicable|unknown` + `failed_layer`）。所以"绿色 + `layer_status.failed_layer = business`"是正常组合：机器可管、订阅入口还没通（最常见是厂商 NAT 没映射端口，见 `docs/data-model.md`「Node」）。
+
 ### `GET /api/v1/nodes/:id`
 
 返回 `200 { node }`（nodeStore 原始记录，与列表同一口径、无 serializer）。非法百分号编码 → `400 bad_request`；未建档 → `404 not_found`。

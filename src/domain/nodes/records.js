@@ -5,6 +5,7 @@ import {
   normalizeNullableNumber,
 } from "../costs/normalize.js";
 import { normalizeManagementRelayStrategy } from "../routes/management-strategies.js";
+import { normalizeNodeLayerStatus } from "../probes/layer-status.js";
 import {
   DEFAULT_LOCAL_SSH_PORT,
   DEFAULT_NODE_SSH_PORT,
@@ -980,6 +981,7 @@ export function createNodeRecordBuilders({
       last_seen_at: now,
       last_probe_at: existingNode?.last_probe_at ?? null,
       health_score: existingNode?.health_score ?? null,
+      layer_status: normalizeNodeLayerStatus(existingNode?.layer_status),
       labels,
       provider_id: normalizeNullableStringValue(
         sourceValue(payload, "provider_id", existingNode?.provider_id ?? null),
@@ -1105,6 +1107,7 @@ export function createNodeRecordBuilders({
       last_seen_at: payload.last_seen_at ?? null,
       last_probe_at: payload.last_probe_at ?? null,
       health_score: payload.health_score ?? null,
+      layer_status: normalizeNodeLayerStatus(payload.layer_status),
       labels: {
         provider: payload.provider ?? null,
         region: normalizeLocationValue(payload.region, "region"),

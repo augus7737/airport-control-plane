@@ -127,8 +127,9 @@
      进程内挂死不重启就不收），期间该节点所有诊断被互斥。
   3. `node-quality.js:909-945` 档位脚本非 0 退出码不参与判级：stdout 出现过一条 report_url 即 success。
   4. `executor.js:1337` `probe_type` 不 trim、无白名单，未知值静默按 `ssh_auth` 跑且任务仍 success。
-  5. `executor.js:1196-1214` 单项探测"不适用"给高分却判 `success=false` → 节点 `failed`，
-     与 full_stack 同场景的 `degraded` 口径互相矛盾。
+  5. ~~`executor.js:1196-1214` 单项探测"不适用"给高分却判 `success=false` → 节点 `failed`，
+     与 full_stack 同场景的 `degraded` 口径互相矛盾。~~ 已修（2026-10-10 状态口径拆分）：
+     单项业务/relay 探测不再改写 `node.status` 与 `health_score`，只写 `layer_status` 对应层。
   6. `node-quality.js:662-668` `sortDiagnostics` 用 `localeCompare` 字典序排时间戳，
      `"2026-9-23" > "2026-10-01"`；`server.js:1321-1329` 的 `sortProbes` 同族且在禁改区不可单测。
 

@@ -2,6 +2,7 @@ import {
   formatCostStatus,
   formatCurrencyTotals,
 } from "../shared/cost-formatters.js";
+import { formatNodeLayerStatus } from "../shared/probe-formatters.js";
 import { taskStatusText } from "../shared/task-helpers.js";
 
 export function normalizePercent(value, fallback = 0) {
@@ -689,6 +690,7 @@ export function buildNodeDetailViewModel({
       ? `${formatCurrencyTotals(nodeCost, nodeCost.problems?.[0] || "-")} · ${expiryNote}`
       : `${formatCostStatus(nodeCost?.cost_status, "待补成本字段")} · ${expiryNote}`;
   const healthOverviewRows = [
+    ["分层取证", formatNodeLayerStatus(node) || "暂无分层记录"],
     ["探测阶段", probeStageText],
     ["延迟拆分", probeLatencyBreakdown || "-"],
     ["公网入口", primaryPublicIp?.address || "未探测"],

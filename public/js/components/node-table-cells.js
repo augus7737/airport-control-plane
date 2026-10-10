@@ -1,4 +1,5 @@
 import { formatLocationDisplay } from "../shared/location-suggestions.js";
+import { formatNodeLayerAlert, formatNodeLayerStatus } from "../shared/probe-formatters.js";
 import {
   formatCostStatus,
   formatCurrencyTotals,
@@ -41,12 +42,14 @@ export function createNodeTableCellsModule(dependencies = {}) {
   function renderNodeStatusCell(node) {
     const latestProbe = getLatestProbeForNode(node);
     const scheduler = typeof getProbeSchedulerState === "function" ? getProbeSchedulerState() : null;
-    const subline =
+    const layerAlert = formatNodeLayerAlert(node);
+    const baseSubline =
       latestProbe && typeof formatNodeStatusProbeSummary === "function"
         ? formatNodeStatusProbeSummary(latestProbe)
         : latestProbe
           ? formatProbeSummary(latestProbe)
           : "待首检";
+    const subline = layerAlert ? `${layerAlert}｜${baseSubline}` : baseSubline;
     const latencyBreakdown =
       typeof formatProbeLatencyBreakdown === "function" ? formatProbeLatencyBreakdown(latestProbe) : "";
     const timeLabel = latestProbe?.observed_at
@@ -83,6 +86,10 @@ export function createNodeTableCellsModule(dependencies = {}) {
             <div class="cell-hover-row">
               <span>巡检状态</span>
               <strong>${escapeHtml(formatProbeCapability(latestProbe))}</strong>
+            </div>
+            <div class="cell-hover-row">
+              <span>分层取证</span>
+              <strong>${escapeHtml(formatNodeLayerStatus(node) || "暂无分层记录")}</strong>
             </div>
             <div class="cell-hover-row">
               <span>阶段摘要</span>

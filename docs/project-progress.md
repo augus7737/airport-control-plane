@@ -1,7 +1,7 @@
 # 项目进度
 
-更新时间：2026-09-26
-基线提交：`c77d27f`（2026-09-23 假节点按架构固定镜像 tag，并加入 Alpine/OpenRC 节点）+ 本轮控制面裸机部署改造；`46544c0`（2026-08-21）及之前的积累见下方“近期进展”
+更新时间：2026-10-10
+基线提交：`b78a439`（2026-09-26 发布链路开机自启回读）+ 本轮节点状态口径拆分；`c77d27f`（2026-09-23 假节点按架构固定镜像 tag，并加入 Alpine/OpenRC 节点）及之前的积累见下方“近期进展”
 
 ## 当前定位
 
@@ -303,7 +303,43 @@ systemd 用 `is-enabled`，无 systemd 走 `rc-update show default` 匹配，两
   所以监控侧口径本来是对的；这次差点被 `uptime` 带偏的是我。另：停机约 2 分钟，落在两次 5 分钟采样之间，
   **监控没有任何一条失败样本**——短于采集周期的宕机现在不可见，这是采样周期的固有下限，不是缺陷。
 
-## 已跑通的主链路
+## 进展（2026-10-10，节点状态口径拆分：status 只跟随管理链路）
+
+起因是真机现场：巴西那台 Alpine 容器 sing-box 已经生效、控制面 SSH 随时能接管，只因为厂商 NAT 没映射 8443
+（#78），`full_stack` 巡检把整条 `probe.success` 判红，节点 `status` 跟着落 `failed`。
+"接管坏了"和"线路是死链"是两件事，却共用一个词，于是列表里的红色既不能被读成"机器挂了"，也不能被读成"不用管"。
+
+改法（判定口径 C 从发布链路搬到节点状态）：
+
+- `src/domain/probes/executor.js`：`full_stack` 的 `nodePatch.status` = 管理链路口径（`control_ready → active`，否则 `degraded`），
+  `health_score` 仍是按层加权的分（管理 35 / 业务 40 若适用 / 上游 25 若适用）；`probe.success` **仍要求全层通过**，
+  所以死链照样在任务中心报警，任务级别的告警没被削弱。`reason_code` 与 `failed_stage` 改成按同一优先级解释，
+  避免"状态说管理、原因说业务"。
+- 单项探测不再冒充全局判断：`business_entry_tcp` / `relay_upstream_tcp` 只写自己那层的读数，
+  **不改** `node.status` 与 `health_score`——本次没取证管理链路，节点能否接管不由它决定。这条顺带解决了
+  `docs/parallel-development.md` 读码发现 5（单项"不适用"给高分却判 `failed`，与 `full_stack` 的 `degraded` 互相矛盾）。
+- 新增 `src/domain/probes/layer-status.js`：`layer_status` 的**唯一**契约（三层枚举、读数构造、按层合并、`normalizeNodeLayerStatus`）。
+  `probes/executor.js` 与 `nodes/records.js` 共用它，枚举不双写。合并语义是按层保留——本轮没取证的层沿用上轮读数，
+  `failed_layer` 只从**本轮**确立的 `unreachable` 里按 管理 > 业务 > 上游 取第一个；`state` 不在枚举内一律降级为 `unknown`，
+  伪造或损坏的落库值进不来。
+- 落库面：`buildNodeRecord` / `buildManualNodeRecord` 各加一条 `layer_status` 归一，否则 bootstrap 重建记录会把已有分层抹掉。
+  `GET /api/v1/nodes` 返回原始记录、没有序列化层，所以前端自动看到新字段，接口矩阵无需加行。
+- 前端：`public/js/shared/probe-formatters.js` 导出 `formatNodeLayerAlert` / `formatNodeLayerStatus`（管理层故障不报警——
+  那已经体现在状态色上，业务/上游故障必须单独说出来，否则绿色会被读成"正在服务用户"）。
+  节点列表副行前置 `${报警}｜${原文案}`，悬停行与详情页健康概览首行都给"分层取证 管理链路 通 / 业务入口 不通 / 入口上游 不适用"。
+- 任务日志摘要固定成 5 行，第 4 行明写"节点状态 X（只看管理链路）"。
+
+验证边界：`npm run check` 通过，`npm test` **330** 用例全绿（325 → 330：`test/probe-quality.test.js` 24 → 25、
+新增 `test/probe-layer-status.test.js` 3 项、`test/probe-formatters.test.js` +1；当前全量是 47 个测试文件，含并窗落下的文件）。
+改口径后 `test/probe-quality.test.js` 恰好炸出 4 条失败，全部是旧混淆的固化，逐条按新口径改写而不是放宽断言；
+新增的"按层合并"用例专门钉住陈旧 `layer_status` 不被整块覆盖。
+**浏览器与真机均未复验**：本轮只跑了自动化门禁。真机效果要等 HK 实例部署后的下一次巡检——预期 BR 从 `failed` 翻成
+`active`、业务口照样红、`layer_status.failed_layer = "business"`。
+
+未做：#72（探测成功即 `active` 会掩盖初始化失败）**本轮刻意不动**。`ensureBootstrapInitTasks` 把 `new|degraded`
+都当作需要补初始化任务，若让管理链路成功不再压回初始化失败态，每轮巡检都会为同一节点反复拉起 init 任务；
+要修得先给"初始化证据"单独建字段，是另一轮。
+
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
 2. 节点执行一行接入命令 → 上报事实 → 去重建档 → 回传公钥与初始化动作

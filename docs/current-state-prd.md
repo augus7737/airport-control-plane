@@ -102,6 +102,8 @@
 
 - `management.*` / SSH：控制面如何接管节点
 - `networking.*` / 业务链路：用户流量如何进入入口机并到达落地机
+- `node.status` 只跟随管理链路，业务入口/relay 上游不通不改它；三层读数与失败层落在 `node.layer_status`，健康分按层加权（管理 35 / 业务 40 / 上游 25，不适用的层不占分）
+- 巡检任务仍在全层通过时才 `success`：NAT 端口没映射导致的死链要在任务中心报警，但不能把一台可接管的机器整体判成坏了
 - `latency_source`：管理链路 TCP、SSH 端到端、业务入口 TCP、relay 上游各自的耗时口径，互不冒充
 - `reason_code` 与失败阶段是稳定枚举，中文文案只在 `public/js/shared/probe-formatters.js` 维护一份
 
@@ -151,7 +153,7 @@
 - sing-box 配置在真实节点完成渲染、`sing-box check` 校验、重启激活与失败回滚
 - 控制面登录、回跳、登出、受保护 API 的 `401` 行为已在真实浏览器与 `curl` 下验证
 - 周期巡检在本地实例真实运行并沉淀 `scheduled_probe` 任务
-- 自动化测试：`npm test` 当前 44 个文件 / 309 个用例通过，覆盖 HTTP 边界（413、异常 Host、500 边界）、鉴权会话与登录失败锁定、路由表回归（`test/route-table.test.js` 对 130+ 行接口矩阵逐一打真实实例，断言状态码与机器码）、JSON store 原子写、任务认领并发、批量执行上限、SSH 传输不回退本机、节点端点与事实归一、管理链路路由、流量方向、HY2 与 UDP 探测、发布复检分层与可达层视图、任务日志摘要、成本计费与汇总视图、裸机部署脚本（apt/apk × systemd/OpenRC 分支、回滚边界、清理只删自建目录）、主题与前端选项等
+- 自动化测试：`npm test` 当前 47 个文件 / 330 个用例通过，覆盖 HTTP 边界（413、异常 Host、500 边界）、鉴权会话与登录失败锁定、路由表回归（`test/route-table.test.js` 对 130+ 行接口矩阵逐一打真实实例，断言状态码与机器码）、JSON store 原子写、任务认领并发、批量执行上限、SSH 传输不回退本机、节点端点与事实归一、管理链路路由、流量方向、HY2 与 UDP 探测、探测分层状态合并与健康分加权口径（`test/probe-layer-status.test.js`）、发布复检分层与可达层视图、任务日志摘要、成本计费与汇总视图、裸机部署脚本（apt/apk × systemd/OpenRC 分支、回滚边界、清理只删自建目录）、主题与前端选项等
 
 如需复现演示数据：`npm run dev` 后执行 `npm run seed`（`scripts/seed-local-demo.js`，通过 HTTP 造厂商/节点/模板/用户/令牌），该脚本只用于本地演示，不属于生产链路。
 

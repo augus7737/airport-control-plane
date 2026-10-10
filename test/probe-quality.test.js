@@ -194,8 +194,10 @@ function createHarness(overrides = {}) {
   const domain = createProbeExecutorDomain({
     cwdProvider: () => "/tmp",
     defaultNodeSshUser: "root",
-    getNodeById: (nodeId) => (nodeId === overrides.missingNodeId ? null : { id: nodeId, name: `node ${nodeId}`, status: "new" }),
-    nowIso: () => OBSERVED_AT,
+    getNodeById: (nodeId) =>
+      nodeId === overrides.missingNodeId
+        ? null
+        : { id: nodeId, name: `node ${nodeId}`, status: "new", ...(overrides.nodeRecord ?? {}) },    nowIso: () => OBSERVED_AT,
     persistNodeStore: async () => {
       state.persisted.push("nodes");
     },
@@ -394,7 +396,7 @@ test("full_stack：relay 模式管理链路完全没接管时健康分 30、节�
   });
 });
 
-test("full_stack：业务入口不可达是「部分失败」，整体 failed 且按 35/40/25 权重合分", async () => {
+test("full_stack：业务入口不可达只压失败层，节点状态仍跟管理链路", async () => {
   await withStubs({ latencyMs: 20, behaviors: ["ECONNREFUSED"] }, async () => {
     const harness = createHarness({
       managementRoute: relayRoute,
@@ -406,13 +408,19 @@ test("full_stack：业务入口不可达是「部分失败」，整体 failed �
 
     // 管理 100*35 + 业务失败 12*40 = 3500+480 → /75 → 53.07 → 53
     assert.equal(probe.health_score, 53);
-    assert.equal(node.status, "failed");
-    assert.equal(probe.success, false);
+    assert.equal(node.health_score, 53, "健康分仍按分层加权，保留严重度");
+    assert.equal(node.status, "active", "SSH 接管成功就不该因为业务口不通被判成 failed");
+    assert.equal(probe.success, false, "任务层要失败，巡检失败队列不能漏掉死链");
     assert.equal(probe.business_ready, false, "业务适用且失败时是 false，不是 null");
     assert.equal(probe.reason_code, "tcp_connection_refused");
     assert.equal(probe.error_stage, "business_entry_tcp");
     assert.equal(probe.stages.business_entry_tcp.attempted, true);
     assert.equal(probe.stages.business_entry_tcp.success, false);
+    assert.equal(node.layer_status.failed_layer, "business");
+    assert.equal(node.layer_status.management.state, "ready");
+    assert.equal(node.layer_status.business.state, "unreachable");
+    assert.equal(node.layer_status.business.target, "203.0.113.20:8443");
+    assert.equal(node.layer_status.business.reason_code, "tcp_connection_refused");
   });
 });
 
@@ -446,7 +454,7 @@ test("full_stack：业务入口成功时按 35/40/25 合分，且主延迟优先
   });
 });
 
-test("full_stack：relay 上游失败同样把整体压成 failed，并保留上游三元组", async () => {
+test("full_stack：relay 上游失败记为 relay 失败层，节点状态跟管理链路，并保留上游三元组", async () => {
   await withStubs({ latencyMs: 20 }, async () => {
     const harness = createHarness({
       managementRoute: relayRoute,
@@ -474,7 +482,11 @@ test("full_stack：relay 上游失败同样把整体压成 failed，并保留上
 
     const { probe, node } = await runProbe(harness, "full_stack");
 
-    assert.equal(node.status, "failed");
+    assert.equal(node.status, "active", "relay 上游不通不代表这台机器失联");
+    assert.equal(node.layer_status.failed_layer, "relay_upstream");
+    assert.equal(node.layer_status.business.state, "ready");
+    assert.equal(node.layer_status.relay_upstream.state, "unreachable");
+    assert.equal(node.layer_status.relay_upstream.target, "198.51.100.9:443");
     assert.equal(probe.relay_upstream_ready, false);
     assert.equal(probe.error_stage, "relay_upstream_tcp");
     assert.equal(probe.upstream_host, "198.51.100.9");
@@ -601,17 +613,20 @@ test("ssh_auth 单项探测：problems 缺失事实要进摘要文案", async ()
   });
 });
 
-test("单项探测：不适用项走「默认分」兜底（业务 78 / relay 74），节点仍判 active", async () => {
+test("单项探测：不适用项走「默认分」兜底（业务 78 / relay 74），且不改节点状态与健康分", async () => {
   await withStubs({ latencyMs: 20 }, async () => {
     const businessHarness = createHarness({ managementRoute: directRoute });
     const businessRun = await runProbe(businessHarness, "business_entry_tcp");
     assert.equal(businessRun.probe.health_score, 78);
-    // 现状（口径不一致，见报告）：单项探测不区分「不适用」与「失败」，
-    // allowSkippedSuccess=false → 没配业务线路也记 success false / 节点 failed，分数却给 78 兜底
-    assert.equal(businessRun.node.status, "failed");
+    // 单项探测没取证管理链路，所以节点状态/健康分保持原值，只写业务层的读数
+    assert.equal(businessRun.node.status, "new", "保持节点原状态，不被单项业务探测改写");
+    assert.equal(businessRun.node.health_score, undefined, "单项业务探测不覆盖健康分");
     assert.equal(businessRun.probe.success, false);
     assert.equal(businessRun.probe.reason_code, "business_entry_target_missing");
     assert.equal(businessRun.probe.business_ready, null);
+    assert.equal(businessRun.node.layer_status.business.state, "not_applicable");
+    assert.equal(businessRun.node.layer_status.management.state, "unknown");
+    assert.equal(businessRun.node.layer_status.failed_layer, null);
     assert.equal(
       businessRun.probe.summary,
       "当前业务线路缺少可探测的入口地址或端口。",
@@ -620,10 +635,58 @@ test("单项探测：不适用项走「默认分」兜底（业务 78 / relay 74
     const relayHarness = createHarness({ managementRoute: directRoute });
     const relayRun = await runProbe(relayHarness, "relay_upstream_tcp");
     assert.equal(relayRun.probe.health_score, 74);
-    assert.equal(relayRun.node.status, "failed");
+    assert.equal(relayRun.node.status, "new");
+    assert.equal(relayRun.node.health_score, undefined);
     assert.equal(relayRun.probe.success, false);
     assert.equal(relayRun.probe.reason_code, "business_route_unpublished");
+    assert.equal(relayRun.node.layer_status.relay_upstream.state, "not_applicable");
     assert.equal(relayRun.probe.summary, "当前节点还没有成功发布的业务线路，已跳过入口上游探测。");
+  });
+});
+
+test("分层读数按层合并：单项业务探测只刷新业务层，管理层沿用上一次取证且不改节点状态", async () => {
+  await withStubs({ latencyMs: 20 }, async () => {
+    const staleAt = "2026-01-01T00:00:00.000Z";
+    const harness = createHarness({
+      managementRoute: directRoute,
+      businessContext: buildBusinessContext(),
+      nodeRecord: {
+        status: "active",
+        health_score: 53,
+        layer_status: {
+          observed_at: staleAt,
+          probe_type: "full_stack",
+          management: { state: "ready", observed_at: staleAt, target: "10.88.0.12:22", reason_code: null },
+          business: {
+            state: "unreachable",
+            observed_at: staleAt,
+            target: "203.0.113.20:8443",
+            reason_code: "tcp_connection_refused",
+          },
+          relay_upstream: { state: "not_applicable", observed_at: staleAt, target: "-", reason_code: null },
+          failed_layer: "business",
+          reason_code: "tcp_connection_refused",
+        },
+      },
+    });
+
+    const { node, probe } = await runProbe(harness, "business_entry_tcp");
+
+    assert.equal(probe.success, true);
+    assert.equal(node.status, "active", "本次没取证管理链路，状态保持不动");
+    assert.equal(node.health_score, 53, "健康分由综合巡检维护，单项业务探测不覆盖");
+    assert.equal(node.layer_status.probe_type, "business_entry_tcp");
+    assert.equal(node.layer_status.business.state, "ready");
+    assert.equal(node.layer_status.business.observed_at, OBSERVED_AT);
+    assert.deepEqual(node.layer_status.management, {
+      state: "ready",
+      observed_at: staleAt,
+      target: "10.88.0.12:22",
+      reason_code: null,
+    });
+    assert.equal(node.layer_status.relay_upstream.state, "not_applicable");
+    assert.equal(node.layer_status.failed_layer, null, "本次取证的层都通就不该留失败层");
+    assert.equal(node.layer_status.reason_code, null);
   });
 });
 
@@ -735,8 +798,17 @@ test("任务与节点写回口径：health_score / status / last_probe_at 同步
       "探测类型 full_stack",
       "目标 10.88.0.12:22",
       task.note,
-      "健康分 100，节点状态 active",
+      "节点状态 active（只看管理链路），健康分 100",
+      "失败层 无",
     ]);
+    assert.equal(node.layer_status.probe_type, "full_stack");
+    assert.equal(node.layer_status.observed_at, OBSERVED_AT);
+    assert.deepEqual(
+      Object.keys(node.layer_status).sort(),
+      ["business", "failed_layer", "management", "observed_at", "probe_type", "reason_code", "relay_upstream"].sort(),
+    );
+    assert.equal(node.layer_status.business.state, "not_applicable");
+    assert.equal(node.layer_status.reason_code, null);
     assert.equal(harness.state.nodeRecords.length, 1);
     // 现状：写盘顺序 = 任务先写一次，再 Promise.all(probes, tasks, nodes)
     assert.deepEqual(harness.state.persisted, ["tasks", "probes", "tasks", "nodes"]);

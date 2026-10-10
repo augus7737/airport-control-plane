@@ -42,14 +42,15 @@
 ```
 {
   id, fingerprint, status, source,
-  registered_at, last_seen_at, last_probe_at, health_score,
+  registered_at, last_seen_at, last_probe_at, health_score, layer_status{...},
   labels{ provider, region, role, ...自定义键 },
   provider_id, bootstrap_token_id,
   facts{...}, commercial{...}, networking{...}, management{...}, endpoints{...}
 }
 ```
 
-- `status`：`new | active | degraded | failed`（`disabled` / `retired` 在代码里没有写入路径）。
+- `status`：`new | active | degraded | failed`（`disabled` / `retired` 在代码里没有写入路径）。**口径只覆盖管理链路**：SSH 能接管 = `active`，端口通但接管失败 = `degraded`，都不通 = `failed`。业务入口/relay 上游不通**不**改这个值，只落 `layer_status` 和加权后的 `health_score`，并把那条巡检任务判失败（死链要在任务中心报警，但不能把一台控制面完全可接管的机器说成坏了）。
+- `layer_status`：`{ observed_at, probe_type, management{state,observed_at,target,reason_code}, business{...}, relay_upstream{...}, failed_layer, reason_code }`，`state` 为 `ready | unreachable | not_applicable | unknown`。每次探测只覆盖本次取证到的层（综合巡检覆盖三层，单项业务探测只覆盖业务层），未取证的层沿用上一次读数；落库前由 `normalizeNodeLayerStatus()` 归一，非法 `state`/`failed_layer` 一律丢掉。
 - `source`：`bootstrap | manual`。手工录入默认 `active`；`manual` 行被节点自报注册按 hostname + 地址精确收养后翻成 `bootstrap`，此后走同一条自上报刷新路径。
 - `fingerprint` 唯一，用于注册去重；手工壳录入时没有 `fingerprint`，靠 hostname + 地址匹配收养（见 `docs/api.md` 的注册匹配顺序）。
 
@@ -99,7 +100,7 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 - `type`：`init_alpine | probe_node | node_diagnostic | publish_proxy_config | apply_system_template | apply_system_users`。`init_alpine` 只是历史名字，实际覆盖 Alpine / Debian-Ubuntu / RHEL 家族。
 - `trigger`：`bootstrap_register | bootstrap_refresh | bootstrap_auto_probe | manual_probe | manual_diagnostic | manual_retry | manual_release | scheduled_probe`。
 - 认领是原子的：同一任务并发执行只有一个 owner 能推进终态。
-- 任务→节点状态映射：`success → active`，`failed → degraded`。
+- 任务→节点状态映射只存在于初始化链路：`success → active`，`failed → degraded`（`applyNodeInitStatus` / `reconcileInitTaskFromOperation`）。探测任务不经过这条映射，按上面的管理链路口径写 `status`。
 - `log_excerpt` 由 `src/domain/tasks/log-excerpt.js` 的 `buildTaskLogExcerpt` 统一生成：保留头 12 行 + 尾 60 行，单行截到 400 字符，中间省略处插一行 `… 中间省略 N 行，完整输出见 GET /api/v1/operations/<id>`。
   装包失败的原因常在开头（apt/apk 报错、下载超时），所以不能只留尾部；省略标记必须落在中间——
   前端 `getTaskSummary` 取数组最后一行当列表摘要。节点侧完整回显（每目标上限 `OPERATION_OUTPUT_LIMIT_BYTES`，默认 128 KB）只在 operations 里。
@@ -110,12 +111,13 @@ IP 来源标记区分 `self_reported`、外部查询服务与 `manual_override`�
 ```
 { id, node_id, task_id, probe_type, target, target_host, target_port,
   access_mode, transport_kind, transport_label,
-  success, control_ready, reason_code, summary,
+  success, control_ready, business_ready, relay_upstream_ready, reason_code, summary,
   latency_ms, latency_source, packet_loss_ratio, health_score,
   error_stage, error_message, stages{...}, observed_at }
 ```
 
 - `probe_type`：`ssh_auth | business_entry_tcp | relay_upstream_tcp | full_stack`。
+- `success` 仍是"本次适用的层全通"，所以业务口没映射时这条记录是红的；但 `node.status` 只跟管理链路（见上文 Node 小节），两项不再同义。
 - `latency_source`：`management_tcp | management_ssh_e2e | business_entry_tcp | relay_upstream_tcp | ssh_auth | relay_direct_tcp_skipped`。
 - `reason_code` 是稳定枚举（如 `probe_target_missing`、`business_route_unpublished`、`relay_udp_not_supported`、`udp_timeout`），中文文案只在 `public/js/shared/probe-formatters.js` 维护一份，前端不再各自硬编码。
 - 探测完成只更新健康字段，不用旧节点快照回写资产字段。

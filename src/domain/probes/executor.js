@@ -1,5 +1,10 @@
 import net from "node:net";
 import { isRelayTransportKind } from "../routes/management-strategies.js";
+import {
+  assembleLayerStatus,
+  buildApplicabilityLayerReading,
+  buildManagementLayerReading,
+} from "./layer-status.js";
 
 function normalizeString(value) {
   if (typeof value !== "string") {
@@ -1020,18 +1025,27 @@ exit 127
     const businessFailure = business.applicable && !business.success;
     const relayFailure = relay.applicable && !relay.success;
     const managementFailure = !management.control_ready;
-    const overallStatus = businessFailure || relayFailure
-      ? "failed"
-      : managementFailure
-        ? "degraded"
-        : "active";
-    const success = overallStatus === "active";
-    const reasonCode = businessFailure
-      ? business.reason_code
-      : relayFailure
-        ? relay.reason_code
-        : managementFailure
-          ? management.reason_code
+    const observedAt = nowIso();
+    // 节点状态只表达管理链路；业务口/relay 不通是线路问题，不能把一台可接管的机器判成 failed。
+    const overallStatus = managementFailure ? "degraded" : "active";
+    const success = !managementFailure && !businessFailure && !relayFailure;
+    const layerStatus = assembleLayerStatus({
+      observedAt,
+      probeType: "full_stack",
+      previous: node?.layer_status,
+      readings: {
+        management: buildManagementLayerReading(management, observedAt),
+        business: buildApplicabilityLayerReading(business, observedAt),
+        relay_upstream: buildApplicabilityLayerReading(relay, observedAt),
+      },
+    });
+    // 状态口径以管理链路为先，reason/error_stage 也按同一优先级解释，避免"状态说管理、原因说业务"。
+    const reasonCode = managementFailure
+      ? management.reason_code
+      : businessFailure
+        ? business.reason_code
+        : relayFailure
+          ? relay.reason_code
           : business.applicable
             ? "business_route_ready"
             : "management_only_ready";
@@ -1042,31 +1056,33 @@ exit 127
       { score: relayUpstreamScore(relay), weight: relay.applicable ? 25 : 0 },
     ]);
     const summary = buildFullStackSummary(management, business, relay);
-    const failedStage = businessFailure
-      ? "business_entry_tcp"
-      : relayFailure
-        ? "relay_upstream_tcp"
-        : managementFailure
-          ? managementFailureStage(management)
+    const failedStage = managementFailure
+      ? managementFailureStage(management)
+      : businessFailure
+        ? "business_entry_tcp"
+        : relayFailure
+          ? "relay_upstream_tcp"
           : null;
-    const errorMessage = businessFailure
-      ? business.reason_code
-      : relayFailure
-        ? relay.stage?.error_message || relay.reason_code
-        : managementFailure
-          ? management.ssh?.error_message || management.reason_code
+    const errorMessage = managementFailure
+      ? management.ssh?.error_message || management.reason_code
+      : businessFailure
+        ? business.reason_code
+        : relayFailure
+          ? relay.stage?.error_message || relay.reason_code
           : null;
-    const stderrExcerpt = businessFailure
-      ? business.tcp?.output_excerpt ?? null
-      : relayFailure
-        ? relay.stage?.output_excerpt ?? null
-        : managementFailure
-          ? management.ssh?.output_excerpt ?? null
+    const stderrExcerpt = managementFailure
+      ? management.ssh?.output_excerpt ?? null
+      : businessFailure
+        ? business.tcp?.output_excerpt ?? null
+        : relayFailure
+          ? relay.stage?.output_excerpt ?? null
           : null;
 
     return {
       nodeStatus: overallStatus,
       healthScore,
+      nodePatch: { status: overallStatus, health_score: healthScore },
+      layerStatus,
       probe: {
         id: `probe_${randomUUID()}`,
         node_id: node.id,
@@ -1131,7 +1147,7 @@ exit 127
           business_entry_tcp: business.tcp,
           relay_upstream_tcp: relay.stage,
         },
-        observed_at: nowIso(),
+        observed_at: observedAt,
       },
     };
   }
@@ -1139,6 +1155,9 @@ exit 127
   function buildStandaloneProbe(node, task, probeType, outcome) {
     let nodeStatus = "active";
     let healthScore = 100;
+    const observedAt = nowIso();
+    let nodePatch = {};
+    let layerReadings = {};
     let target = null;
     let summary = "";
     let success = false;
@@ -1190,13 +1209,16 @@ exit 127
         ssh: outcome.ssh,
         management_tcp: outcome.tcp,
       };
+      nodePatch = { status: nodeStatus, health_score: healthScore };
+      layerReadings = { management: buildManagementLayerReading(outcome, observedAt) };
     } else if (probeType === "business_entry_tcp") {
       target = outcome.target;
       success = outcome.success;
       businessReady = outcome.applicable ? Boolean(outcome.success) : null;
       summary = buildBusinessSummary(outcome);
       healthScore = businessEntryScore(outcome) ?? 78;
-      nodeStatus = outcome.success ? "active" : "failed";
+      // 单项业务探测不改节点状态与健康分：本次没取证管理链路，节点能否接管不由它决定。
+      nodeStatus = node?.status ?? "new";
       errorStage = !success ? "business_entry_tcp" : null;
       errorMessage = !success ? outcome.reason_code || outcome.tcp?.error_message : null;
       latencyMs = outcome.tcp?.latency_ms ?? null;
@@ -1205,13 +1227,14 @@ exit 127
         tcp: outcome.tcp,
         business_entry_tcp: outcome.tcp,
       };
+      layerReadings = { business: buildApplicabilityLayerReading(outcome, observedAt) };
     } else {
       target = outcome.target;
       success = outcome.success;
       relayUpstreamReady = outcome.applicable ? Boolean(outcome.success) : null;
       summary = buildRelaySummary(outcome);
       healthScore = relayUpstreamScore(outcome) ?? 74;
-      nodeStatus = outcome.success ? "active" : "failed";
+      nodeStatus = node?.status ?? "new";
       errorStage = !success ? "relay_upstream_tcp" : null;
       errorMessage = !success ? outcome.stage?.error_message || outcome.reason_code : null;
       stderrExcerpt = outcome.stage?.output_excerpt ?? null;
@@ -1222,11 +1245,19 @@ exit 127
       stages = {
         relay_upstream_tcp: outcome.stage,
       };
+      layerReadings = { relay_upstream: buildApplicabilityLayerReading(outcome, observedAt) };
     }
 
     return {
       nodeStatus,
       healthScore,
+      nodePatch,
+      layerStatus: assembleLayerStatus({
+        observedAt,
+        probeType,
+        previous: node?.layer_status,
+        readings: layerReadings,
+      }),
       probe: {
         id: `probe_${randomUUID()}`,
         node_id: node.id,
@@ -1294,7 +1325,7 @@ exit 127
         error_message: errorMessage,
         stderr_excerpt: stderrExcerpt,
         stages,
-        observed_at: nowIso(),
+        observed_at: observedAt,
       },
     };
   }
@@ -1389,8 +1420,8 @@ exit 127
 
     const updatedNode = {
       ...node,
-      status: built.nodeStatus,
-      health_score: built.healthScore,
+      ...built.nodePatch,
+      layer_status: built.layerStatus,
       last_probe_at: probe.observed_at,
     };
     setNodeRecord(updatedNode);
@@ -1398,11 +1429,16 @@ exit 127
     task.status = probe.success ? "success" : "failed";
     task.finished_at = nowIso();
     task.note = probe.summary;
+    const failedLayer = built.layerStatus.failed_layer;
+    const failedLayerText = failedLayer
+      ? `${failedLayer}（${built.layerStatus[failedLayer]?.reason_code || "原因未归一"}）`
+      : "无";
     task.log_excerpt = [
       `探测类型 ${probe.probe_type}`,
       `目标 ${probe.target || "-"}`,
       probe.summary,
-      `健康分 ${built.healthScore}，节点状态 ${built.nodeStatus}`,
+      `节点状态 ${updatedNode.status ?? "new"}（只看管理链路），健康分 ${updatedNode.health_score ?? "-"}`,
+      `失败层 ${failedLayerText}`,
     ];
     upsertTaskRecord(task);
 
