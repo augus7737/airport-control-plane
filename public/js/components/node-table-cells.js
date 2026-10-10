@@ -49,7 +49,6 @@ export function createNodeTableCellsModule(dependencies = {}) {
         : latestProbe
           ? formatProbeSummary(latestProbe)
           : "待首检";
-    const subline = layerAlert ? `${layerAlert}｜${baseSubline}` : baseSubline;
     const latencyBreakdown =
       typeof formatProbeLatencyBreakdown === "function" ? formatProbeLatencyBreakdown(latestProbe) : "";
     const timeLabel = latestProbe?.observed_at
@@ -71,7 +70,8 @@ export function createNodeTableCellsModule(dependencies = {}) {
       <div class="cell-hover-card status-cell-card">
         <div class="status-cell-compact">
           <span class="${statusClassName(node.status)}">${statusText(node.status)}</span>
-          <span class="status-subline">${escapeHtml(subline)}</span>
+          ${layerAlert ? `<span class="status-layer-alert">${escapeHtml(layerAlert)}</span>` : ""}
+          <span class="status-subline">${escapeHtml(baseSubline)}</span>
         </div>
         <div class="cell-hover-panel">
           <div class="cell-hover-title-row">

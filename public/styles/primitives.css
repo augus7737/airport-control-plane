@@ -305,6 +305,17 @@ tbody tr:last-child td {
   text-overflow: ellipsis;
 }
 
+/* 分层告警是这一格里唯一必须读全的文本：单独成行、允许换行、不截断。
+   状态列只有 ~113px 可用宽，和探测摘要挤同一行时它正好是被 ellipsis 吃掉的开头。 */
+.status-layer-alert {
+  color: var(--danger-text);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .empty {
   padding: 28px;
   border: 1px dashed var(--line-strong);

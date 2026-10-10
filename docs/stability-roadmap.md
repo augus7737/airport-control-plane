@@ -22,7 +22,7 @@
 | P2.2 Cookie 安全策略 | ✅ 已完成 | `HttpOnly` + `SameSite=Lax` + `CONTROL_PLANE_SESSION_SECURE` / `x-forwarded-proto` 自动 `Secure`，滑动续期 |
 | P2.3 Token 脱敏（哈希化） | ⬜ 未实现 | `bootstrap-tokens.json` 仍存明文以支持一键复制 |
 | P2.4 敏感日志清理 | 🟡 部分完成 | 私钥与 Reality 私钥不落控制面配置；缺统一的日志脱敏与审查 |
-| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 47 个 `node:test` 文件 / 330 个用例；`npm test` / `npm run check`（全树逐文件语法）；核心远程执行端到端仍缺 |
+| P3.1 测试脚本与核心单测 | ✅ 第一阶段完成 | 48 个 `node:test` 文件 / 333 个用例；`npm test` / `npm run check`（全树逐文件语法）；核心远程执行端到端仍缺 |
 | P3.2 拆分 `src/server.js` | 🟡 路由层已完成 | 16 个命名空间搬到 `src/http/routes/`（5763 → 3805 行，现为 3864 行），有 `test/route-table.test.js` 守路由；`src/services` 服务层未拆 |
 | P4.1 SQLite 迁移 | ⬜ 未开始 | 仍是 JSON 文件，无 SQL 依赖 |
 | P4.2 PostgreSQL 预留 | ⬜ 未开始 | repository 层尚未抽出 |

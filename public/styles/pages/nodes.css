@@ -378,6 +378,7 @@ body[data-page="nodes"] .status-cell-compact {
 }
 
 body[data-page="nodes"] .status-subline,
+body[data-page="nodes"] .status-layer-alert,
 body[data-page="nodes"] .compact-inline-summary,
 body[data-page="nodes"] .compact-ip-address {
   font-size: 12px;

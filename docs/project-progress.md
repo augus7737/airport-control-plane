@@ -326,11 +326,12 @@ systemd 用 `is-enabled`，无 systemd 走 `rc-update show default` 匹配，两
   `GET /api/v1/nodes` 返回原始记录、没有序列化层，所以前端自动看到新字段，接口矩阵无需加行。
 - 前端：`public/js/shared/probe-formatters.js` 导出 `formatNodeLayerAlert` / `formatNodeLayerStatus`（管理层故障不报警——
   那已经体现在状态色上，业务/上游故障必须单独说出来，否则绿色会被读成"正在服务用户"）。
-  节点列表副行前置 `${报警}｜${原文案}`，悬停行与详情页健康概览首行都给"分层取证 管理链路 通 / 业务入口 不通 / 入口上游 不适用"。
+  节点列表把告警单独成行（见下方"复验暴露的缺陷与修法"），悬停行与详情页健康概览首行都给"分层取证 管理链路 通 / 业务入口 不通 / 入口上游 不适用"。
 - 任务日志摘要固定成 5 行，第 4 行明写"节点状态 X（只看管理链路）"。
 
-验证边界：`npm run check` 通过，`npm test` **330** 用例全绿（325 → 330：`test/probe-quality.test.js` 24 → 25、
-新增 `test/probe-layer-status.test.js` 3 项、`test/probe-formatters.test.js` +1；当前全量是 47 个测试文件，含并窗落下的文件）。
+验证边界：`npm run check` 通过，`npm test` **333** 用例全绿（325 → 330 → 333：`test/probe-quality.test.js` 24 → 25、
+新增 `test/probe-layer-status.test.js` 3 项、`test/probe-formatters.test.js` +1；随后修状态列截断又新增
+`test/node-table-status-cell.test.js` 3 项。当前全量是 48 个测试文件，含并窗落下的文件）。
 改口径后 `test/probe-quality.test.js` 恰好炸出 4 条失败，全部是旧混淆的固化，逐条按新口径改写而不是放宽断言；
 新增的"按层合并"用例专门钉住陈旧 `layer_status` 不被整块覆盖。
 
@@ -353,10 +354,16 @@ HK 那台跑的是 Node **v20.20.2**（本地 v24），部署脚本只重跑 `np
 - 管理不通（另 5 台）：badge `badge-degraded`，副行**没有**重复的层告警前缀，说明 `formatNodeLayerAlert`
   对 `failed_layer=management` 返回空串是对的（状态色已经表达了）。
 
-**复验暴露的缺陷（本轮未修）**：`.status-subline` 是 `hidden` + `ellipsis`，在 807px 视口下"状态"列宽 137px、
-副行可用 113px，而 BR 那行实际内容 363px ⇒ **新加的层告警正好是被裁掉的开头那几个字**，首屏只读得到
-「业务入口不通 · 端…」。旧的「管理异常 · 管理 T…」同样被裁，所以不是新引入的回归，但我把更长的文本放进了同一个位置。
-要么让告警单独占一行、要么缩成「业务不通」把原因留给悬停、要么加宽该列 —— 悬停里有不等于首屏层级达标。
+**复验暴露的缺陷与修法**：`.status-subline` 是 `hidden` + `ellipsis`，在 807px 视口下"状态"列宽 137px、
+副行可用 113px，而 BR 那行内容 363px ⇒ 分层告警恰好是被裁掉的开头，首屏只读得到「业务入口不通 · 端…」。
+旧的「管理异常 · 管理 T…」同样被裁（不是新引入的回归），但我把更长的文本放进了同一个位置，等于加重它。
+修法是**让告警单独成行且不参与截断**：`node-table-cells.js` 不再拼 `${告警}｜${摘要}`，改渲染
+`.status-layer-alert`（`primitives.css` 里 `white-space: normal` + `--danger-text`），原因仍留在悬停面板。
+**没有动列宽** —— 归属/资产两列同样吃紧，从它们身上挪宽度只是把截断搬到别处。
+iframe 复测 1440/1180/980/720/480 五个宽度：告警在 1440 是 1 行、其余 2 行，**五种宽度下都不被裁**，
+行高 66~83px 始终低于"节点"列自身的 87~106px，所以没有把行撑高；页面无横向溢出。
+`test/node-table-status-cell.test.js` 把三件事钉住：告警单独成行、摘要不再携带告警、管理层故障不叠告警。
+**遗留**：副行的探测摘要（含管理耗时）在 1440 宽度下仍被裁，属表格密度问题，归 UI 窗口 A 一起收。
 
 未做：#72（探测成功即 `active` 会掩盖初始化失败）**本轮刻意不动**。`ensureBootstrapInitTasks` 把 `new|degraded`
 都当作需要补初始化任务，若让管理链路成功不再压回初始化失败态，每轮巡检都会为同一节点反复拉起 init 任务；
