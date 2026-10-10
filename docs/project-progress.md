@@ -1,7 +1,7 @@
 # 项目进度
 
 更新时间：2026-10-10
-基线提交：`b78a439`（2026-09-26 发布链路开机自启回读）+ 本轮节点状态口径拆分；`c77d27f`（2026-09-23 假节点按架构固定镜像 tag，并加入 Alpine/OpenRC 节点）及之前的积累见下方“近期进展”
+基线提交：`89153f0`（2026-10-10 节点状态口径拆分 `9b1dab9` + 真机/浏览器复验记录）；`b78a439`（2026-09-26 发布链路开机自启回读）与 `c77d27f`（2026-09-23 假节点按架构固定镜像 tag，并加入 Alpine/OpenRC 节点）及之前的积累见下方“近期进展”
 
 ## 当前定位
 
@@ -339,13 +339,30 @@ systemd 用 `is-enabled`，无 systemd 走 `rc-update show default` 匹配，两
 `failed_layer=business`；**它那条巡检任务照样是 `failed`**，日志新两行写作
 `节点状态 active（只看管理链路），健康分 32` 与 `失败层 business（tcp_connection_refused）`。
 未发布的另两台是 `business=not_applicable` + 任务 `success` + `失败层 无`。
-HK 那台跑的是 Node **v20.20.2**（本地 v24），部署脚本只重跑 `npm run check` 门禁。**浏览器观感未复验**——
-页面需要登录，静态资源确认已是新代码，实际渲染要人工看 `http://38.147.170.154:8080`。
+HK 那台跑的是 Node **v20.20.2**（本地 v24），部署脚本只重跑 `npm run check` 门禁。
+
+**浏览器观感已复验，但不在 HK 上**：HK 页面进不去（那台 sshd 入口当时连 SSH banner 都收不到，而 `:8080` 0.09s 返回
+200；登录口令只存在远端 `/etc/airport-control-plane/airport.env` 里，SSH 一断就拿不到）。改在**本地隔离实例**取证：
+把 `:8080` 的 `data/` 复制到 `/tmp/airport-layer-ui/data`（删掉复制出来的 `operator-sessions.json`），
+用 `PORT=8092 AUTO_PROBE_ENABLED=false AIRPORT_ENABLE_LOCAL_DEMO_TRANSPORT=false` 起一个自带一次性口令的实例，
+再把 HK 08:15 那轮 BR 的实测读数**手抄**进其中一个节点（是抄录，不是自动镜像）。两种组合都符合设计：
+
+- 管理通 / 业务不通（BR）：badge `badge-active`「可用」，悬停「分层取证 管理链路 通 / 业务入口 不通 / 入口上游 不适用」，
+  详情页健康概览首行同文案；`health_score 32` 与新权重算得通 —— `(54×35 + 12×40) / 75 = 32`
+  （管理 ready + 端到端 3749ms → `probeLatencyScore` 落 `>1000` 档 50 分再 +4；relay 不适用权重 0）。
+- 管理不通（另 5 台）：badge `badge-degraded`，副行**没有**重复的层告警前缀，说明 `formatNodeLayerAlert`
+  对 `failed_layer=management` 返回空串是对的（状态色已经表达了）。
+
+**复验暴露的缺陷（本轮未修）**：`.status-subline` 是 `hidden` + `ellipsis`，在 807px 视口下"状态"列宽 137px、
+副行可用 113px，而 BR 那行实际内容 363px ⇒ **新加的层告警正好是被裁掉的开头那几个字**，首屏只读得到
+「业务入口不通 · 端…」。旧的「管理异常 · 管理 T…」同样被裁，所以不是新引入的回归，但我把更长的文本放进了同一个位置。
+要么让告警单独占一行、要么缩成「业务不通」把原因留给悬停、要么加宽该列 —— 悬停里有不等于首屏层级达标。
 
 未做：#72（探测成功即 `active` 会掩盖初始化失败）**本轮刻意不动**。`ensureBootstrapInitTasks` 把 `new|degraded`
 都当作需要补初始化任务，若让管理链路成功不再压回初始化失败态，每轮巡检都会为同一节点反复拉起 init 任务；
 要修得先给"初始化证据"单独建字段，是另一轮。
 
+## 已跑通的主链路
 
 1. 未登录访问自动跳登录页，登录后按 `next` 回原页
 2. 节点执行一行接入命令 → 上报事实 → 去重建档 → 回传公钥与初始化动作
