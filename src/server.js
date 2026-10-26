@@ -31,6 +31,7 @@ import { createNodeRecordBuilders, normalizeLocationList, updateNodeLabelsRecord
 import { createNodeFactsDomain } from "./domain/nodes/facts.js";
 import { createNodeLifecycleDomain } from "./domain/nodes/lifecycle.js";
 import { createBootstrapTokenDomain } from "./domain/bootstrap/tokens.js";
+import { buildAlpineRepositoryPreparation } from "./domain/bootstrap/package-mirrors.js";
 import { createPlatformSshDomain } from "./domain/platform/ssh.js";
 import { createPlatformSingBoxDistributionDomain } from "./domain/platform/sing-box-distribution.js";
 import { createOperationsExecutorDomain } from "./domain/operations/executor.js";
@@ -1558,6 +1559,8 @@ function buildBootstrapEnrollScript(url) {
     .map(([name, value]) => `${name} ${shellQuote(value)}`)
     .join(" ");
   const bootstrapUrl = `${baseUrl}/bootstrap.sh`;
+  const region = normalizeNullableString(url.searchParams.get("region"));
+  const alpineRepositoryPreparation = buildAlpineRepositoryPreparation(region);
 
   return `#!/bin/sh
 set -eu
@@ -1569,8 +1572,7 @@ if [ -z ${shellQuote(token ?? "")} ]; then
 fi
 
 echo "[airport-enroll] preparing node"
-command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && [ ! -f /etc/apk/repositories.airport.bak ] && cp /etc/apk/repositories /etc/apk/repositories.airport.bak 2>/dev/null || true
-command -v apk >/dev/null 2>&1 && [ -f /etc/apk/repositories ] && sed -i 's#https\\?://[^ ]*alpinelinux\\.org/alpine#https://mirrors.aliyun.com/alpine#g' /etc/apk/repositories || true
+${alpineRepositoryPreparation}
 if command -v apk >/dev/null 2>&1; then
   apk update >/dev/null 2>&1 || true
   apk add --no-cache curl wget openssh ca-certificates >/dev/null 2>&1 || true
