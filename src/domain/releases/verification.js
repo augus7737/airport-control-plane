@@ -608,7 +608,7 @@ export function resolveDeploymentOutcome(deploymentVerification) {
     return {
       status,
       reachability,
-      note: `配置已生效，但业务入口可达性复检未通过或未完成（多为端口未放行 / 节点防火墙 / 控制面出口被风控，不一定是配置问题）: ${reasons || "unknown"}`,
+      note: `配置已生效，但业务入口可达性复检未通过或未完成（NAT / LXC 小鸡请先到服务商面板确认公网端口已映射到节点内部监听端口；也可能是端口未放行、节点防火墙或控制面出口被风控，不一定是配置问题）: ${reasons || "unknown"}`,
     };
   }
 

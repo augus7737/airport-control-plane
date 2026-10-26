@@ -445,7 +445,7 @@ export function getReleaseReachability(release) {
 
   let detail = "";
   if (status === "failed") {
-    detail = `配置已生效，但 ${nodeCount}的业务入口没连通${reasons}。多为端口未放行 / 节点防火墙 / 控制面出口被风控，不一定是配置问题。`;
+    detail = `配置已生效，但 ${nodeCount}的业务入口没连通${reasons}。如果是 NAT / LXC 小鸡，请先到服务商面板确认公网端口已映射到节点内部监听端口；也可能是端口未放行、节点防火墙或控制面出口被风控，不一定是配置问题。`;
   } else if (status === "partial") {
     detail = `${nodeCount}的业务入口可达复检未确认${reasons}，其余节点已通过。`;
   } else if (status === "skipped") {

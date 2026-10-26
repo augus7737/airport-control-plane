@@ -343,6 +343,8 @@ test("配置已生效但业务端口不可达：整体复检失败，生效层�
   assert.equal(outcome.reachability, "failed");
   assert.match(outcome.note, /配置已生效/);
   assert.match(outcome.note, /business_entry_tcp_failed/);
+  assert.match(outcome.note, /NAT \/ LXC/);
+  assert.match(outcome.note, /服务商面板/);
 });
 
 test("业务入口复检缺失或未跑：可达层 partial，不改生效层成败", () => {

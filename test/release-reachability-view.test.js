@@ -33,6 +33,8 @@ test("生效层成功但可达层失败时给出降调警示与节点/原因样�
   assert.match(view.detail, /2 台节点/);
   assert.match(view.detail, /port_unreachable/);
   assert.match(view.detail, /配置已生效/);
+  assert.match(view.detail, /NAT \/ LXC/);
+  assert.match(view.detail, /服务商面板/);
 });
 
 test("可达层部分未确认时不写成全量失败", () => {
