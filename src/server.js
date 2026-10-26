@@ -1235,8 +1235,10 @@ const {
 
 const {
   buildAccessUserShareResponse,
+  buildClashSubscriptionContent,
   buildSubscriptionContent,
   resolveRequestOrigin,
+  resolveSubscriptionFormat,
 } = createSharesDomain({
   clientPublicBaseUrl,
   normalizeBaseUrl,
@@ -3676,16 +3678,25 @@ const server = createServer(createSafeRequestHandler(async (request, reply) => {
       return;
     }
 
-    const body = buildSubscriptionContent(shareResponse.targets, requestedNodeId);
+    const format = resolveSubscriptionFormat(
+      url.searchParams.get("format"),
+      request.headers["user-agent"],
+    );
+    const body =
+      format === "clash"
+        ? buildClashSubscriptionContent(shareResponse.targets, requestedNodeId)
+        : buildSubscriptionContent(shareResponse.targets, requestedNodeId);
+    const contentType = format === "clash" ? "text/yaml" : "text/plain";
     if (request.method === "HEAD") {
       reply.writeHead(200, {
-        "content-type": "text/plain; charset=utf-8",
+        "content-type": `${contentType}; charset=utf-8`,
+        "profile-update-interval": "24",
       });
       reply.end();
       return;
     }
 
-    textResponse(reply, 200, "text/plain", body);
+    textResponse(reply, 200, contentType, body);
     return;
   }
 

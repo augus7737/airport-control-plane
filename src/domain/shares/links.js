@@ -240,6 +240,203 @@ function buildSubscriptionContent(targets, nodeId = null) {
     .join("\n");
 }
 
+function yamlScalar(value) {
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value === null) {
+    return "null";
+  }
+  return JSON.stringify(String(value));
+}
+
+function serializeYaml(value, indent = 0) {
+  const prefix = " ".repeat(indent);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return `${prefix}[]`;
+    return value
+      .map((item) =>
+        isPlainObject(item) || Array.isArray(item)
+          ? `${prefix}-\n${serializeYaml(item, indent + 2)}`
+          : `${prefix}- ${yamlScalar(item)}`,
+      )
+      .join("\n");
+  }
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+    if (entries.length === 0) return `${prefix}{}`;
+    return entries
+      .map(([key, item]) =>
+        isPlainObject(item) || Array.isArray(item)
+          ? `${prefix}${key}:\n${serializeYaml(item, indent + 2)}`
+          : `${prefix}${key}: ${yamlScalar(item)}`,
+      )
+      .join("\n");
+  }
+  return `${prefix}${yamlScalar(value)}`;
+}
+
+function decodeVmessPayload(link) {
+  try {
+    const encoded = link.slice("vmess://".length).trim();
+    return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function applyClashTransport(proxy, params) {
+  const network = normalizeString(params.get("type"))?.toLowerCase() ?? "tcp";
+  proxy.network = network;
+  const host = normalizeString(params.get("host"));
+  const transportPath = normalizeString(params.get("path"));
+
+  if (network === "ws") {
+    proxy["ws-opts"] = {
+      ...(transportPath ? { path: transportPath } : {}),
+      ...(host ? { headers: { Host: host } } : {}),
+    };
+  } else if (network === "grpc") {
+    const serviceName = normalizeString(params.get("serviceName"));
+    if (serviceName) proxy["grpc-opts"] = { "grpc-service-name": serviceName };
+  } else if (network === "http" && (transportPath || host)) {
+    proxy["h2-opts"] = {
+      ...(transportPath ? { path: transportPath } : {}),
+      ...(host ? { host: [host] } : {}),
+    };
+  }
+}
+
+function buildClashProxy(target) {
+  const link = normalizeString(target?.share_url);
+  if (!link) return null;
+
+  if (link.startsWith("vmess://")) {
+    const payload = decodeVmessPayload(link);
+    const port = Number(payload?.port);
+    if (!payload?.add || !payload?.id || !Number.isInteger(port) || port < 1) return null;
+    const proxy = {
+      name: normalizeString(payload.ps) ?? normalizeString(target?.label) ?? "VMess",
+      type: "vmess",
+      server: payload.add,
+      port,
+      uuid: payload.id,
+      alterId: Number(payload.aid) || 0,
+      cipher: normalizeString(payload.scy) ?? "auto",
+      udp: true,
+      network: normalizeString(payload.net) ?? "tcp",
+    };
+    if (payload.tls === "tls") proxy.tls = true;
+    if (normalizeString(payload.sni)) proxy.servername = payload.sni;
+    if (proxy.network === "ws") {
+      proxy["ws-opts"] = {
+        ...(normalizeString(payload.path) ? { path: payload.path } : {}),
+        ...(normalizeString(payload.host) ? { headers: { Host: payload.host } } : {}),
+      };
+    }
+    return proxy;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(link);
+  } catch {
+    return null;
+  }
+  const port = Number(parsed.port);
+  const name = decodeURIComponent(parsed.hash.replace(/^#/, "")) || normalizeString(target?.label) || "Proxy";
+  if (!parsed.hostname || !Number.isInteger(port) || port < 1) return null;
+
+  if (parsed.protocol === "vless:") {
+    const uuid = decodeURIComponent(parsed.username);
+    if (!uuid) return null;
+    const security = normalizeString(parsed.searchParams.get("security"))?.toLowerCase() ?? "none";
+    const proxy = {
+      name,
+      type: "vless",
+      server: parsed.hostname,
+      port,
+      uuid,
+      udp: true,
+    };
+    applyClashTransport(proxy, parsed.searchParams);
+    const flow = normalizeString(parsed.searchParams.get("flow"));
+    if (flow) proxy.flow = flow;
+    if (security !== "none") {
+      proxy.tls = true;
+      const servername = normalizeString(parsed.searchParams.get("sni"));
+      if (servername) proxy.servername = servername;
+    }
+    if (security === "reality") {
+      const publicKey = normalizeString(parsed.searchParams.get("pbk"));
+      if (!publicKey) return null;
+      proxy["reality-opts"] = {
+        "public-key": publicKey,
+        ...(normalizeString(parsed.searchParams.get("sid"))
+          ? { "short-id": parsed.searchParams.get("sid") }
+          : {}),
+      };
+      const fingerprint = normalizeString(parsed.searchParams.get("fp"));
+      if (fingerprint) proxy["client-fingerprint"] = fingerprint;
+    }
+    return proxy;
+  }
+
+  if (parsed.protocol === "hysteria2:") {
+    const password = decodeURIComponent(parsed.username);
+    if (!password) return null;
+    const proxy = {
+      name,
+      type: "hysteria2",
+      server: parsed.hostname,
+      port,
+      password,
+      udp: true,
+    };
+    const sni = normalizeString(parsed.searchParams.get("sni"));
+    if (sni) proxy.sni = sni;
+    const obfs = normalizeString(parsed.searchParams.get("obfs"));
+    const obfsPassword = normalizeString(parsed.searchParams.get("obfs-password"));
+    if (obfs) proxy.obfs = obfs;
+    if (obfsPassword) proxy["obfs-password"] = obfsPassword;
+    return proxy;
+  }
+
+  return null;
+}
+
+function buildClashSubscriptionContent(targets, nodeId = null) {
+  const relevantTargets = nodeId
+    ? targets.filter((target) => target.node_id === nodeId)
+    : targets;
+  const proxies = relevantTargets.map(buildClashProxy).filter(Boolean);
+  const groupName = "Airport";
+  return `${serializeYaml({
+    "mixed-port": 7890,
+    "allow-lan": false,
+    mode: "rule",
+    "log-level": "info",
+    proxies,
+    "proxy-groups": [
+      {
+        name: groupName,
+        type: "select",
+        proxies: proxies.map((proxy) => proxy.name),
+      },
+    ],
+    rules: [`MATCH,${groupName}`],
+  })}\n`;
+}
+
+function resolveSubscriptionFormat(explicitFormat, userAgent = "") {
+  const requested = normalizeString(explicitFormat)?.toLowerCase();
+  if (["clash", "mihomo", "yaml", "yml"].includes(requested)) return "clash";
+  if (["links", "raw", "uri"].includes(requested)) return "links";
+  return /clash|mihomo|clash-verge|clashx|stash/i.test(String(userAgent || ""))
+    ? "clash"
+    : "links";
+}
+
 function isDateOnlyValue(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim());
 }
@@ -841,6 +1038,7 @@ export function createSharesDomain(dependencies = {}) {
     buildAggregateSubscriptionUrl,
     buildNodeSubscriptionUrl,
     buildQrSvg,
+    buildClashSubscriptionContent,
     buildSubscriptionContent,
     buildVlessShareUrl,
     buildVmessShareUrl,
@@ -849,5 +1047,6 @@ export function createSharesDomain(dependencies = {}) {
     findLatestSuccessfulReleaseForNode,
     resolvePublicBaseUrl,
     resolveRequestOrigin,
+    resolveSubscriptionFormat,
   };
 }

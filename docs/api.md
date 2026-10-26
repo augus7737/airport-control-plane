@@ -354,7 +354,7 @@ Notes:
 - `POST /api/v1/proxy-profiles/:id/clone`：`201 { profile }`。深拷贝模板与其余字段，新 id、`status="draft"`、名字按「X 副本」「X 副本 2」避重；源模板通不过写入口校验时返回 `400`（副本仍会被挡）。
 - `GET|POST /api/v1/node-groups`，`GET|PATCH|DELETE /api/v1/node-groups/:id`（`200 { group }`）
   - `PATCH` 成功响应额外带 `warnings: string[]`（不拒绝写入）：本次实际移除了成员、且该组仍被某个模板的当前生效发布引用时，逐 profile 给一条“生效拓扑已与节点组不一致，建议重新发布”的提示；发布页保存后同口径展示。
-- `GET|HEAD /sub/:shareToken`：公开订阅输出，可选 `?node_id=` 只取单节点
+- `GET|HEAD /sub/:shareToken`：公开订阅输出，可选 `?node_id=` 只取单节点。默认输出 URI 列表；Clash / Mihomo User-Agent 自动输出 Clash YAML，也可用 `?format=clash` 强制 YAML、`?format=links` 强制 URI 列表。
 
 协议兼容：`hysteria2` 必须 `tls` + UDP/QUIC，凭证取 `credential.password`；`vmess` 支持 `tls` 或 `none`，不支持 `reality`；`reality` 要求节点本地 `template.reality.private_key_path`（私钥内容不接受 inline 提交）；`tls` 需要 `template.tls.certificate_path` 与 `key_path`。被发布记录引用的用户、模板、节点组删除时返回 `409`。
 
