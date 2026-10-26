@@ -61,6 +61,38 @@ function toSafeFileName(value) {
     .slice(0, 80) || "share";
 }
 
+export function buildAccessUserPayload(formData) {
+  const protocol = String(formData.get("protocol") || "vless").trim() || "vless";
+  const uuid = String(formData.get("uuid") || "").trim();
+  const password = String(formData.get("password") || "").trim();
+  const alterId = Number.parseInt(String(formData.get("alter_id") || "0").trim() || "0", 10);
+  const credential = {};
+
+  if (protocol === "hysteria2") {
+    if (password) {
+      credential.password = password;
+    }
+  } else {
+    if (uuid) {
+      credential.uuid = uuid;
+    }
+    if (protocol === "vmess") {
+      credential.alter_id = alterId;
+    }
+  }
+
+  return {
+    name: String(formData.get("name") || "").trim(),
+    protocol,
+    status: String(formData.get("status") || "active").trim() || "active",
+    expires_at: String(formData.get("expires_at") || "").trim() || null,
+    profile_id: String(formData.get("profile_id") || "").trim() || null,
+    node_group_ids: formData.getAll("node_group_ids").map((item) => String(item)),
+    note: String(formData.get("note") || "").trim() || null,
+    credential,
+  };
+}
+
 export function createAccessUsersPageModule(dependencies) {
   const {
     appState,
@@ -93,6 +125,7 @@ export function createAccessUsersPageModule(dependencies) {
     shareRequestKey: null,
     queryHydrated: false,
     pendingQueryShareUserId: null,
+    createDraft: null,
   };
 
   function getSelectedUser() {
@@ -122,7 +155,7 @@ export function createAccessUsersPageModule(dependencies) {
 
   function getDraft(user) {
     if (!user) {
-      return createEmptyDraft();
+      return state.createDraft || createEmptyDraft();
     }
     return {
       name: String(user.name || ""),
@@ -1175,6 +1208,7 @@ export function createAccessUsersPageModule(dependencies) {
 
     const createEmptyUser = () => {
       state.selectedId = null;
+      state.createDraft = null;
       state.message = null;
       clearShareState();
       renderCurrentContent();
@@ -1199,6 +1233,7 @@ export function createAccessUsersPageModule(dependencies) {
 
     documentRef.getElementById("access-user-form-reset")?.addEventListener("click", () => {
       state.selectedId = null;
+      state.createDraft = null;
       state.message = null;
       clearShareState();
       renderCurrentContent();
@@ -1211,6 +1246,7 @@ export function createAccessUsersPageModule(dependencies) {
           clearShareState();
         }
         state.selectedId = nextSelectedId;
+        state.createDraft = null;
         state.message = null;
         renderCurrentContent();
         scrollToForm();
@@ -1295,36 +1331,15 @@ export function createAccessUsersPageModule(dependencies) {
       event.preventDefault();
       const form = event.currentTarget;
       const formData = new FormData(form);
-      const payload = {
-        name: String(formData.get("name") || "").trim(),
-        protocol: String(formData.get("protocol") || "vless").trim() || "vless",
-        status: String(formData.get("status") || "active").trim() || "active",
-        expires_at: String(formData.get("expires_at") || "").trim() || null,
-        profile_id: String(formData.get("profile_id") || "").trim() || null,
-        node_group_ids: formData.getAll("node_group_ids").map((item) => String(item)),
-        note: String(formData.get("note") || "").trim() || null,
-        credential: {
-          uuid: String(formData.get("uuid") || "").trim(),
-          password: String(formData.get("password") || "").trim(),
-          alter_id: Number.parseInt(String(formData.get("alter_id") || "0").trim() || "0", 10),
-        },
-      };
+      const payload = buildAccessUserPayload(formData);
 
       if (!payload.name) {
         windowRef.alert("请先填写接入用户名称。");
         return;
       }
 
-      if (payload.protocol !== "hysteria2" && !payload.credential.uuid) {
-        windowRef.alert("请先填写 UUID。");
-        return;
-      }
-
-      if (payload.protocol === "hysteria2" && !payload.credential.password) {
-        delete payload.credential.password;
-      }
-
       if (payload.protocol !== "hysteria2" &&
+          payload.protocol === "vmess" &&
           (!Number.isInteger(payload.credential.alter_id) || payload.credential.alter_id < 0)) {
         windowRef.alert("alterId 必须是大于等于 0 的整数。");
         return;
@@ -1350,6 +1365,7 @@ export function createAccessUsersPageModule(dependencies) {
         if (result?.id) {
           state.selectedId = result.id;
         }
+        state.createDraft = null;
         const savedUserId = result?.id || state.selectedId;
         if (savedUserId && previousShareUserId === savedUserId) {
           await loadShareData(savedUserId, { keepCurrentData: false, scroll: false });
@@ -1359,6 +1375,18 @@ export function createAccessUsersPageModule(dependencies) {
         renderCurrentContent();
         scrollToForm();
       } catch (error) {
+        state.createDraft = {
+          name: payload.name,
+          protocol: payload.protocol,
+          uuid: payload.credential.uuid || "",
+          password: payload.credential.password || "",
+          alter_id: String(payload.credential.alter_id ?? 0),
+          status: payload.status,
+          expires_at: payload.expires_at || "",
+          profile_id: payload.profile_id || "",
+          node_group_ids: payload.node_group_ids,
+          note: payload.note || "",
+        };
         state.message = {
           type: "error",
           text: error instanceof Error ? error.message : "保存接入用户失败",
