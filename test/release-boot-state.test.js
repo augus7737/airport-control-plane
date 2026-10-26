@@ -81,3 +81,15 @@ test("二进制安装使用磁盘临时目录并在完整校验后原子替换",
   );
   assert.doesNotMatch(script, /cp "\$BINARY_FILE" "\$SINGBOX_BIN_FILE"/);
 });
+
+test("Alpine 上执行官方 glibc 二进制失败时补装 gcompat 后重试", () => {
+  const script = buildBinaryInstallScript();
+
+  assert.match(script, /\[ -f \/etc\/alpine-release \]/);
+  assert.match(script, /apk add --no-cache gcompat/);
+  assert.match(script, /\[publish\] runtime_compat=gcompat/);
+  assert.ok(
+    script.indexOf("apk add --no-cache gcompat") < script.lastIndexOf('"$INSTALL_TMP_FILE" version'),
+    "补装兼容层后必须再次执行二进制检查",
+  );
+});

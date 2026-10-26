@@ -595,10 +595,22 @@ install_singbox_binary() {
   fi
   chmod 755 "$INSTALL_TMP_FILE"
   if ! "$INSTALL_TMP_FILE" version >/dev/null 2>&1; then
-    echo "[publish] binary_install=execution_check_failed"
-    rm -f "$INSTALL_TMP_FILE"
-    rm -rf "$TMP_DIR"
-    return 1
+    # Official linux archives use the glibc loader. Alpine nodes use musl, so
+    # install the small compatibility layer once and retry before rejecting a
+    # complete binary as non-executable.
+    if [ -f /etc/alpine-release ] && command -v apk >/dev/null 2>&1; then
+      if apk add --no-cache gcompat >/dev/null 2>&1; then
+        echo "[publish] runtime_compat=gcompat"
+      else
+        echo "[publish] runtime_compat=gcompat_failed"
+      fi
+    fi
+    if ! "$INSTALL_TMP_FILE" version >/dev/null 2>&1; then
+      echo "[publish] binary_install=execution_check_failed"
+      rm -f "$INSTALL_TMP_FILE"
+      rm -rf "$TMP_DIR"
+      return 1
+    fi
   fi
   mv "$INSTALL_TMP_FILE" "$SINGBOX_BIN_FILE"
   hash -r 2>/dev/null || true
