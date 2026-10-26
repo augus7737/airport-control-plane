@@ -549,7 +549,10 @@ install_singbox_binary() {
     return 1
   fi
 
-  TMP_DIR="$(mktemp -d /tmp/airport-singbox.XXXXXX 2>/dev/null || mktemp -d)"
+  # /tmp is commonly tmpfs on small VPSes. Extracting a 50+ MiB Go binary there can
+  # exhaust the node's memory and sever the SSH session mid-install.
+  install -d -m 700 /var/tmp >/dev/null 2>&1 || true
+  TMP_DIR="$(mktemp -d /var/tmp/airport-singbox.XXXXXX 2>/dev/null || mktemp -d /tmp/airport-singbox.XXXXXX 2>/dev/null || mktemp -d)"
   ARCHIVE_FILE="$TMP_DIR/sing-box.tar.gz"
 
   if ! download_file "$DOWNLOAD_URL" "$ARCHIVE_FILE"; then
@@ -582,8 +585,22 @@ install_singbox_binary() {
   fi
 
   install -d -m 755 "$(dirname "$SINGBOX_BIN_FILE")"
-  cp "$BINARY_FILE" "$SINGBOX_BIN_FILE"
-  chmod 755 "$SINGBOX_BIN_FILE"
+  INSTALL_TMP_FILE="\${SINGBOX_BIN_FILE}.airport.tmp.$$"
+  rm -f "$INSTALL_TMP_FILE"
+  if ! cp "$BINARY_FILE" "$INSTALL_TMP_FILE"; then
+    echo "[publish] binary_install=copy_failed"
+    rm -f "$INSTALL_TMP_FILE"
+    rm -rf "$TMP_DIR"
+    return 1
+  fi
+  chmod 755 "$INSTALL_TMP_FILE"
+  if ! "$INSTALL_TMP_FILE" version >/dev/null 2>&1; then
+    echo "[publish] binary_install=execution_check_failed"
+    rm -f "$INSTALL_TMP_FILE"
+    rm -rf "$TMP_DIR"
+    return 1
+  fi
+  mv "$INSTALL_TMP_FILE" "$SINGBOX_BIN_FILE"
   hash -r 2>/dev/null || true
   ensure_singbox_service || true
 

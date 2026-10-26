@@ -18,6 +18,23 @@ function buildScript() {
   });
 }
 
+function buildBinaryInstallScript() {
+  return buildSingBoxPublishScript({
+    release: { id: "release_binary", node_group_id: "group_binary" },
+    manifest: { profile: { protocol: "vless", transport: "tcp" } },
+    renderedConfig: { log: { level: "info" }, inbounds: [{ type: "vless", listen: "::", listen_port: 443 }] },
+    renderPlan: {
+      digest: "digest_binary",
+      metadata: { config_path: "/etc/sing-box/config.json", security: "none" },
+    },
+    binaryDistribution: {
+      version: "1.13.19",
+      install_path: "/usr/local/bin/sing-box",
+      variants: [{ target: "linux-amd64", effective_url: "https://example.invalid/sing-box.tar.gz" }],
+    },
+  });
+}
+
 function outcomeWith(bootMarker) {
   const output = ["[publish] engine=sing-box", "[publish] validation=passed", "[publish] result=applied"];
   if (bootMarker) {
@@ -49,4 +66,18 @@ test("applied 但开机自启未生效时不再输出无保留的绿灯文案", 
   assert.match(outcomeWith("disabled"), /未设为开机自启，重启后不会自动拉起/);
   assert.match(outcomeWith("unknown"), /开机自启状态未确认/);
   assert.match(outcomeWith(null), /已校验并重载。$/, "旧节点没有 boot 标记时保持原口径，不猜");
+});
+
+test("二进制安装使用磁盘临时目录并在完整校验后原子替换", () => {
+  const script = buildBinaryInstallScript();
+
+  assert.match(script, /mktemp -d \/var\/tmp\/airport-singbox\.XXXXXX/);
+  assert.match(script, /INSTALL_TMP_FILE="\$\{SINGBOX_BIN_FILE\}\.airport\.tmp\.\$\$"/);
+  assert.match(script, /"\$INSTALL_TMP_FILE" version/);
+  assert.match(script, /binary_install=execution_check_failed/);
+  assert.ok(
+    script.indexOf('"$INSTALL_TMP_FILE" version') < script.indexOf('mv "$INSTALL_TMP_FILE" "$SINGBOX_BIN_FILE"'),
+    "必须先执行完整性检查，再替换正式二进制",
+  );
+  assert.doesNotMatch(script, /cp "\$BINARY_FILE" "\$SINGBOX_BIN_FILE"/);
 });
